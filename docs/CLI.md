@@ -59,7 +59,9 @@ sigil compile <file.sigil>
 
 Parses and validates a module, then asks the GCC JIT backend to lower every
 native-supported function into an in-memory JIT result. The command reports each
-function as `lowered` or `skipped`.
+function as `lowered` or `skipped`. When a function is skipped, the report
+includes an `at:` source range for the construct that made native lowering
+unsupported.
 
 The current native subset supports pure scalar functions over `i64` and `bool`
 using:
@@ -94,6 +96,9 @@ Parses and validates a module, lowers it with `libgccjit`, retrieves the named
 function from the JIT result, and invokes it through the native ABI. Arguments
 are parsed from the function signature: `i64` parameters accept integer strings,
 and `bool` parameters accept `true`, `false`, `1`, or `0`.
+If lowering or invocation fails after parsing, the output includes an `at:`
+source range when Sigil can identify a relevant function, parameter, statement,
+or expression.
 
 Example:
 

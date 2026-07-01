@@ -121,6 +121,14 @@ fn quotient(x: i64, y: i64) -> i64
   expect(!unsupported_result.functions[0].lowered, "division function skipped");
   expect(unsupported_result.functions[0].detail.find("division") != std::string::npos,
          "division skip explains semantic gap");
+  expect(unsupported_result.functions[0].range.display() == "unsupported.sigil:6:10-14",
+         "division skip points to expression range");
+
+  const auto unsupported_invocation = sigil::invoke_function_with_gccjit(
+      unsupported_module, "quotient", {sigil::gccjit_i64(4), sigil::gccjit_i64(2)});
+  expect(!unsupported_invocation.invoked, "unsupported invocation not invoked");
+  expect(unsupported_invocation.range.display() == "unsupported.sigil:6:10-14",
+         "unsupported invocation points to expression range");
 #else
   expect(!unsupported_result.available, "unsupported unavailable without backend");
 #endif

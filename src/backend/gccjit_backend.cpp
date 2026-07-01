@@ -56,30 +56,50 @@ struct ResultDeleter {
 
 class LoweringError : public std::runtime_error {
 public:
-  using std::runtime_error::runtime_error;
+  explicit LoweringError(std::string message, SourceRange range = {})
+      : std::runtime_error(std::move(message)), range_(std::move(range)) {}
+
+  const SourceRange& range() const {
+    return range_;
+  }
+
+private:
+  SourceRange range_;
+};
+
+struct LoweringDiagnostic {
+  std::string detail;
+  SourceRange range;
 };
 
 bool is_native_scalar(const Type& type) {
   return type.kind == TypeKind::I64 || type.kind == TypeKind::Bool;
 }
 
+LoweringDiagnostic make_lowering_diagnostic(std::string detail, SourceRange range) {
+  return LoweringDiagnostic{std::move(detail), std::move(range)};
+}
+
 std::string unsupported_type_detail(const std::string& owner, const Type& type) {
   return owner + " has unsupported native type '" + type.display() + "'";
 }
 
-bool expression_is_lowerable(const Expr& expr, std::string& detail);
+bool expression_is_lowerable(const Expr& expr, LoweringDiagnostic& diagnostic);
 
-bool binary_is_lowerable(BinaryOp op, std::string& detail) {
+bool binary_is_lowerable(const Expr& expr, LoweringDiagnostic& diagnostic) {
+  const auto op = expr ? expr->binary_op : BinaryOp::Equal;
   if (op == BinaryOp::Divide || op == BinaryOp::Modulo) {
-    detail = "division and modulo are not native-lowered until Sigil fixes their exact semantics";
+    diagnostic = make_lowering_diagnostic(
+        "division and modulo are not native-lowered until Sigil fixes their exact semantics",
+        expr ? expr->range : SourceRange{});
     return false;
   }
   return true;
 }
 
-bool expression_is_lowerable(const Expr& expr, std::string& detail) {
+bool expression_is_lowerable(const Expr& expr, LoweringDiagnostic& diagnostic) {
   if (!expr) {
-    detail = "missing expression";
+    diagnostic = make_lowering_diagnostic("missing expression", {});
     return false;
   }
 
@@ -89,47 +109,53 @@ bool expression_is_lowerable(const Expr& expr, std::string& detail) {
   case ExprNode::Kind::Identifier:
     return true;
   case ExprNode::Kind::Unary:
-    return expression_is_lowerable(expr->lhs, detail);
+    return expression_is_lowerable(expr->lhs, diagnostic);
   case ExprNode::Kind::Binary:
-    return binary_is_lowerable(expr->binary_op, detail) &&
-           expression_is_lowerable(expr->lhs, detail) && expression_is_lowerable(expr->rhs, detail);
+    return binary_is_lowerable(expr, diagnostic) &&
+           expression_is_lowerable(expr->lhs, diagnostic) &&
+           expression_is_lowerable(expr->rhs, diagnostic);
   case ExprNode::Kind::If:
-    return expression_is_lowerable(expr->condition, detail) &&
-           expression_is_lowerable(expr->lhs, detail) && expression_is_lowerable(expr->rhs, detail);
+    return expression_is_lowerable(expr->condition, diagnostic) &&
+           expression_is_lowerable(expr->lhs, diagnostic) &&
+           expression_is_lowerable(expr->rhs, diagnostic);
   }
 
-  detail = "unknown expression kind";
+  diagnostic = make_lowering_diagnostic("unknown expression kind", expr->range);
   return false;
 }
 
-bool statements_are_lowerable(const std::vector<Statement>& statements, std::string& detail);
+bool statements_are_lowerable(const std::vector<Statement>& statements,
+                              LoweringDiagnostic& diagnostic);
 
-bool statement_is_lowerable(const Statement& statement, std::string& detail) {
+bool statement_is_lowerable(const Statement& statement, LoweringDiagnostic& diagnostic) {
   switch (statement.kind) {
   case StatementKind::Let:
     if (!is_native_scalar(statement.type)) {
-      detail = unsupported_type_detail("local '" + statement.name + "'", statement.type);
+      diagnostic = make_lowering_diagnostic(
+          unsupported_type_detail("local '" + statement.name + "'", statement.type),
+          statement.range);
       return false;
     }
-    return expression_is_lowerable(statement.expr, detail);
+    return expression_is_lowerable(statement.expr, diagnostic);
   case StatementKind::Assign:
   case StatementKind::Assume:
   case StatementKind::Assert:
   case StatementKind::Return:
-    return expression_is_lowerable(statement.expr, detail);
+    return expression_is_lowerable(statement.expr, diagnostic);
   case StatementKind::If:
-    return expression_is_lowerable(statement.expr, detail) &&
-           statements_are_lowerable(statement.then_branch, detail) &&
-           statements_are_lowerable(statement.else_branch, detail);
+    return expression_is_lowerable(statement.expr, diagnostic) &&
+           statements_are_lowerable(statement.then_branch, diagnostic) &&
+           statements_are_lowerable(statement.else_branch, diagnostic);
   }
 
-  detail = "unknown statement kind";
+  diagnostic = make_lowering_diagnostic("unknown statement kind", statement.range);
   return false;
 }
 
-bool statements_are_lowerable(const std::vector<Statement>& statements, std::string& detail) {
+bool statements_are_lowerable(const std::vector<Statement>& statements,
+                              LoweringDiagnostic& diagnostic) {
   for (const auto& statement : statements) {
-    if (!statement_is_lowerable(statement, detail)) {
+    if (!statement_is_lowerable(statement, diagnostic)) {
       return false;
     }
   }
@@ -149,22 +175,25 @@ bool block_always_returns(const std::vector<Statement>& statements) {
   return false;
 }
 
-bool function_is_lowerable(const FunctionDecl& fn, std::string& detail) {
+bool function_is_lowerable(const FunctionDecl& fn, LoweringDiagnostic& diagnostic) {
   if (!is_native_scalar(fn.return_type)) {
-    detail = unsupported_type_detail("function '" + fn.name + "' return", fn.return_type);
+    diagnostic = make_lowering_diagnostic(
+        unsupported_type_detail("function '" + fn.name + "' return", fn.return_type), fn.range);
     return false;
   }
   for (const auto& param : fn.params) {
     if (!is_native_scalar(param.type)) {
-      detail = unsupported_type_detail("parameter '" + param.name + "'", param.type);
+      diagnostic = make_lowering_diagnostic(
+          unsupported_type_detail("parameter '" + param.name + "'", param.type), param.range);
       return false;
     }
   }
-  if (!statements_are_lowerable(fn.body, detail)) {
+  if (!statements_are_lowerable(fn.body, diagnostic)) {
     return false;
   }
   if (!block_always_returns(fn.body)) {
-    detail = "function does not return on every lowered path";
+    diagnostic =
+        make_lowering_diagnostic("function does not return on every lowered path", fn.range);
     return false;
   }
   return true;
@@ -521,9 +550,10 @@ GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Mo
   auto* bool_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_BOOL);
 
   for (const auto& fn : module.functions) {
-    std::string detail;
-    if (!function_is_lowerable(fn, detail)) {
-      result.functions.push_back(GccJitFunctionReport{fn.name, false, detail});
+    LoweringDiagnostic diagnostic;
+    if (!function_is_lowerable(fn, diagnostic)) {
+      result.functions.push_back(
+          GccJitFunctionReport{fn.name, false, diagnostic.detail, diagnostic.range});
       continue;
     }
 
@@ -531,9 +561,11 @@ GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Mo
       FunctionLowerer lowerer(context, i64_type, bool_type, fn);
       lowerer.lower();
       lowered_names.push_back(fn.name);
-      result.functions.push_back(GccJitFunctionReport{fn.name, true, "lowered"});
+      result.functions.push_back(GccJitFunctionReport{fn.name, true, "lowered", fn.range});
+    } catch (const LoweringError& error) {
+      result.functions.push_back(GccJitFunctionReport{fn.name, false, error.what(), error.range()});
     } catch (const std::exception& error) {
-      result.functions.push_back(GccJitFunctionReport{fn.name, false, error.what()});
+      result.functions.push_back(GccJitFunctionReport{fn.name, false, error.what(), fn.range});
     }
   }
 
@@ -574,17 +606,20 @@ std::string scalar_kind_name(TypeKind kind) {
 
 bool invocation_arguments_match(const FunctionDecl& fn,
                                 const std::vector<GccJitScalarValue>& arguments,
-                                std::string& detail) {
+                                LoweringDiagnostic& diagnostic) {
   if (fn.params.size() != arguments.size()) {
-    detail = "function '" + fn.name + "' expects " + std::to_string(fn.params.size()) +
-             " argument(s), got " + std::to_string(arguments.size());
+    diagnostic = make_lowering_diagnostic(
+        "function '" + fn.name + "' expects " + std::to_string(fn.params.size()) +
+            " argument(s), got " + std::to_string(arguments.size()),
+        fn.range);
     return false;
   }
   for (std::size_t index = 0; index < fn.params.size(); ++index) {
     if (fn.params[index].type.kind != arguments[index].kind) {
-      detail = "argument " + std::to_string(index + 1) + " for function '" + fn.name +
-               "' must be " + fn.params[index].type.display() + ", got " +
-               scalar_kind_name(arguments[index].kind);
+      diagnostic = make_lowering_diagnostic(
+          "argument " + std::to_string(index + 1) + " for function '" + fn.name + "' must be " +
+              fn.params[index].type.display() + ", got " + scalar_kind_name(arguments[index].kind),
+          fn.params[index].range);
       return false;
     }
   }
@@ -724,9 +759,10 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
     return invocation;
   }
 
-  std::string detail;
-  if (!invocation_arguments_match(*fn, arguments, detail)) {
-    invocation.detail = detail;
+  LoweringDiagnostic diagnostic;
+  if (!invocation_arguments_match(*fn, arguments, diagnostic)) {
+    invocation.detail = diagnostic.detail;
+    invocation.range = diagnostic.range;
     return invocation;
   }
 
@@ -742,6 +778,7 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
   const auto* report = find_function_report(lowering, function_name);
   if (!report || !report->lowered) {
     invocation.detail = report ? report->detail : "function was not lowered";
+    invocation.range = report ? report->range : SourceRange{};
     return invocation;
   }
 
@@ -749,6 +786,7 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
   if (!jit_result) {
     const char* last_error = gcc_jit_context_get_last_error(context.get());
     invocation.detail = last_error ? last_error : "gcc_jit_context_compile failed";
+    invocation.range = fn->range;
     return invocation;
   }
   invocation.compiled = true;
@@ -756,6 +794,7 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
   void* code = gcc_jit_result_get_code(jit_result.get(), function_name.c_str());
   if (!code) {
     invocation.detail = "compiled function '" + function_name + "' was not found in JIT result";
+    invocation.range = fn->range;
     return invocation;
   }
 
@@ -765,13 +804,14 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
     invocation.detail = "invoked " + function_name;
   } catch (const std::exception& error) {
     invocation.detail = error.what();
+    invocation.range = fn->range;
   }
   return invocation;
 #else
   (void)module;
   (void)function_name;
   (void)arguments;
-  return {false, false, false, unavailable_detail(), {}};
+  return {false, false, false, unavailable_detail(), {}, {}};
 #endif
 }
 

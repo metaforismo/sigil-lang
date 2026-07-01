@@ -57,6 +57,16 @@ std::string indent_block(const std::string& block, const std::string& indent) {
   return out.str();
 }
 
+bool has_range(const sigil::SourceRange& range) {
+  return range.start.line != 0;
+}
+
+void print_range_if_available(const sigil::SourceRange& range) {
+  if (has_range(range)) {
+    std::cout << "    at: " << range.display() << "\n";
+  }
+}
+
 const sigil::FunctionDecl* find_function(const sigil::Module& module,
                                          const std::string& function_name) {
   for (const auto& fn : module.functions) {
@@ -206,6 +216,7 @@ int compile_command(const std::vector<std::string>& args) {
       std::cout << " - " << fn.detail;
     }
     std::cout << "\n";
+    print_range_if_available(fn.range);
   }
 
   if (!result.available) {
@@ -247,6 +258,7 @@ int run_command(const std::vector<std::string>& args) {
   std::cout << "  run: " << function_name << "\n";
   std::cout << "  status: " << (result.invoked ? "invoked" : "not invoked") << "\n";
   std::cout << "  detail: " << result.detail << "\n";
+  print_range_if_available(result.range);
   if (result.invoked) {
     std::cout << "  result: " << sigil::display_gccjit_value(result.value) << "\n";
   }

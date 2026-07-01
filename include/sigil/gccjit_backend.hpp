@@ -19,6 +19,7 @@ struct GccJitFunctionReport {
   std::string name;
   bool lowered = false;
   std::string detail;
+  SourceRange range;
 };
 
 struct GccJitCompileResult {
@@ -45,6 +46,7 @@ struct GccJitInvocationResult {
   bool compiled = false;
   bool invoked = false;
   std::string detail;
+  SourceRange range;
   GccJitScalarValue value;
 };
 

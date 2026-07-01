@@ -22,12 +22,13 @@ tests, and docs are in the repo.
 - [x] Add assignment with explicit mutation rules.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
+- [x] Emit native lowering diagnostics with source ranges.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Emit native lowering diagnostics with source ranges.
 - [ ] Keep solver-visible IR and native-lowered IR aligned.
+- [ ] Save lowered IR artifacts beside SMT artifacts.
 
 ## Core Language
 

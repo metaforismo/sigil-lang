@@ -39,6 +39,8 @@ production verifier yet.
   returns.
 - ABI smoke tests that invoke JIT-compiled scalar functions and check returned
   `i64`/`bool` values.
+- Native-lowering diagnostics that report source ranges for unsupported
+  constructs.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
   and a Linux `libgccjit` native-lowering smoke path.
 
@@ -151,7 +153,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- native lowering diagnostics with source ranges;
+- alignment checks between solver-visible IR and native-lowered IR;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
