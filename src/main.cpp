@@ -7,6 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@ void print_help() {
             << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
             << "  sigil compile <file.sigil>\n"
+            << "  sigil run <file.sigil> <function> [args...]\n"
             << "  sigil backend\n";
 }
 
@@ -53,6 +55,47 @@ std::string indent_block(const std::string& block, const std::string& indent) {
     out << indent << line << "\n";
   }
   return out.str();
+}
+
+const sigil::FunctionDecl* find_function(const sigil::Module& module,
+                                         const std::string& function_name) {
+  for (const auto& fn : module.functions) {
+    if (fn.name == function_name) {
+      return &fn;
+    }
+  }
+  return nullptr;
+}
+
+sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::Type& type,
+                                            std::size_t index) {
+  if (type.kind == sigil::TypeKind::I64) {
+    std::size_t consumed = 0;
+    long long parsed = 0;
+    try {
+      parsed = std::stoll(value, &consumed, 10);
+    } catch (const std::exception&) {
+      throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64");
+    }
+    if (consumed != value.size()) {
+      throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64");
+    }
+    return sigil::gccjit_i64(parsed);
+  }
+
+  if (type.kind == sigil::TypeKind::Bool) {
+    if (value == "true" || value == "1") {
+      return sigil::gccjit_bool(true);
+    }
+    if (value == "false" || value == "0") {
+      return sigil::gccjit_bool(false);
+    }
+    throw std::runtime_error("argument " + std::to_string(index + 1) +
+                             " must be a bool: true, false, 1, or 0");
+  }
+
+  throw std::runtime_error("argument " + std::to_string(index + 1) + " has unsupported type '" +
+                           type.display() + "'");
 }
 
 int check_command(const std::vector<std::string>& args) {
@@ -171,6 +214,49 @@ int compile_command(const std::vector<std::string>& args) {
   return result.compiled ? 0 : 2;
 }
 
+int run_command(const std::vector<std::string>& args) {
+  if (args.size() < 2) {
+    print_help();
+    return 1;
+  }
+
+  const auto& path = args[0];
+  const auto& function_name = args[1];
+  const auto source = read_file(path);
+  const auto module = sigil::parse_source(source, path);
+  sigil::validate_module(module);
+
+  const auto* fn = find_function(module, function_name);
+  if (!fn) {
+    throw std::runtime_error("unknown function: " + function_name);
+  }
+  if (args.size() - 2 != fn->params.size()) {
+    throw std::runtime_error("function '" + function_name + "' expects " +
+                             std::to_string(fn->params.size()) + " argument(s), got " +
+                             std::to_string(args.size() - 2));
+  }
+
+  std::vector<sigil::GccJitScalarValue> values;
+  values.reserve(fn->params.size());
+  for (std::size_t index = 0; index < fn->params.size(); ++index) {
+    values.push_back(parse_run_argument(args[index + 2], fn->params[index].type, index));
+  }
+
+  const auto result = sigil::invoke_function_with_gccjit(module, function_name, values);
+  std::cout << "module " << module.name << "\n";
+  std::cout << "  run: " << function_name << "\n";
+  std::cout << "  status: " << (result.invoked ? "invoked" : "not invoked") << "\n";
+  std::cout << "  detail: " << result.detail << "\n";
+  if (result.invoked) {
+    std::cout << "  result: " << sigil::display_gccjit_value(result.value) << "\n";
+  }
+
+  if (!result.available) {
+    return 3;
+  }
+  return result.invoked ? 0 : 2;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -188,6 +274,9 @@ int main(int argc, char** argv) {
     }
     if (command == "compile") {
       return compile_command(args);
+    }
+    if (command == "run") {
+      return run_command(args);
     }
     if (command == "backend") {
       return backend_command();

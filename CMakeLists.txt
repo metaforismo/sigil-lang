@@ -182,8 +182,15 @@ if(SIGIL_GCCJIT_AVAILABLE)
   add_test(
     NAME sigil_gccjit_compile_native
     COMMAND sigil compile "${CMAKE_CURRENT_SOURCE_DIR}/examples/native.sigil")
+  add_test(
+    NAME sigil_gccjit_run_native
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_run_native.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/native.sigil")
   if(SIGIL_GCCJIT_TEST_ENV)
     set_tests_properties(sigil_gccjit_compile_native PROPERTIES
+      ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
+    set_tests_properties(sigil_gccjit_run_native PROPERTIES
       ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
   endif()
 endif()

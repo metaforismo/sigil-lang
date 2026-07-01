@@ -2,6 +2,7 @@
 
 #include "sigil/ast.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -28,5 +29,27 @@ struct GccJitCompileResult {
 };
 
 GccJitCompileResult compile_module_with_gccjit(const Module& module);
+
+struct GccJitScalarValue {
+  TypeKind kind = TypeKind::I64;
+  std::int64_t integer = 0;
+  bool boolean = false;
+};
+
+GccJitScalarValue gccjit_i64(std::int64_t value);
+GccJitScalarValue gccjit_bool(bool value);
+std::string display_gccjit_value(const GccJitScalarValue& value);
+
+struct GccJitInvocationResult {
+  bool available = false;
+  bool compiled = false;
+  bool invoked = false;
+  std::string detail;
+  GccJitScalarValue value;
+};
+
+GccJitInvocationResult invoke_function_with_gccjit(const Module& module,
+                                                   const std::string& function_name,
+                                                   const std::vector<GccJitScalarValue>& arguments);
 
 } // namespace sigil

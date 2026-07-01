@@ -37,6 +37,8 @@ production verifier yet.
 - Native lowering for pure `i64`/`bool` functions using `let`, assignment,
   conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
   returns.
+- ABI smoke tests that invoke JIT-compiled scalar functions and check returned
+  `i64`/`bool` values.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
   and a Linux `libgccjit` native-lowering smoke path.
 
@@ -100,6 +102,12 @@ Compile the native-lowerable subset into an in-memory GCC JIT module:
 ./build/sigil compile examples/native.sigil
 ```
 
+Run a native-lowered scalar function through the JIT ABI:
+
+```sh
+./build/sigil run examples/native.sigil add_one 41
+```
+
 `sigil check` also runs static validation before building proof obligations:
 contract expressions must be boolean, identifiers must be declared, return
 expressions must match the function return type, and unsupported value types are
@@ -143,7 +151,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- ABI tests for JIT-compiled scalar functions;
+- native lowering diagnostics with source ranges;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

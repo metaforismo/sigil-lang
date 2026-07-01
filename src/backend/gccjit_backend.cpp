@@ -15,6 +15,21 @@
 
 namespace sigil {
 
+GccJitScalarValue gccjit_i64(std::int64_t value) {
+  return GccJitScalarValue{TypeKind::I64, value, value != 0};
+}
+
+GccJitScalarValue gccjit_bool(bool value) {
+  return GccJitScalarValue{TypeKind::Bool, value ? 1 : 0, value};
+}
+
+std::string display_gccjit_value(const GccJitScalarValue& value) {
+  if (value.kind == TypeKind::Bool) {
+    return value.boolean ? "true" : "false";
+  }
+  return std::to_string(value.integer);
+}
+
 namespace {
 
 [[maybe_unused]] const char* unavailable_detail() {
@@ -486,6 +501,166 @@ private:
   std::size_t local_counter_ = 0;
 };
 
+std::unique_ptr<gcc_jit_context, ContextDeleter> acquire_configured_context() {
+  std::unique_ptr<gcc_jit_context, ContextDeleter> context(gcc_jit_context_acquire());
+  if (!context) {
+    return context;
+  }
+#ifdef LIBGCCJIT_HAVE_gcc_jit_context_set_bool_allow_unreachable_blocks
+  gcc_jit_context_set_bool_allow_unreachable_blocks(context.get(), 1);
+#endif
+  gcc_jit_context_set_int_option(context.get(), GCC_JIT_INT_OPTION_OPTIMIZATION_LEVEL, 2);
+  return context;
+}
+
+GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Module& module,
+                                              std::vector<std::string>& lowered_names) {
+  GccJitCompileResult result;
+  result.available = true;
+  auto* i64_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_INT64_T);
+  auto* bool_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_BOOL);
+
+  for (const auto& fn : module.functions) {
+    std::string detail;
+    if (!function_is_lowerable(fn, detail)) {
+      result.functions.push_back(GccJitFunctionReport{fn.name, false, detail});
+      continue;
+    }
+
+    try {
+      FunctionLowerer lowerer(context, i64_type, bool_type, fn);
+      lowerer.lower();
+      lowered_names.push_back(fn.name);
+      result.functions.push_back(GccJitFunctionReport{fn.name, true, "lowered"});
+    } catch (const std::exception& error) {
+      result.functions.push_back(GccJitFunctionReport{fn.name, false, error.what()});
+    }
+  }
+
+  if (lowered_names.empty()) {
+    result.detail = "no functions were lowerable by the GCCJIT backend";
+  }
+  return result;
+}
+
+const FunctionDecl* find_function(const Module& module, const std::string& function_name) {
+  for (const auto& fn : module.functions) {
+    if (fn.name == function_name) {
+      return &fn;
+    }
+  }
+  return nullptr;
+}
+
+const GccJitFunctionReport* find_function_report(const GccJitCompileResult& result,
+                                                 const std::string& function_name) {
+  for (const auto& report : result.functions) {
+    if (report.name == function_name) {
+      return &report;
+    }
+  }
+  return nullptr;
+}
+
+std::string scalar_kind_name(TypeKind kind) {
+  if (kind == TypeKind::Bool) {
+    return "bool";
+  }
+  if (kind == TypeKind::I64) {
+    return "i64";
+  }
+  return "unsupported";
+}
+
+bool invocation_arguments_match(const FunctionDecl& fn,
+                                const std::vector<GccJitScalarValue>& arguments,
+                                std::string& detail) {
+  if (fn.params.size() != arguments.size()) {
+    detail = "function '" + fn.name + "' expects " + std::to_string(fn.params.size()) +
+             " argument(s), got " + std::to_string(arguments.size());
+    return false;
+  }
+  for (std::size_t index = 0; index < fn.params.size(); ++index) {
+    if (fn.params[index].type.kind != arguments[index].kind) {
+      detail = "argument " + std::to_string(index + 1) + " for function '" + fn.name +
+               "' must be " + fn.params[index].type.display() + ", got " +
+               scalar_kind_name(arguments[index].kind);
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename T> T native_arg(const GccJitScalarValue& value);
+
+template <> std::int64_t native_arg<std::int64_t>(const GccJitScalarValue& value) {
+  return value.integer;
+}
+
+template <> bool native_arg<bool>(const GccJitScalarValue& value) {
+  return value.boolean;
+}
+
+template <typename Return, typename... Args, std::size_t... Index>
+Return invoke_raw_impl(void* code, const std::vector<GccJitScalarValue>& arguments,
+                       std::index_sequence<Index...>) {
+  using FunctionPointer = Return (*)(Args...);
+  const auto fn = reinterpret_cast<FunctionPointer>(code);
+  return fn(native_arg<Args>(arguments[Index])...);
+}
+
+template <typename Return, typename... Args>
+Return invoke_raw(void* code, const std::vector<GccJitScalarValue>& arguments) {
+  return invoke_raw_impl<Return, Args...>(code, arguments, std::index_sequence_for<Args...>{});
+}
+
+template <typename Return>
+Return invoke_with_signature(void* code, const FunctionDecl& fn,
+                             const std::vector<GccJitScalarValue>& arguments) {
+  if (fn.params.empty()) {
+    return invoke_raw<Return>(code, arguments);
+  }
+
+  if (fn.params.size() == 1) {
+    if (fn.params[0].type.kind == TypeKind::I64) {
+      return invoke_raw<Return, std::int64_t>(code, arguments);
+    }
+    if (fn.params[0].type.kind == TypeKind::Bool) {
+      return invoke_raw<Return, bool>(code, arguments);
+    }
+  }
+
+  if (fn.params.size() == 2) {
+    const auto lhs = fn.params[0].type.kind;
+    const auto rhs = fn.params[1].type.kind;
+    if (lhs == TypeKind::I64 && rhs == TypeKind::I64) {
+      return invoke_raw<Return, std::int64_t, std::int64_t>(code, arguments);
+    }
+    if (lhs == TypeKind::I64 && rhs == TypeKind::Bool) {
+      return invoke_raw<Return, std::int64_t, bool>(code, arguments);
+    }
+    if (lhs == TypeKind::Bool && rhs == TypeKind::I64) {
+      return invoke_raw<Return, bool, std::int64_t>(code, arguments);
+    }
+    if (lhs == TypeKind::Bool && rhs == TypeKind::Bool) {
+      return invoke_raw<Return, bool, bool>(code, arguments);
+    }
+  }
+
+  throw LoweringError("ABI invocation currently supports up to two scalar parameters");
+}
+
+GccJitScalarValue invoke_code(void* code, const FunctionDecl& fn,
+                              const std::vector<GccJitScalarValue>& arguments) {
+  if (fn.return_type.kind == TypeKind::I64) {
+    return gccjit_i64(invoke_with_signature<std::int64_t>(code, fn, arguments));
+  }
+  if (fn.return_type.kind == TypeKind::Bool) {
+    return gccjit_bool(invoke_with_signature<bool>(code, fn, arguments));
+  }
+  throw LoweringError("ABI invocation only supports i64 and bool return values");
+}
+
 #endif
 
 } // namespace
@@ -505,43 +680,16 @@ GccJitStatus gccjit_status() {
 
 GccJitCompileResult compile_module_with_gccjit(const Module& module) {
 #if SIGIL_HAVE_GCCJIT
-  std::unique_ptr<gcc_jit_context, ContextDeleter> context(gcc_jit_context_acquire());
+  auto context = acquire_configured_context();
   if (!context) {
     return {
         false, false, "libgccjit was found at build time, but gcc_jit_context_acquire failed", {}};
   }
 
-#ifdef LIBGCCJIT_HAVE_gcc_jit_context_set_bool_allow_unreachable_blocks
-  gcc_jit_context_set_bool_allow_unreachable_blocks(context.get(), 1);
-#endif
-  gcc_jit_context_set_int_option(context.get(), GCC_JIT_INT_OPTION_OPTIMIZATION_LEVEL, 2);
-
-  GccJitCompileResult result;
-  result.available = true;
   std::vector<std::string> lowered_names;
-
-  auto* i64_type = gcc_jit_context_get_type(context.get(), GCC_JIT_TYPE_INT64_T);
-  auto* bool_type = gcc_jit_context_get_type(context.get(), GCC_JIT_TYPE_BOOL);
-
-  for (const auto& fn : module.functions) {
-    std::string detail;
-    if (!function_is_lowerable(fn, detail)) {
-      result.functions.push_back(GccJitFunctionReport{fn.name, false, detail});
-      continue;
-    }
-
-    try {
-      FunctionLowerer lowerer(context.get(), i64_type, bool_type, fn);
-      lowerer.lower();
-      lowered_names.push_back(fn.name);
-      result.functions.push_back(GccJitFunctionReport{fn.name, true, "lowered"});
-    } catch (const std::exception& error) {
-      result.functions.push_back(GccJitFunctionReport{fn.name, false, error.what()});
-    }
-  }
+  auto result = lower_module_into_context(context.get(), module, lowered_names);
 
   if (lowered_names.empty()) {
-    result.detail = "no functions were lowerable by the GCCJIT backend";
     return result;
   }
 
@@ -560,6 +708,70 @@ GccJitCompileResult compile_module_with_gccjit(const Module& module) {
 #else
   (void)module;
   return {false, false, unavailable_detail(), {}};
+#endif
+}
+
+GccJitInvocationResult
+invoke_function_with_gccjit(const Module& module, const std::string& function_name,
+                            const std::vector<GccJitScalarValue>& arguments) {
+#if SIGIL_HAVE_GCCJIT
+  GccJitInvocationResult invocation;
+  invocation.available = true;
+
+  const auto* fn = find_function(module, function_name);
+  if (!fn) {
+    invocation.detail = "unknown function '" + function_name + "'";
+    return invocation;
+  }
+
+  std::string detail;
+  if (!invocation_arguments_match(*fn, arguments, detail)) {
+    invocation.detail = detail;
+    return invocation;
+  }
+
+  auto context = acquire_configured_context();
+  if (!context) {
+    invocation.available = false;
+    invocation.detail = "libgccjit was found at build time, but gcc_jit_context_acquire failed";
+    return invocation;
+  }
+
+  std::vector<std::string> lowered_names;
+  const auto lowering = lower_module_into_context(context.get(), module, lowered_names);
+  const auto* report = find_function_report(lowering, function_name);
+  if (!report || !report->lowered) {
+    invocation.detail = report ? report->detail : "function was not lowered";
+    return invocation;
+  }
+
+  std::unique_ptr<gcc_jit_result, ResultDeleter> jit_result(gcc_jit_context_compile(context.get()));
+  if (!jit_result) {
+    const char* last_error = gcc_jit_context_get_last_error(context.get());
+    invocation.detail = last_error ? last_error : "gcc_jit_context_compile failed";
+    return invocation;
+  }
+  invocation.compiled = true;
+
+  void* code = gcc_jit_result_get_code(jit_result.get(), function_name.c_str());
+  if (!code) {
+    invocation.detail = "compiled function '" + function_name + "' was not found in JIT result";
+    return invocation;
+  }
+
+  try {
+    invocation.value = invoke_code(code, *fn, arguments);
+    invocation.invoked = true;
+    invocation.detail = "invoked " + function_name;
+  } catch (const std::exception& error) {
+    invocation.detail = error.what();
+  }
+  return invocation;
+#else
+  (void)module;
+  (void)function_name;
+  (void)arguments;
+  return {false, false, false, unavailable_detail(), {}};
 #endif
 }
 

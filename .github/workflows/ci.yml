@@ -104,3 +104,6 @@ jobs:
 
       - name: Native compile smoke
         run: ./build/sigil compile examples/native.sigil
+
+      - name: Native ABI run smoke
+        run: ./build/sigil run examples/native.sigil add_one 41 | grep "result: 42"

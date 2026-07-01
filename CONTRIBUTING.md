@@ -20,6 +20,7 @@ cmake -S . -B build-gccjit
 cmake --build build-gccjit
 ./build-gccjit/sigil backend
 ./build-gccjit/sigil compile examples/native.sigil
+./build-gccjit/sigil run examples/native.sigil add_one 41
 ```
 
 If you have Z3 installed, run at least one strict solver-backed smoke check:

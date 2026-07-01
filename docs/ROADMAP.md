@@ -21,12 +21,13 @@ tests, and docs are in the repo.
 - [x] Add statement-level `if` and join proof contexts at merge points.
 - [x] Add assignment with explicit mutation rules.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
+- [x] Add ABI tests for JIT-compiled functions.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Add ABI tests for JIT-compiled functions.
 - [ ] Emit native lowering diagnostics with source ranges.
+- [ ] Keep solver-visible IR and native-lowered IR aligned.
 
 ## Core Language
 

@@ -88,6 +88,10 @@ in-memory GCC JIT result. It supports `i64` and `bool` parameters, locals,
 assignment, expression and statement conditionals, returns, comparisons, boolean
 operators, and `+`/`-`/`*` arithmetic.
 
+The ABI smoke path retrieves lowered functions from `gcc_jit_result_get_code`
+and invokes a small set of scalar signatures directly. This keeps native tests
+honest: the backend must produce callable code, not only a compilable IR graph.
+
 Contracts, `assume`, and `assert` remain proof-layer constructs. The native
 backend erases them after static validation and proof generation. Division and
 modulo are deliberately not lowered yet, because Sigil still needs an explicit

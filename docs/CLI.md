@@ -31,8 +31,8 @@ Exit codes:
 - `1`: command-line, parse, validation, or file-read error.
 - `2`: at least one obligation was `REFUTED` or `ERROR`, or `--strict` found an
   `UNKNOWN` obligation.
-- `3`: `sigil backend` or `sigil compile` was run and the binary was built
-  without a usable `libgccjit` backend.
+- `3`: `sigil backend`, `sigil compile`, or `sigil run` was run and the binary
+  was built without a usable `libgccjit` backend.
 
 Result statuses:
 
@@ -82,4 +82,34 @@ Exit codes:
 - `1`: command-line, parse, validation, or file-read error.
 - `2`: `libgccjit` was available, but no function could be lowered or GCC JIT
   compilation failed.
+- `3`: the binary was built without a usable `libgccjit` backend.
+
+## `sigil run`
+
+```sh
+sigil run <file.sigil> <function> [args...]
+```
+
+Parses and validates a module, lowers it with `libgccjit`, retrieves the named
+function from the JIT result, and invokes it through the native ABI. Arguments
+are parsed from the function signature: `i64` parameters accept integer strings,
+and `bool` parameters accept `true`, `false`, `1`, or `0`.
+
+Example:
+
+```sh
+sigil run examples/native.sigil add_one 41
+```
+
+The command currently supports `i64` and `bool` return values and up to two
+scalar parameters. That is enough to exercise the first ABI contract without
+pretending Sigil has a complete FFI or runtime yet.
+
+Exit codes:
+
+- `0`: the function was compiled, found in the JIT result, invoked, and returned
+  a scalar value.
+- `1`: command-line, parse, validation, argument-conversion, or file-read error.
+- `2`: `libgccjit` was available, but lowering, JIT compilation, symbol lookup,
+  or invocation failed.
 - `3`: the binary was built without a usable `libgccjit` backend.

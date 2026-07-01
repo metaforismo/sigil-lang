@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -57,9 +58,48 @@ fn nonzero(x: i64) -> bool
   expect(result.functions[1].lowered, "choose lowered");
   expect(result.functions[2].name == "nonzero", "third function name");
   expect(result.functions[2].lowered, "nonzero lowered");
+
+  const auto add_one =
+      sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
+  expect(add_one.available, "add_one invocation sees backend");
+  expect(add_one.compiled, "add_one invocation compiled");
+  expect(add_one.invoked, "add_one invoked");
+  expect(add_one.value.kind == sigil::TypeKind::I64, "add_one result kind");
+  expect(add_one.value.integer == 42, "add_one ABI result");
+
+  const auto choose_true = sigil::invoke_function_with_gccjit(
+      module, "choose", {sigil::gccjit_bool(true), sigil::gccjit_i64(9)});
+  expect(choose_true.invoked, "choose true invoked");
+  expect(choose_true.value.integer == 9, "choose true ABI result");
+
+  const auto choose_false = sigil::invoke_function_with_gccjit(
+      module, "choose", {sigil::gccjit_bool(false), sigil::gccjit_i64(9)});
+  expect(choose_false.invoked, "choose false invoked");
+  expect(choose_false.value.integer == 0, "choose false ABI result");
+
+  const auto nonzero_false =
+      sigil::invoke_function_with_gccjit(module, "nonzero", {sigil::gccjit_i64(0)});
+  expect(nonzero_false.invoked, "nonzero false invoked");
+  expect(nonzero_false.value.kind == sigil::TypeKind::Bool, "nonzero result kind");
+  expect(!nonzero_false.value.boolean, "nonzero false ABI result");
+
+  const auto nonzero_true =
+      sigil::invoke_function_with_gccjit(module, "nonzero", {sigil::gccjit_i64(5)});
+  expect(nonzero_true.invoked, "nonzero true invoked");
+  expect(nonzero_true.value.boolean, "nonzero true ABI result");
+
+  const auto wrong_argument =
+      sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_bool(true)});
+  expect(!wrong_argument.invoked, "wrong argument not invoked");
+  expect(wrong_argument.detail.find("must be i64") != std::string::npos,
+         "wrong argument explains expected type");
 #else
   expect(!result.available, "gccjit compile result unavailable without backend");
   expect(!result.compiled, "gccjit compile result not compiled without backend");
+  const auto invocation =
+      sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
+  expect(!invocation.available, "gccjit invocation unavailable without backend");
+  expect(!invocation.invoked, "gccjit invocation not invoked without backend");
 #endif
 
   const char* unsupported_source = R"(
