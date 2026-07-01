@@ -124,7 +124,7 @@ struct FunctionDecl {
   std::string name;
   std::vector<ParamDecl> params;
   Type return_type;
-  std::vector<NamedPredicate> requires;
+  std::vector<NamedPredicate> preconditions;
   std::vector<NamedPredicate> ensures;
   std::vector<Statement> body;
   SourceLocation location;

@@ -120,7 +120,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       symbols["result"] = fn.return_type;
     }
 
-    std::vector<NamedPredicate> active = fn.requires;
+    std::vector<NamedPredicate> active = fn.preconditions;
     int assert_index = 0;
     int return_index = 0;
     for (const auto& statement : fn.body) {

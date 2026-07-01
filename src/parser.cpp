@@ -96,7 +96,7 @@ FunctionDecl Parser::parse_function() {
 
   while (check(TokenKind::Requires) || check(TokenKind::Ensures)) {
     if (check(TokenKind::Requires)) {
-      decl.requires.push_back(parse_named_predicate(TokenKind::Requires));
+      decl.preconditions.push_back(parse_named_predicate(TokenKind::Requires));
     } else {
       decl.ensures.push_back(parse_named_predicate(TokenKind::Ensures));
     }

@@ -39,7 +39,7 @@ ensures preserved: result >= 0;
   expect(module.structs[0].fields.size() == 2, "field count");
   expect(module.structs[0].invariants.size() == 1, "invariant count");
   expect(module.functions.size() == 1, "function count");
-  expect(module.functions[0].requires.size() == 1, "requires count");
+  expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
   expect(module.functions[0].body.size() == 2, "body count");
   expect(sigil::display_expr(module.structs[0].invariants[0].expr) == "(!valid || (key >= 0))",
