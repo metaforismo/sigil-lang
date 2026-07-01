@@ -13,4 +13,4 @@ struct GccJitStatus {
 
 GccJitStatus gccjit_status();
 
-}  // namespace sigil
+} // namespace sigil

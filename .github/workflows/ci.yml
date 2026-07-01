@@ -32,3 +32,25 @@ jobs:
 
       - name: Smoke check example
         run: ./build/sigil check examples/cache.sigil --no-z3 --dump-smt
+
+  solver:
+    name: Z3 strict proof smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Z3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y z3
+
+      - name: Configure
+        run: cmake -S . -B build -DSIGIL_ENABLE_GCCJIT=OFF -DSIGIL_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Strict proof smoke
+        run: ./build/sigil check examples/cache.sigil --strict

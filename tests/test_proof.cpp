@@ -13,7 +13,7 @@ void expect(bool condition, const char* message) {
   }
 }
 
-}  // namespace
+} // namespace
 
 int main() {
   const char* source = R"(
@@ -31,7 +31,8 @@ ensures preserved: result >= 0;
   const auto module = sigil::parse_source(source, "proof.sigil");
   const auto obligations = sigil::build_obligations(module);
   expect(obligations.size() == 2, "assert plus ensure obligations");
-  expect(obligations[0].name == "fn.proof_seed.assert.1.still_non_negative", "assert obligation name");
+  expect(obligations[0].name == "fn.proof_seed.assert.1.still_non_negative",
+         "assert obligation name");
 
   const auto smt = sigil::emit_smt_lib(obligations[1]);
   expect(smt.find("(declare-const x Int)") != std::string::npos, "declares x");

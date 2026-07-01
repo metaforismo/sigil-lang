@@ -7,11 +7,12 @@
 - Emit SMT-LIB proof obligations.
 - Run local checks and optional Z3.
 - Detect `libgccjit` in CMake.
+- Validate scalar proof expressions before SMT emission.
 - Keep CI dependency-light and reproducible.
 
 ## Phase 1: Useful Core Language
 
-- Add a real type checker.
+- Extend the scalar type checker into a real language type checker.
 - Add variables, assignment, if/else, loops, and simple structs.
 - Generate weakest-precondition obligations for control flow.
 - Report source spans for failed or unknown obligations.

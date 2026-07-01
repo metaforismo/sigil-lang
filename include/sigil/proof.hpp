@@ -30,10 +30,9 @@ struct VerificationResult {
 
 std::vector<ProofObligation> build_obligations(const Module& module);
 std::string emit_smt_lib(const ProofObligation& obligation);
-std::vector<VerificationResult> verify_obligations(
-    const std::vector<ProofObligation>& obligations,
-    bool use_z3);
+std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
+                                                   bool use_z3);
 
 const char* status_name(VerificationStatus status);
 
-}  // namespace sigil
+} // namespace sigil

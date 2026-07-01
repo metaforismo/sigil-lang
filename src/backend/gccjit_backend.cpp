@@ -15,8 +15,9 @@ GccJitStatus gccjit_status() {
   gcc_jit_context_release(context);
   return {true, "libgccjit is available and can allocate a JIT context"};
 #else
-  return {false, "this binary was built without libgccjit; install libgccjit and reconfigure CMake"};
+  return {false,
+          "this binary was built without libgccjit; install libgccjit and reconfigure CMake"};
 #endif
 }
 
-}  // namespace sigil
+} // namespace sigil

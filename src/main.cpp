@@ -1,6 +1,7 @@
 #include "sigil/gccjit_backend.hpp"
 #include "sigil/parser.hpp"
 #include "sigil/proof.hpp"
+#include "sigil/typecheck.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -53,6 +54,7 @@ int check_command(const std::vector<std::string>& args) {
 
   const auto source = read_file(path);
   const auto module = sigil::parse_source(source, path);
+  sigil::validate_module(module);
   const auto obligations = sigil::build_obligations(module);
   const auto results = sigil::verify_obligations(obligations, use_z3);
 
@@ -70,13 +72,12 @@ int check_command(const std::vector<std::string>& args) {
   bool has_failure = false;
   bool has_unknown = false;
   for (const auto& result : results) {
-    std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name
-              << " - " << result.details << "\n";
+    std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name << " - "
+              << result.details << "\n";
     if (dump_smt) {
       std::cout << result.smt_lib << "\n";
     }
-    has_failure = has_failure ||
-                  result.status == sigil::VerificationStatus::Refuted ||
+    has_failure = has_failure || result.status == sigil::VerificationStatus::Refuted ||
                   result.status == sigil::VerificationStatus::Error;
     has_unknown = has_unknown || result.status == sigil::VerificationStatus::Unknown;
   }
@@ -93,7 +94,7 @@ int backend_command() {
   return status.available ? 0 : 3;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
   try {

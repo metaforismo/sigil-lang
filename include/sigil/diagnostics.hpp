@@ -18,10 +18,12 @@ class Diagnostic : public std::runtime_error {
 public:
   Diagnostic(SourceLocation location, const std::string& message);
 
-  const SourceLocation& location() const noexcept { return location_; }
+  const SourceLocation& location() const noexcept {
+    return location_;
+  }
 
 private:
   SourceLocation location_;
 };
 
-}  // namespace sigil
+} // namespace sigil

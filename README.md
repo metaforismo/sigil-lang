@@ -20,6 +20,8 @@ production verifier yet.
 - Hand-written lexer and parser for `.sigil` modules.
 - First-class syntax for struct invariants, function preconditions,
   postconditions, assumptions, assertions, and returns.
+- Static validation for predicate types, identifier scope, duplicate symbols,
+  and return types.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
@@ -49,6 +51,15 @@ ctest --test-dir build --output-on-failure
 ./build/sigil check examples/arithmetic.sigil --dump-smt
 ```
 
+For a fuller local setup on macOS:
+
+```sh
+brew install z3 libgccjit clang-format
+cmake -S . -B build -DSIGIL_WARNINGS_AS_ERRORS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
 If Z3 is installed and available on `PATH`, `sigil check` asks it to prove any
 obligation that the local syntactic prover cannot discharge. To use a specific
 binary:
@@ -62,6 +73,11 @@ Check whether the native backend was compiled with `libgccjit`:
 ```sh
 ./build/sigil backend
 ```
+
+`sigil check` also runs static validation before building proof obligations:
+contract expressions must be boolean, identifiers must be declared, return
+expressions must match the function return type, and unsupported value types are
+rejected before SMT is emitted.
 
 ## Language Shape
 
@@ -94,7 +110,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are:
 
-- type checking beyond the current declaration-level type map;
+- type checking beyond the current scalar proof-expression validator;
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;

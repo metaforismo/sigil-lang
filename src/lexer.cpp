@@ -30,71 +30,75 @@ std::vector<Token> Lexer::tokenize() {
     }
 
     switch (c) {
-      case '(':
-        tokens.push_back(make_token(TokenKind::LParen, start, location));
-        break;
-      case ')':
-        tokens.push_back(make_token(TokenKind::RParen, start, location));
-        break;
-      case '{':
-        tokens.push_back(make_token(TokenKind::LBrace, start, location));
-        break;
-      case '}':
-        tokens.push_back(make_token(TokenKind::RBrace, start, location));
-        break;
-      case ':':
-        tokens.push_back(make_token(TokenKind::Colon, start, location));
-        break;
-      case ';':
-        tokens.push_back(make_token(TokenKind::Semicolon, start, location));
-        break;
-      case ',':
-        tokens.push_back(make_token(TokenKind::Comma, start, location));
-        break;
-      case '+':
-        tokens.push_back(make_token(TokenKind::Plus, start, location));
-        break;
-      case '-':
-        tokens.push_back(make_token(match('>') ? TokenKind::Arrow : TokenKind::Minus, start, location));
-        break;
-      case '*':
-        tokens.push_back(make_token(TokenKind::Star, start, location));
-        break;
-      case '/':
-        tokens.push_back(make_token(TokenKind::Slash, start, location));
-        break;
-      case '%':
-        tokens.push_back(make_token(TokenKind::Percent, start, location));
-        break;
-      case '!':
-        tokens.push_back(make_token(match('=') ? TokenKind::BangEqual : TokenKind::Bang, start, location));
-        break;
-      case '<':
-        tokens.push_back(make_token(match('=') ? TokenKind::LessEqual : TokenKind::Less, start, location));
-        break;
-      case '>':
-        tokens.push_back(make_token(match('=') ? TokenKind::GreaterEqual : TokenKind::Greater, start, location));
-        break;
-      case '=':
-        if (!match('=')) {
-          throw Diagnostic(location, "expected '=' after '='");
-        }
-        tokens.push_back(make_token(TokenKind::EqualEqual, start, location));
-        break;
-      case '&':
-        if (!match('&')) {
-          throw Diagnostic(location, "expected '&' after '&'");
-        }
-        tokens.push_back(make_token(TokenKind::AndAnd, start, location));
-        break;
-      case '|':
-        if (!match('|')) {
-          throw Diagnostic(location, "expected '|' after '|'");
-        }
-        tokens.push_back(make_token(TokenKind::OrOr, start, location));
-        break;
-      default:
-        throw Diagnostic(location, std::string("unexpected character '") + c + "'");
+    case '(':
+      tokens.push_back(make_token(TokenKind::LParen, start, location));
+      break;
+    case ')':
+      tokens.push_back(make_token(TokenKind::RParen, start, location));
+      break;
+    case '{':
+      tokens.push_back(make_token(TokenKind::LBrace, start, location));
+      break;
+    case '}':
+      tokens.push_back(make_token(TokenKind::RBrace, start, location));
+      break;
+    case ':':
+      tokens.push_back(make_token(TokenKind::Colon, start, location));
+      break;
+    case ';':
+      tokens.push_back(make_token(TokenKind::Semicolon, start, location));
+      break;
+    case ',':
+      tokens.push_back(make_token(TokenKind::Comma, start, location));
+      break;
+    case '+':
+      tokens.push_back(make_token(TokenKind::Plus, start, location));
+      break;
+    case '-':
+      tokens.push_back(
+          make_token(match('>') ? TokenKind::Arrow : TokenKind::Minus, start, location));
+      break;
+    case '*':
+      tokens.push_back(make_token(TokenKind::Star, start, location));
+      break;
+    case '/':
+      tokens.push_back(make_token(TokenKind::Slash, start, location));
+      break;
+    case '%':
+      tokens.push_back(make_token(TokenKind::Percent, start, location));
+      break;
+    case '!':
+      tokens.push_back(
+          make_token(match('=') ? TokenKind::BangEqual : TokenKind::Bang, start, location));
+      break;
+    case '<':
+      tokens.push_back(
+          make_token(match('=') ? TokenKind::LessEqual : TokenKind::Less, start, location));
+      break;
+    case '>':
+      tokens.push_back(
+          make_token(match('=') ? TokenKind::GreaterEqual : TokenKind::Greater, start, location));
+      break;
+    case '=':
+      if (!match('=')) {
+        throw Diagnostic(location, "expected '=' after '='");
+      }
+      tokens.push_back(make_token(TokenKind::EqualEqual, start, location));
+      break;
+    case '&':
+      if (!match('&')) {
+        throw Diagnostic(location, "expected '&' after '&'");
+      }
+      tokens.push_back(make_token(TokenKind::AndAnd, start, location));
+      break;
+    case '|':
+      if (!match('|')) {
+        throw Diagnostic(location, "expected '|' after '|'");
+      }
+      tokens.push_back(make_token(TokenKind::OrOr, start, location));
+      break;
+    default:
+      throw Diagnostic(location, std::string("unexpected character '") + c + "'");
     }
   }
 
@@ -168,7 +172,8 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
   };
   const auto text = source_.substr(start, current_ - start);
   const auto found = keywords.find(text);
-  return Token{found == keywords.end() ? TokenKind::Identifier : found->second, text, std::move(location)};
+  return Token{found == keywords.end() ? TokenKind::Identifier : found->second, text,
+               std::move(location)};
 }
 
 Token Lexer::number(std::size_t start, SourceLocation location) {
@@ -180,80 +185,80 @@ Token Lexer::number(std::size_t start, SourceLocation location) {
 
 const char* token_name(TokenKind kind) {
   switch (kind) {
-    case TokenKind::End:
-      return "end of file";
-    case TokenKind::Identifier:
-      return "identifier";
-    case TokenKind::Number:
-      return "number";
-    case TokenKind::LParen:
-      return "'('";
-    case TokenKind::RParen:
-      return "')'";
-    case TokenKind::LBrace:
-      return "'{'";
-    case TokenKind::RBrace:
-      return "'}'";
-    case TokenKind::Colon:
-      return "':'";
-    case TokenKind::Semicolon:
-      return "';'";
-    case TokenKind::Comma:
-      return "','";
-    case TokenKind::Arrow:
-      return "'->'";
-    case TokenKind::Plus:
-      return "'+'";
-    case TokenKind::Minus:
-      return "'-'";
-    case TokenKind::Star:
-      return "'*'";
-    case TokenKind::Slash:
-      return "'/'";
-    case TokenKind::Percent:
-      return "'%'";
-    case TokenKind::Bang:
-      return "'!'";
-    case TokenKind::Less:
-      return "'<'";
-    case TokenKind::Greater:
-      return "'>'";
-    case TokenKind::LessEqual:
-      return "'<='";
-    case TokenKind::GreaterEqual:
-      return "'>='";
-    case TokenKind::EqualEqual:
-      return "'=='";
-    case TokenKind::BangEqual:
-      return "'!='";
-    case TokenKind::AndAnd:
-      return "'&&'";
-    case TokenKind::OrOr:
-      return "'||'";
-    case TokenKind::Module:
-      return "'module'";
-    case TokenKind::Struct:
-      return "'struct'";
-    case TokenKind::Invariant:
-      return "'invariant'";
-    case TokenKind::Fn:
-      return "'fn'";
-    case TokenKind::Requires:
-      return "'requires'";
-    case TokenKind::Ensures:
-      return "'ensures'";
-    case TokenKind::Assume:
-      return "'assume'";
-    case TokenKind::Assert:
-      return "'assert'";
-    case TokenKind::Return:
-      return "'return'";
-    case TokenKind::True:
-      return "'true'";
-    case TokenKind::False:
-      return "'false'";
+  case TokenKind::End:
+    return "end of file";
+  case TokenKind::Identifier:
+    return "identifier";
+  case TokenKind::Number:
+    return "number";
+  case TokenKind::LParen:
+    return "'('";
+  case TokenKind::RParen:
+    return "')'";
+  case TokenKind::LBrace:
+    return "'{'";
+  case TokenKind::RBrace:
+    return "'}'";
+  case TokenKind::Colon:
+    return "':'";
+  case TokenKind::Semicolon:
+    return "';'";
+  case TokenKind::Comma:
+    return "','";
+  case TokenKind::Arrow:
+    return "'->'";
+  case TokenKind::Plus:
+    return "'+'";
+  case TokenKind::Minus:
+    return "'-'";
+  case TokenKind::Star:
+    return "'*'";
+  case TokenKind::Slash:
+    return "'/'";
+  case TokenKind::Percent:
+    return "'%'";
+  case TokenKind::Bang:
+    return "'!'";
+  case TokenKind::Less:
+    return "'<'";
+  case TokenKind::Greater:
+    return "'>'";
+  case TokenKind::LessEqual:
+    return "'<='";
+  case TokenKind::GreaterEqual:
+    return "'>='";
+  case TokenKind::EqualEqual:
+    return "'=='";
+  case TokenKind::BangEqual:
+    return "'!='";
+  case TokenKind::AndAnd:
+    return "'&&'";
+  case TokenKind::OrOr:
+    return "'||'";
+  case TokenKind::Module:
+    return "'module'";
+  case TokenKind::Struct:
+    return "'struct'";
+  case TokenKind::Invariant:
+    return "'invariant'";
+  case TokenKind::Fn:
+    return "'fn'";
+  case TokenKind::Requires:
+    return "'requires'";
+  case TokenKind::Ensures:
+    return "'ensures'";
+  case TokenKind::Assume:
+    return "'assume'";
+  case TokenKind::Assert:
+    return "'assert'";
+  case TokenKind::Return:
+    return "'return'";
+  case TokenKind::True:
+    return "'true'";
+  case TokenKind::False:
+    return "'false'";
   }
   return "token";
 }
 
-}  // namespace sigil
+} // namespace sigil

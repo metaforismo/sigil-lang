@@ -79,4 +79,4 @@ private:
 
 const char* token_name(TokenKind kind);
 
-}  // namespace sigil
+} // namespace sigil

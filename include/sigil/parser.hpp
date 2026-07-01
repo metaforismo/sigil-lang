@@ -48,4 +48,4 @@ private:
 
 Module parse_source(std::string_view source, const std::string& file_name);
 
-}  // namespace sigil
+} // namespace sigil

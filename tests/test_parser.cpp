@@ -12,7 +12,7 @@ void expect(bool condition, const char* message) {
   }
 }
 
-}  // namespace
+} // namespace
 
 int main() {
   const char* source = R"(

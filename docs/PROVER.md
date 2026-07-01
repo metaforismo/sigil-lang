@@ -30,6 +30,10 @@ silently accepted.
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
 
+Sigil runs static validation before SMT emission. That matters for soundness:
+undeclared identifiers and mismatched predicate types are rejected instead of
+being guessed into SMT declarations.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.

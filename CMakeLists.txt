@@ -17,6 +17,7 @@ add_library(sigil_core
   src/lexer.cpp
   src/parser.cpp
   src/proof.cpp
+  src/typecheck.cpp
   src/backend/gccjit_backend.cpp)
 
 target_include_directories(sigil_core
@@ -40,8 +41,33 @@ else()
 endif()
 
 if(SIGIL_ENABLE_GCCJIT)
-  find_path(SIGIL_GCCJIT_INCLUDE_DIR NAMES libgccjit.h)
-  find_library(SIGIL_GCCJIT_LIBRARY NAMES gccjit libgccjit)
+  set(SIGIL_GCCJIT_HINTS
+    /opt/homebrew/opt/libgccjit
+    /opt/homebrew
+    /usr/local/opt/libgccjit
+    /usr/local)
+
+  find_program(SIGIL_BREW_EXECUTABLE brew)
+  if(SIGIL_BREW_EXECUTABLE)
+    execute_process(
+      COMMAND "${SIGIL_BREW_EXECUTABLE}" --prefix libgccjit
+      OUTPUT_VARIABLE SIGIL_BREW_LIBGCCJIT_PREFIX
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(SIGIL_BREW_LIBGCCJIT_PREFIX)
+      list(PREPEND SIGIL_GCCJIT_HINTS "${SIGIL_BREW_LIBGCCJIT_PREFIX}")
+    endif()
+  endif()
+
+  find_path(SIGIL_GCCJIT_INCLUDE_DIR
+    NAMES libgccjit.h
+    HINTS ${SIGIL_GCCJIT_HINTS}
+    PATH_SUFFIXES include)
+
+  find_library(SIGIL_GCCJIT_LIBRARY
+    NAMES gccjit libgccjit
+    HINTS ${SIGIL_GCCJIT_HINTS}
+    PATH_SUFFIXES lib lib/gcc/current lib/gcc/16 lib/gcc/15 lib/gcc/14 lib/gcc/13 lib/gcc/12)
 endif()
 
 if(SIGIL_ENABLE_GCCJIT AND SIGIL_GCCJIT_INCLUDE_DIR AND SIGIL_GCCJIT_LIBRARY)
@@ -66,6 +92,19 @@ add_test(NAME sigil_parser_tests COMMAND sigil_parser_tests)
 add_executable(sigil_proof_tests tests/test_proof.cpp)
 target_link_libraries(sigil_proof_tests PRIVATE sigil_core)
 add_test(NAME sigil_proof_tests COMMAND sigil_proof_tests)
+
+add_executable(sigil_typecheck_tests tests/test_typecheck.cpp)
+target_link_libraries(sigil_typecheck_tests PRIVATE sigil_core)
+add_test(NAME sigil_typecheck_tests COMMAND sigil_typecheck_tests)
+
+find_program(SIGIL_Z3_EXECUTABLE z3)
+if(SIGIL_Z3_EXECUTABLE)
+  add_test(
+    NAME sigil_z3_strict_cache
+    COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil" --strict)
+  set_tests_properties(sigil_z3_strict_cache PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+endif()
 
 install(TARGETS sigil sigil_core)
 install(DIRECTORY include/ DESTINATION include)

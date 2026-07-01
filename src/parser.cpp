@@ -136,7 +136,8 @@ Statement Parser::parse_statement() {
   Statement statement;
   if (match(TokenKind::Assume) || match(TokenKind::Assert)) {
     const auto keyword = previous();
-    statement.kind = keyword.kind == TokenKind::Assume ? StatementKind::Assume : StatementKind::Assert;
+    statement.kind =
+        keyword.kind == TokenKind::Assume ? StatementKind::Assume : StatementKind::Assert;
     statement.location = keyword.location;
     if (check(TokenKind::Identifier) && tokens_[current_ + 1].kind == TokenKind::Colon) {
       statement.name = advance().text;
@@ -210,9 +211,7 @@ Expr Parser::parse_equality() {
   while (match(TokenKind::EqualEqual) || match(TokenKind::BangEqual)) {
     const auto op = previous();
     expr = make_binary(op.kind == TokenKind::EqualEqual ? BinaryOp::Equal : BinaryOp::NotEqual,
-                       expr,
-                       parse_comparison(),
-                       op.location);
+                       expr, parse_comparison(), op.location);
   }
   return expr;
 }
@@ -239,10 +238,8 @@ Expr Parser::parse_term() {
   auto expr = parse_factor();
   while (match(TokenKind::Plus) || match(TokenKind::Minus)) {
     const auto op = previous();
-    expr = make_binary(op.kind == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Subtract,
-                       expr,
-                       parse_factor(),
-                       op.location);
+    expr = make_binary(op.kind == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Subtract, expr,
+                       parse_factor(), op.location);
   }
   return expr;
 }
@@ -265,8 +262,7 @@ Expr Parser::parse_factor() {
 Expr Parser::parse_unary() {
   if (match(TokenKind::Bang) || match(TokenKind::Minus)) {
     const auto op = previous();
-    return make_unary(op.kind == TokenKind::Bang ? UnaryOp::Not : UnaryOp::Negate,
-                      parse_unary(),
+    return make_unary(op.kind == TokenKind::Bang ? UnaryOp::Not : UnaryOp::Negate, parse_unary(),
                       op.location);
   }
   return parse_primary();
@@ -299,4 +295,4 @@ Module parse_source(std::string_view source, const std::string& file_name) {
   return parser.parse_module();
 }
 
-}  // namespace sigil
+} // namespace sigil

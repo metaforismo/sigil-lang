@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <string_view>
 
 namespace sigil {
 
@@ -60,13 +59,28 @@ std::string run_command(const std::string& command, int& exit_code) {
   return output;
 }
 
+std::string first_solver_token(const std::string& output) {
+  std::istringstream lines(output);
+  std::string line;
+  while (std::getline(lines, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (!line.empty()) {
+      return line;
+    }
+  }
+  return "";
+}
+
 VerificationResult verify_with_z3(const ProofObligation& obligation, const std::string& smt) {
   const auto temp_path = std::filesystem::temp_directory_path() /
                          ("sigil-" + obligation.name + "-" + std::to_string(std::rand()) + ".smt2");
   {
     std::ofstream file(temp_path);
     if (!file) {
-      return {obligation.name, VerificationStatus::Error, "could not create temporary SMT file", smt};
+      return {obligation.name, VerificationStatus::Error, "could not create temporary SMT file",
+              smt};
     }
     file << smt;
   }
@@ -80,18 +94,24 @@ VerificationResult verify_with_z3(const ProofObligation& obligation, const std::
     }
     std::error_code ignored;
     std::filesystem::remove(temp_path, ignored);
-    if (output.find("unsat") != std::string::npos) {
+    const auto solver_token = first_solver_token(output);
+    if (solver_token == "unsat") {
       return {obligation.name, VerificationStatus::Proven, "proved by z3", smt};
     }
-    if (output.find("sat") != std::string::npos) {
-      return {obligation.name, VerificationStatus::Refuted, "z3 found a model violating the goal", smt};
+    if (solver_token == "sat") {
+      return {obligation.name, VerificationStatus::Refuted, "z3 found a model violating the goal",
+              smt};
+    }
+    if (solver_token == "unknown") {
+      return {obligation.name, VerificationStatus::Unknown, "z3 returned unknown", smt};
     }
     return {obligation.name, VerificationStatus::Unknown, "z3 returned: " + output, smt};
   }
 
   std::error_code ignored;
   std::filesystem::remove(temp_path, ignored);
-  return {obligation.name, VerificationStatus::Unknown, "z3 executable not found; syntactic checks only", smt};
+  return {obligation.name, VerificationStatus::Unknown,
+          "z3 executable not found; syntactic checks only", smt};
 }
 
 VerificationResult verify_syntactically(const ProofObligation& obligation, const std::string& smt) {
@@ -107,7 +127,7 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
   return {obligation.name, VerificationStatus::Unknown, "no local proof rule matched", smt};
 }
 
-}  // namespace
+} // namespace
 
 std::vector<ProofObligation> build_obligations(const Module& module) {
   std::vector<ProofObligation> obligations;
@@ -129,7 +149,8 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       } else if (statement.kind == StatementKind::Assert) {
         ++assert_index;
         ProofObligation obligation;
-        obligation.name = "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
+        obligation.name =
+            "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
         obligation.assumptions = active;
         obligation.goal = NamedPredicate{statement.name, statement.expr, statement.location};
         obligation.symbols = symbols;
@@ -138,10 +159,8 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
         ++return_index;
         const auto return_name = "return_" + std::to_string(return_index);
-        auto equality = make_binary(BinaryOp::Equal,
-                                    make_identifier("result", statement.location),
-                                    statement.expr,
-                                    statement.location);
+        auto equality = make_binary(BinaryOp::Equal, make_identifier("result", statement.location),
+                                    statement.expr, statement.location);
         active.push_back(NamedPredicate{return_name, equality, statement.location});
       }
     }
@@ -150,7 +169,8 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     for (const auto& ensure : fn.ensures) {
       ++ensure_index;
       ProofObligation obligation;
-      obligation.name = "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+      obligation.name =
+          "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
       obligation.assumptions = active;
       obligation.goal = ensure;
       obligation.symbols = symbols;
@@ -186,9 +206,8 @@ std::string emit_smt_lib(const ProofObligation& obligation) {
   return out.str();
 }
 
-std::vector<VerificationResult> verify_obligations(
-    const std::vector<ProofObligation>& obligations,
-    bool use_z3) {
+std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
+                                                   bool use_z3) {
   std::vector<VerificationResult> results;
   for (const auto& obligation : obligations) {
     const auto smt = emit_smt_lib(obligation);
@@ -204,16 +223,16 @@ std::vector<VerificationResult> verify_obligations(
 
 const char* status_name(VerificationStatus status) {
   switch (status) {
-    case VerificationStatus::Proven:
-      return "PROVEN";
-    case VerificationStatus::Refuted:
-      return "REFUTED";
-    case VerificationStatus::Unknown:
-      return "UNKNOWN";
-    case VerificationStatus::Error:
-      return "ERROR";
+  case VerificationStatus::Proven:
+    return "PROVEN";
+  case VerificationStatus::Refuted:
+    return "REFUTED";
+  case VerificationStatus::Unknown:
+    return "UNKNOWN";
+  case VerificationStatus::Error:
+    return "ERROR";
   }
   return "UNKNOWN";
 }
 
-}  // namespace sigil
+} // namespace sigil

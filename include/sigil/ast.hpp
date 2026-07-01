@@ -24,8 +24,12 @@ struct Type {
   static Type from_name(const std::string& name);
   std::string display() const;
   std::string smt_sort() const;
-  bool is_integer() const { return kind == TypeKind::I64 || kind == TypeKind::Unknown; }
-  bool is_bool() const { return kind == TypeKind::Bool; }
+  bool is_integer() const {
+    return kind == TypeKind::I64;
+  }
+  bool is_bool() const {
+    return kind == TypeKind::Bool;
+  }
 };
 
 enum class UnaryOp {
@@ -139,4 +143,4 @@ struct Module {
 
 using SymbolTable = std::unordered_map<std::string, Type>;
 
-}  // namespace sigil
+} // namespace sigil

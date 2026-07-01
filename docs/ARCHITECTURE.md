@@ -8,6 +8,7 @@ source
   -> lexer
   -> parser
   -> module AST
+  -> static validator
   -> proof-obligation planner
   -> SMT-LIB emitter
   -> local checks / Z3
@@ -20,6 +21,19 @@ The lexer and parser are hand-written C++17. This keeps the grammar easy to
 change while the language is still being designed. Parser output is a typed AST
 containing structs, fields, invariants, functions, contracts, and body
 statements.
+
+## Static Validation
+
+Before proof obligations are emitted, Sigil validates the current scalar type
+system:
+
+- struct invariant expressions must be `bool`;
+- function preconditions and postconditions must be `bool`;
+- identifiers must be declared in the active scope;
+- `result` is only available in postconditions for non-void functions;
+- returns must match the declared function return type;
+- unsupported user-defined value types are rejected until the type checker and
+  backend know how to represent them.
 
 ## Verification Planner
 
