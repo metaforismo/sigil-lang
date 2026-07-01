@@ -14,6 +14,7 @@ tests, and docs are in the repo.
 - [x] Report Z3 refutations with optional counterexample models.
 - [x] Save emitted SMT-LIB queries as reproducible artifacts.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.
+- [x] Render Z3 counterexamples in Sigil source terms.
 - [x] Support typed local `let` bindings in proof obligations.
 - [x] Support expression-level conditionals through SMT `ite`.
 - [x] Report source locations for parser, type, and proof results.
@@ -31,8 +32,8 @@ tests, and docs are in the repo.
 
 ## Immediate Queue
 
-- [ ] Render Z3 counterexamples in Sigil source terms.
 - [ ] Extend scalar validation into a complete language type checker.
+- [ ] Add loops with user-written invariants.
 
 ## Core Language
 
@@ -40,7 +41,7 @@ tests, and docs are in the repo.
 - [ ] Add loops with user-written invariants.
 - [ ] Add simple user-defined struct values.
 - [ ] Generate weakest-precondition obligations for control flow.
-- [ ] Render Z3 counterexamples in Sigil source terms.
+- [x] Render Z3 counterexamples in Sigil source terms.
 
 ## Native Lowering
 

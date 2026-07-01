@@ -17,8 +17,9 @@ Options:
 
 - `--dump-smt`: print each emitted SMT-LIB query to stdout.
 - `--save-smt <dir>`: write every emitted SMT-LIB query to `<dir>`.
-- `--show-model`: when Z3 refutes an obligation, ask Z3 for a model and print it
-  under the refuted result.
+- `--show-model`: when Z3 refutes an obligation, ask Z3 for a model, render the
+  scalar values as a Sigil source-level `counterexample`, and keep the raw Z3
+  model under the refuted result.
 - `--solver-timeout-ms <ms>`: emit an SMT timeout option for each query. The
   timeout is preserved in `--dump-smt` output and `--save-smt` artifacts.
 - `--strict`: exit non-zero if any obligation is `UNKNOWN`.

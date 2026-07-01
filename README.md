@@ -33,6 +33,7 @@ production verifier yet.
   and return types.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
+- Source-level counterexample rendering for refuted Z3 models.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using `let`, assignment,
   conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
@@ -97,6 +98,9 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
+
+For refuted obligations, `--show-model` prints both Sigil-level values and the
+raw Z3 model.
 
 Check whether the native backend was compiled with `libgccjit`:
 
@@ -164,10 +168,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are:
 
 - type checking beyond the current scalar proof-expression validator;
+- loops with user-written invariants;
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- source-level rendering for Z3 counterexample models;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

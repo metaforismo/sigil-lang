@@ -47,6 +47,18 @@ ensures preserved: result >= 0;
   expect(smt.find("(declare-const result Int)") != std::string::npos, "declares result");
   expect(smt.find("(assert (>= x 0))") != std::string::npos, "emits precondition");
   expect(smt.find("(assert (= y (+ x 1)))") != std::string::npos, "emits let equality");
+  const auto counterexample = sigil::render_source_counterexample(obligations[2], R"(
+(
+  (define-fun x () Int
+    0)
+  (define-fun result () Int
+    (- 1))
+)
+)");
+  expect(counterexample.find("x: i64 = 0") != std::string::npos,
+         "renders source parameter counterexample");
+  expect(counterexample.find("result: i64 = -1") != std::string::npos,
+         "renders source result counterexample");
 
   const auto results = sigil::verify_obligations(obligations, false);
   expect(results.size() == 3, "verification result count");

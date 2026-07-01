@@ -198,6 +198,9 @@ int check_command(const std::vector<std::string>& args) {
     if (!result.smt_path.empty()) {
       std::cout << "  smt: " << result.smt_path << "\n";
     }
+    if (!result.counterexample.empty()) {
+      std::cout << "  counterexample:\n" << indent_block(result.counterexample, "    ");
+    }
     if (!result.model.empty()) {
       std::cout << "  model:\n" << indent_block(result.model, "    ");
     }

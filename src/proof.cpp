@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -9,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -106,6 +108,75 @@ std::string solver_tail(const std::string& output) {
   return tail.str();
 }
 
+std::string trim(std::string value) {
+  const auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
+  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
+  return value;
+}
+
+std::string remove_define_fun_close(std::string value) {
+  value = trim(std::move(value));
+  if (!value.empty() && value.back() == ')') {
+    value.pop_back();
+  }
+  return trim(std::move(value));
+}
+
+std::string normalize_model_value(std::string value) {
+  value = remove_define_fun_close(std::move(value));
+  if (value.rfind("(- ", 0) == 0 && value.size() > 4 && value.back() == ')') {
+    return "-" + value.substr(3, value.size() - 4);
+  }
+  return value;
+}
+
+std::unordered_map<std::string, std::string> parse_model_values(const std::string& model) {
+  std::unordered_map<std::string, std::string> values;
+  std::istringstream lines(model);
+  std::string line;
+  std::string active_name;
+  while (std::getline(lines, line)) {
+    line = trim(std::move(line));
+    if (line.empty() || line == "(" || line == ")") {
+      continue;
+    }
+
+    constexpr std::string_view prefix = "(define-fun ";
+    if (line.rfind(prefix, 0) == 0) {
+      const auto name_start = prefix.size();
+      const auto name_end = line.find(' ', name_start);
+      active_name =
+          name_end == std::string::npos ? "" : line.substr(name_start, name_end - name_start);
+      continue;
+    }
+
+    if (!active_name.empty()) {
+      values[active_name] = normalize_model_value(std::move(line));
+      active_name.clear();
+    }
+  }
+  return values;
+}
+
+std::vector<std::string> source_symbol_order(const ProofObligation& obligation) {
+  std::vector<std::string> names;
+  for (const auto& assumption : obligation.assumptions) {
+    collect_identifiers(assumption.expr, names);
+  }
+  collect_identifiers(obligation.goal.expr, names);
+
+  std::vector<std::string> remaining;
+  for (const auto& [name, _] : obligation.symbols) {
+    if (std::find(names.begin(), names.end(), name) == names.end()) {
+      remaining.push_back(name);
+    }
+  }
+  std::sort(remaining.begin(), remaining.end());
+  names.insert(names.end(), remaining.begin(), remaining.end());
+  return names;
+}
+
 std::filesystem::path temporary_smt_path(const std::string& obligation_name) {
   const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
   return std::filesystem::temp_directory_path() /
@@ -175,6 +246,7 @@ VerificationResult verify_with_z3(const ProofObligation& obligation, const std::
         const auto model_run = run_z3_query(obligation, smt + "(get-model)\n");
         if (model_run.launched && first_solver_token(model_run.output) == "sat") {
           result.model = solver_tail(model_run.output);
+          result.counterexample = render_source_counterexample(obligation, result.model);
         }
       } catch (const std::exception& error) {
         result.details += std::string("; model query failed: ") + error.what();
@@ -496,6 +568,26 @@ std::string smt_file_name_for_obligation(const std::string& obligation_name) {
   }
   file_name += ".smt2";
   return file_name;
+}
+
+std::string render_source_counterexample(const ProofObligation& obligation,
+                                         const std::string& z3_model) {
+  const auto values = parse_model_values(z3_model);
+  if (values.empty()) {
+    return "";
+  }
+
+  std::ostringstream out;
+  for (const auto& name : source_symbol_order(obligation)) {
+    const auto symbol = sanitize_symbol(name);
+    const auto value = values.find(symbol);
+    const auto type = obligation.symbols.find(name);
+    if (value == values.end() || type == obligation.symbols.end()) {
+      continue;
+    }
+    out << name << ": " << type->second.display() << " = " << value->second << "\n";
+  }
+  return out.str();
 }
 
 std::string write_smt_artifact(const ProofObligation& obligation, const std::string& smt,
