@@ -1,0 +1,12 @@
+module branches;
+
+fn branch_abs(x: i64) -> i64
+ensures non_negative: result >= 0;
+{
+  if x >= 0 {
+    assert then_guard: x >= 0;
+    return x;
+  } else {
+    return -x;
+  }
+}

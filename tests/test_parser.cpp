@@ -60,6 +60,15 @@ ensures preserved: result >= 0;
   assert non_negative: x >= 0;
   return y;
 }
+
+fn choose(x: i64) -> i64
+{
+  if x >= 0 {
+    return x;
+  } else {
+    return -x;
+  }
+}
 )";
 
   const auto module = sigil::parse_source(source, "inline.sigil");
@@ -67,7 +76,7 @@ ensures preserved: result >= 0;
   expect(module.structs.size() == 1, "struct count");
   expect(module.structs[0].fields.size() == 2, "field count");
   expect(module.structs[0].invariants.size() == 1, "invariant count");
-  expect(module.functions.size() == 1, "function count");
+  expect(module.functions.size() == 2, "function count");
   expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
   expect(module.functions[0].body.size() == 4, "body count");
@@ -83,5 +92,13 @@ ensures preserved: result >= 0;
          "if expression range");
   expect(sigil::display_expr(module.structs[0].invariants[0].expr) == "(!valid || (key >= 0))",
          "display invariant");
+  expect(module.functions[1].body.size() == 1, "if statement body count");
+  expect(module.functions[1].body[0].kind == sigil::StatementKind::If, "if statement kind");
+  expect(sigil::display_expr(module.functions[1].body[0].expr) == "(x >= 0)",
+         "if statement condition");
+  expect(module.functions[1].body[0].then_branch.size() == 1, "then branch count");
+  expect(module.functions[1].body[0].else_branch.size() == 1, "else branch count");
+  expect(module.functions[1].body[0].range.display() == "inline.sigil:22:3-26:3",
+         "if statement range");
   return 0;
 }

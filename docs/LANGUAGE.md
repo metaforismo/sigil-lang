@@ -64,6 +64,11 @@ postconditions for non-void functions.
 let next: i64 = size + 1;
 assume cache_bounds: size <= capacity;
 assert still_bounded: size <= capacity;
+if size >= 0 {
+  assert non_negative: size >= 0;
+} else {
+  assume impossible: false;
+}
 return next;
 ```
 
@@ -76,13 +81,20 @@ parameters or earlier locals.
 from the active context and then becomes available to later obligations.
 `return` can use parameters and local bindings.
 
+`if condition { ... } else { ... }` creates two statement branches. The
+condition must be `bool`. The then branch is checked under `condition`, and the
+else branch is checked under `!condition`. Facts that survive the merge are
+guarded by the branch condition, so a fact from only one branch is not treated as
+unconditionally true. Local bindings declared inside a branch are scoped to that
+branch.
+
 Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local
 details.
 
-The current body language is deliberately tiny. Reassignment, branches, loops,
-references, and memory operations will require proper control-flow and
-weakest-precondition generation.
+The current body language is deliberately tiny. Reassignment, loops, references,
+and memory operations will require proper control-flow and weakest-precondition
+generation.
 
 ## Expressions
 

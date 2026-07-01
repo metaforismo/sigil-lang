@@ -36,6 +36,14 @@ bool expressions_equal(const Expr& lhs, const Expr& rhs) {
   return display_expr(lhs) == display_expr(rhs);
 }
 
+bool identifiers_declared(const Expr& expr, const SymbolTable& symbols) {
+  std::vector<std::string> identifiers;
+  collect_identifiers(expr, identifiers);
+  return std::all_of(identifiers.begin(), identifiers.end(), [&](const std::string& identifier) {
+    return symbols.find(identifier) != symbols.end();
+  });
+}
+
 std::string sanitize_symbol(const std::string& name) {
   std::string symbol = name;
   std::replace(symbol.begin(), symbol.end(), '.', '_');
@@ -201,6 +209,107 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
   return make_result(obligation, VerificationStatus::Unknown, "no local proof rule matched", smt);
 }
 
+NamedPredicate make_branch_condition(const Statement& statement, bool then_branch) {
+  if (then_branch) {
+    return NamedPredicate{"if_then", statement.expr, statement.expr->location,
+                          statement.expr->range};
+  }
+  auto negated = make_unary(UnaryOp::Not, statement.expr, statement.expr->range);
+  return NamedPredicate{"if_else", negated, statement.expr->location, statement.expr->range};
+}
+
+NamedPredicate make_guarded_fact(const Expr& condition, const NamedPredicate& fact,
+                                 bool then_branch) {
+  Expr guard_condition = condition;
+  if (then_branch) {
+    guard_condition = make_unary(UnaryOp::Not, condition, condition->range);
+  }
+  auto guarded = make_binary(BinaryOp::Or, guard_condition, fact.expr, fact.range);
+  return NamedPredicate{std::string(then_branch ? "if_then_" : "if_else_") + fact.name, guarded,
+                        fact.location, fact.range};
+}
+
+void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
+                        SymbolTable& symbols, std::vector<NamedPredicate>& active,
+                        int& assert_index, int& return_index,
+                        std::vector<ProofObligation>& obligations);
+
+void process_if_statement(const Statement& statement, const FunctionDecl& fn, SymbolTable& symbols,
+                          std::vector<NamedPredicate>& active, int& assert_index, int& return_index,
+                          std::vector<ProofObligation>& obligations) {
+  SymbolTable then_symbols = symbols;
+  auto then_active = active;
+  then_active.push_back(make_branch_condition(statement, true));
+  const auto then_fact_start = then_active.size();
+  process_statements(statement.then_branch, fn, then_symbols, then_active, assert_index,
+                     return_index, obligations);
+
+  SymbolTable else_symbols = symbols;
+  auto else_active = active;
+  else_active.push_back(make_branch_condition(statement, false));
+  const auto else_fact_start = else_active.size();
+  process_statements(statement.else_branch, fn, else_symbols, else_active, assert_index,
+                     return_index, obligations);
+
+  for (auto index = then_fact_start; index < then_active.size(); ++index) {
+    if (identifiers_declared(then_active[index].expr, symbols)) {
+      active.push_back(make_guarded_fact(statement.expr, then_active[index], true));
+    }
+  }
+  for (auto index = else_fact_start; index < else_active.size(); ++index) {
+    if (identifiers_declared(else_active[index].expr, symbols)) {
+      active.push_back(make_guarded_fact(statement.expr, else_active[index], false));
+    }
+  }
+}
+
+void process_statement(const Statement& statement, const FunctionDecl& fn, SymbolTable& symbols,
+                       std::vector<NamedPredicate>& active, int& assert_index, int& return_index,
+                       std::vector<ProofObligation>& obligations) {
+  if (statement.kind == StatementKind::Let) {
+    symbols[statement.name] = statement.type;
+    auto equality =
+        make_binary(BinaryOp::Equal, make_identifier(statement.name, statement.location),
+                    statement.expr, statement.location);
+    active.push_back(
+        NamedPredicate{"let_" + statement.name, equality, statement.location, statement.range});
+  } else if (statement.kind == StatementKind::If) {
+    process_if_statement(statement, fn, symbols, active, assert_index, return_index, obligations);
+  } else if (statement.kind == StatementKind::Assume) {
+    active.push_back(
+        NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
+  } else if (statement.kind == StatementKind::Assert) {
+    ++assert_index;
+    ProofObligation obligation;
+    obligation.name =
+        "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
+    obligation.location = statement.location;
+    obligation.range = statement.range;
+    obligation.assumptions = active;
+    obligation.goal =
+        NamedPredicate{statement.name, statement.expr, statement.location, statement.range};
+    obligation.symbols = symbols;
+    obligations.push_back(std::move(obligation));
+    active.push_back(
+        NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
+  } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
+    ++return_index;
+    const auto return_name = "return_" + std::to_string(return_index);
+    auto equality = make_binary(BinaryOp::Equal, make_identifier("result", statement.location),
+                                statement.expr, statement.location);
+    active.push_back(NamedPredicate{return_name, equality, statement.location, statement.range});
+  }
+}
+
+void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
+                        SymbolTable& symbols, std::vector<NamedPredicate>& active,
+                        int& assert_index, int& return_index,
+                        std::vector<ProofObligation>& obligations) {
+  for (const auto& statement : statements) {
+    process_statement(statement, fn, symbols, active, assert_index, return_index, obligations);
+  }
+}
+
 } // namespace
 
 std::vector<ProofObligation> build_obligations(const Module& module) {
@@ -217,40 +326,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     std::vector<NamedPredicate> active = fn.preconditions;
     int assert_index = 0;
     int return_index = 0;
-    for (const auto& statement : fn.body) {
-      if (statement.kind == StatementKind::Let) {
-        symbols[statement.name] = statement.type;
-        auto equality =
-            make_binary(BinaryOp::Equal, make_identifier(statement.name, statement.location),
-                        statement.expr, statement.location);
-        active.push_back(
-            NamedPredicate{"let_" + statement.name, equality, statement.location, statement.range});
-      } else if (statement.kind == StatementKind::Assume) {
-        active.push_back(
-            NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
-      } else if (statement.kind == StatementKind::Assert) {
-        ++assert_index;
-        ProofObligation obligation;
-        obligation.name =
-            "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
-        obligation.location = statement.location;
-        obligation.range = statement.range;
-        obligation.assumptions = active;
-        obligation.goal =
-            NamedPredicate{statement.name, statement.expr, statement.location, statement.range};
-        obligation.symbols = symbols;
-        obligations.push_back(std::move(obligation));
-        active.push_back(
-            NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
-      } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
-        ++return_index;
-        const auto return_name = "return_" + std::to_string(return_index);
-        auto equality = make_binary(BinaryOp::Equal, make_identifier("result", statement.location),
-                                    statement.expr, statement.location);
-        active.push_back(
-            NamedPredicate{return_name, equality, statement.location, statement.range});
-      }
-    }
+    process_statements(fn.body, fn, symbols, active, assert_index, return_index, obligations);
 
     int ensure_index = 0;
     for (const auto& ensure : fn.ensures) {

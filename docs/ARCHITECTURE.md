@@ -32,6 +32,8 @@ system:
 - identifiers must be declared in the active scope;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - conditional expression conditions must be `bool`, and branch types must match;
+- statement-level `if` conditions must be `bool`, and branch-local bindings do
+  not escape their branch;
 - `result` is only available in postconditions for non-void functions;
 - returns must match the declared function return type;
 - unsupported user-defined value types are rejected until the type checker and
@@ -46,6 +48,8 @@ The planner walks each function and builds proof obligations:
   `name == expr` as an assumption for later obligations;
 - `assume` statements add local assumptions;
 - `assert` statements create obligations;
+- `if` statements build separate then/else proof contexts and merge
+  branch-derived facts as guarded assumptions;
 - `return expr` records `result == expr`;
 - `ensures` clauses create postcondition obligations.
 

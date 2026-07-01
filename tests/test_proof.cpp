@@ -78,5 +78,33 @@ ensures non_negative: result >= 0;
   const auto timeout_smt = sigil::emit_smt_lib(conditional_obligations[0], 250);
   expect(timeout_smt.find("(set-option :timeout 250)") != std::string::npos,
          "emits solver timeout");
+
+  const char* branch_source = R"(
+module branches;
+
+fn branch_abs(x: i64) -> i64
+ensures non_negative: result >= 0;
+{
+  if x >= 0 {
+    assert then_guard: x >= 0;
+    return x;
+  } else {
+    return -x;
+  }
+}
+)";
+
+  const auto branch_module = sigil::parse_source(branch_source, "branches.sigil");
+  const auto branch_obligations = sigil::build_obligations(branch_module);
+  expect(branch_obligations.size() == 2, "branch assert plus ensure obligations");
+  expect(branch_obligations[0].name == "fn.branch_abs.assert.1.then_guard", "branch assert name");
+  const auto branch_results = sigil::verify_obligations(branch_obligations, false);
+  expect(branch_results[0].status == sigil::VerificationStatus::Proven,
+         "then branch assertion proven by branch condition");
+  const auto branch_smt = sigil::emit_smt_lib(branch_obligations[1]);
+  expect(branch_smt.find("(assert (or (not (>= x 0)) (= result x)))") != std::string::npos,
+         "emits guarded then return fact");
+  expect(branch_smt.find("(assert (or (>= x 0) (= result (- x))))") != std::string::npos,
+         "emits guarded else return fact");
   return 0;
 }

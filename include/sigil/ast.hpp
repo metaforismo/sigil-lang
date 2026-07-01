@@ -127,6 +127,7 @@ struct ParamDecl {
 
 enum class StatementKind {
   Let,
+  If,
   Assume,
   Assert,
   Return,
@@ -137,6 +138,8 @@ struct Statement {
   std::string name;
   Type type;
   Expr expr;
+  std::vector<Statement> then_branch;
+  std::vector<Statement> else_branch;
   SourceLocation location;
   SourceRange range;
 };

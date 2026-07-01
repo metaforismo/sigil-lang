@@ -119,11 +119,8 @@ FunctionDecl Parser::parse_function() {
     }
   }
 
-  consume(TokenKind::LBrace, "expected '{' before function body");
-  while (!check(TokenKind::RBrace)) {
-    decl.body.push_back(parse_statement());
-  }
-  const auto end = consume(TokenKind::RBrace, "expected '}' after function body");
+  decl.body = parse_statement_block("function body");
+  const auto end = previous();
   decl.range = span(start.range, end.range);
   return decl;
 }
@@ -171,6 +168,20 @@ Statement Parser::parse_statement() {
     return statement;
   }
 
+  if (match(TokenKind::If)) {
+    const auto start = previous();
+    statement.kind = StatementKind::If;
+    statement.location = start.location;
+    statement.range = start.range;
+    statement.name = "if";
+    statement.expr = parse_expr();
+    statement.then_branch = parse_statement_block("if then branch");
+    consume(TokenKind::Else, "expected 'else' after if then branch");
+    statement.else_branch = parse_statement_block("if else branch");
+    statement.range = span(start.range, previous().range);
+    return statement;
+  }
+
   if (match(TokenKind::Assume) || match(TokenKind::Assert)) {
     const auto keyword = previous();
     statement.kind =
@@ -202,6 +213,16 @@ Statement Parser::parse_statement() {
   }
 
   throw Diagnostic(peek().range, "expected let, assume, assert, or return statement");
+}
+
+std::vector<Statement> Parser::parse_statement_block(const std::string& owner) {
+  consume(TokenKind::LBrace, "expected '{' before " + owner);
+  std::vector<Statement> statements;
+  while (!check(TokenKind::RBrace)) {
+    statements.push_back(parse_statement());
+  }
+  consume(TokenKind::RBrace, "expected '}' after " + owner);
+  return statements;
 }
 
 std::vector<ParamDecl> Parser::parse_params() {

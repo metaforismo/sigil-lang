@@ -149,6 +149,46 @@ void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symb
   require_type(predicate.expr, symbols, TypeKind::Bool, owner + " '" + predicate.name + "'");
 }
 
+void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals);
+
+void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
+                              SymbolTable locals) {
+  for (const auto& statement : statements) {
+    validate_statement(statement, decl, locals);
+  }
+}
+
+void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals) {
+  if (statement.kind == StatementKind::Let) {
+    require_value_type(statement.type, statement.range,
+                       "local '" + decl.name + "." + statement.name + "'");
+    const auto actual = infer_expr(statement.expr, locals);
+    if (!same_type(actual, statement.type)) {
+      throw Diagnostic(statement.range, "let type mismatch: expected " + statement.type.display() +
+                                            ", found " + actual.display());
+    }
+    insert_symbol(locals, statement.name, statement.type, statement.range, "local");
+  } else if (statement.kind == StatementKind::If) {
+    require_type(statement.expr, locals, TypeKind::Bool, "if statement condition");
+    validate_statement_block(statement.then_branch, decl, locals);
+    validate_statement_block(statement.else_branch, decl, locals);
+  } else if (statement.kind == StatementKind::Assume) {
+    require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
+  } else if (statement.kind == StatementKind::Assert) {
+    require_type(statement.expr, locals, TypeKind::Bool, "assert statement");
+  } else if (statement.kind == StatementKind::Return) {
+    if (decl.return_type.kind == TypeKind::Void) {
+      throw Diagnostic(statement.range, "void functions cannot return a value yet");
+    }
+    const auto actual = infer_expr(statement.expr, locals);
+    if (!same_type(actual, decl.return_type)) {
+      throw Diagnostic(statement.range, "return type mismatch: expected " +
+                                            decl.return_type.display() + ", found " +
+                                            actual.display());
+    }
+  }
+}
+
 void validate_struct(const StructDecl& decl) {
   SymbolTable fields;
   for (const auto& field : decl.fields) {
@@ -194,31 +234,7 @@ void validate_function(const FunctionDecl& decl) {
 
   SymbolTable locals = params;
   for (const auto& statement : decl.body) {
-    if (statement.kind == StatementKind::Let) {
-      require_value_type(statement.type, statement.range,
-                         "local '" + decl.name + "." + statement.name + "'");
-      const auto actual = infer_expr(statement.expr, locals);
-      if (!same_type(actual, statement.type)) {
-        throw Diagnostic(statement.range, "let type mismatch: expected " +
-                                              statement.type.display() + ", found " +
-                                              actual.display());
-      }
-      insert_symbol(locals, statement.name, statement.type, statement.range, "local");
-    } else if (statement.kind == StatementKind::Assume) {
-      require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
-    } else if (statement.kind == StatementKind::Assert) {
-      require_type(statement.expr, locals, TypeKind::Bool, "assert statement");
-    } else if (statement.kind == StatementKind::Return) {
-      if (decl.return_type.kind == TypeKind::Void) {
-        throw Diagnostic(statement.range, "void functions cannot return a value yet");
-      }
-      const auto actual = infer_expr(statement.expr, locals);
-      if (!same_type(actual, decl.return_type)) {
-        throw Diagnostic(statement.range, "return type mismatch: expected " +
-                                              decl.return_type.display() + ", found " +
-                                              actual.display());
-      }
-    }
+    validate_statement(statement, decl, locals);
   }
 }
 

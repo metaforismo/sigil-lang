@@ -29,6 +29,7 @@ private:
   FieldDecl parse_field();
   NamedPredicate parse_named_predicate(TokenKind keyword);
   Statement parse_statement();
+  std::vector<Statement> parse_statement_block(const std::string& owner);
   std::vector<ParamDecl> parse_params();
   Type parse_type();
 

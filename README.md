@@ -24,6 +24,8 @@ production verifier yet.
   returns.
 - Expression-level `if condition { then } else { else }` conditionals that lower
   to SMT `ite`.
+- Statement-level `if`/`else` branches with branch-local proof contexts and
+  guarded facts at merge points.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   and return types.
 - Verification-condition generation for function assertions and postconditions.

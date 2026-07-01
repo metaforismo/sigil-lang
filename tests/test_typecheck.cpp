@@ -63,6 +63,11 @@ ensures preserved: result >= 0;
   let z: i64 = if y >= 0 { y } else { 0 };
   assert visible: x >= 0;
   assert y_visible: z >= x;
+  if z >= x {
+    assert branch_visible: z >= x;
+  } else {
+    assume impossible: false;
+  }
   return z;
 }
 )";
@@ -110,6 +115,19 @@ fn bad_if_condition(x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn bad_if_statement_condition(x: i64) -> i64
+{
+  if x {
+    return x;
+  } else {
+    return 0;
+  }
+}
+)",
+                    "if statement condition must be bool");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_if_branches(flag: bool) -> i64
 {
   let y: i64 = if flag { 1 } else { false };
@@ -127,6 +145,20 @@ fn duplicate_local(x: i64) -> i64
 }
 )",
                     "duplicate local 'x'");
+
+  expect_diagnostic(R"(
+module bad;
+fn branch_local_does_not_escape(x: i64) -> i64
+{
+  if x >= 0 {
+    let y: i64 = x;
+  } else {
+    let y: i64 = 0;
+  }
+  return y;
+}
+)",
+                    "unknown identifier 'y'");
 
   expect_diagnostic(R"(
 module bad;

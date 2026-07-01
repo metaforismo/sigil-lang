@@ -39,6 +39,12 @@ separate proof language.
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 
+Statement-level branches are represented with guarded facts at merge points. A
+fact learned in the then branch of `if c` is merged as `!c || fact`; a fact
+learned in the else branch is merged as `c || fact`. This keeps branch-local
+reasoning useful for later obligations without treating one branch's facts as
+globally true.
+
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
 
