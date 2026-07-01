@@ -115,13 +115,112 @@ void emit_native_predicates(std::ostringstream& out, const std::string& label,
   }
 }
 
-std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionReport& report) {
+void emit_debug_location(std::ostringstream& out, const std::string& label,
+                         const SourceRange& range) {
+  out << "  debug-loc " << label << " " << range.display() << "\n";
+}
+
+void emit_debug_expr_locations(std::ostringstream& out, const std::string& label,
+                               const Expr& expr) {
+  if (!expr) {
+    return;
+  }
+
+  emit_debug_location(out, label, expr->range);
+  switch (expr->kind) {
+  case ExprNode::Kind::Integer:
+  case ExprNode::Kind::Boolean:
+  case ExprNode::Kind::Identifier:
+    return;
+  case ExprNode::Kind::Unary:
+    emit_debug_expr_locations(out, label + ".operand", expr->lhs);
+    return;
+  case ExprNode::Kind::Binary:
+    emit_debug_expr_locations(out, label + ".lhs", expr->lhs);
+    emit_debug_expr_locations(out, label + ".rhs", expr->rhs);
+    return;
+  case ExprNode::Kind::If:
+    emit_debug_expr_locations(out, label + ".condition", expr->condition);
+    emit_debug_expr_locations(out, label + ".then", expr->lhs);
+    emit_debug_expr_locations(out, label + ".else", expr->rhs);
+    return;
+  }
+}
+
+void emit_debug_statement_locations(std::ostringstream& out, const Statement& statement,
+                                    const std::string& prefix);
+
+void emit_debug_nested_statements(std::ostringstream& out, const std::string& prefix,
+                                  const std::vector<Statement>& statements) {
+  for (std::size_t index = 0; index < statements.size(); ++index) {
+    emit_debug_statement_locations(out, statements[index], prefix + std::to_string(index) + ".");
+  }
+}
+
+void emit_debug_statement_locations(std::ostringstream& out, const Statement& statement,
+                                    const std::string& prefix) {
+  switch (statement.kind) {
+  case StatementKind::Let:
+    emit_debug_location(out, prefix + "statement.let." + statement.name, statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.let." + statement.name + ".value",
+                              statement.expr);
+    return;
+  case StatementKind::Assign:
+    emit_debug_location(out, prefix + "statement.assign." + statement.name, statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.assign." + statement.name + ".value",
+                              statement.expr);
+    return;
+  case StatementKind::If:
+    emit_debug_location(out, prefix + "statement.if", statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.if.condition", statement.expr);
+    emit_debug_nested_statements(out, prefix + "then.", statement.then_branch);
+    emit_debug_nested_statements(out, prefix + "else.", statement.else_branch);
+    return;
+  case StatementKind::Assume:
+    emit_debug_location(out, prefix + "statement.assume." + statement.name, statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.assume." + statement.name + ".predicate",
+                              statement.expr);
+    return;
+  case StatementKind::Assert:
+    emit_debug_location(out, prefix + "statement.assert." + statement.name, statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.assert." + statement.name + ".predicate",
+                              statement.expr);
+    return;
+  case StatementKind::Return:
+    emit_debug_location(out, prefix + "statement.return", statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.return.value", statement.expr);
+    return;
+  }
+}
+
+void emit_debug_locations(std::ostringstream& out, const FunctionDecl& fn) {
+  out << "debug-locations\n";
+  emit_debug_location(out, "function", fn.range);
+  for (const auto& param : fn.params) {
+    emit_debug_location(out, "param." + param.name, param.range);
+  }
+  for (const auto& predicate : fn.preconditions) {
+    emit_debug_location(out, "requires." + predicate.name, predicate.range);
+    emit_debug_expr_locations(out, "expr.requires." + predicate.name, predicate.expr);
+  }
+  for (const auto& predicate : fn.ensures) {
+    emit_debug_location(out, "ensures." + predicate.name, predicate.range);
+    emit_debug_expr_locations(out, "expr.ensures." + predicate.name, predicate.expr);
+  }
+  for (std::size_t index = 0; index < fn.body.size(); ++index) {
+    emit_debug_statement_locations(out, fn.body[index], std::to_string(index) + ".");
+  }
+}
+
+std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionReport& report,
+                                bool debug_info_enabled) {
   std::ostringstream out;
   out << "sigil-native-ir v0\n";
   out << "function " << fn.name << "\n";
   out << "range " << fn.range.display() << "\n";
   out << "status " << (report.lowered ? "lowered" : "skipped") << "\n";
   out << "detail " << report.detail << "\n";
+  out << "debug-info " << (debug_info_enabled ? "enabled" : "disabled") << "\n";
   if (!report.lowered && report.range.start.line != 0) {
     out << "diagnostic " << report.range.display() << "\n";
   }
@@ -142,10 +241,13 @@ std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionRepo
   for (const auto& statement : fn.body) {
     emit_native_statement(out, statement, "  ");
   }
+  emit_debug_locations(out, fn);
   return out.str();
 }
 
 #if SIGIL_HAVE_GCCJIT
+
+constexpr bool kEnableGccJitDebugInfo = true;
 
 struct ContextDeleter {
   void operator()(gcc_jit_context* context) const {
@@ -647,6 +749,8 @@ std::unique_ptr<gcc_jit_context, ContextDeleter> acquire_configured_context() {
 #ifdef LIBGCCJIT_HAVE_gcc_jit_context_set_bool_allow_unreachable_blocks
   gcc_jit_context_set_bool_allow_unreachable_blocks(context.get(), 1);
 #endif
+  gcc_jit_context_set_bool_option(context.get(), GCC_JIT_BOOL_OPTION_DEBUGINFO,
+                                  kEnableGccJitDebugInfo ? 1 : 0);
   gcc_jit_context_set_int_option(context.get(), GCC_JIT_INT_OPTION_OPTIMIZATION_LEVEL, 2);
   return context;
 }
@@ -655,6 +759,7 @@ GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Mo
                                               std::vector<std::string>& lowered_names) {
   GccJitCompileResult result;
   result.available = true;
+  result.debug_info_enabled = kEnableGccJitDebugInfo;
   auto* i64_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_INT64_T);
   auto* bool_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_BOOL);
 
@@ -822,8 +927,9 @@ std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module
     const auto fallback_detail = result.detail.empty() ? "not lowered" : result.detail;
     const auto fallback = GccJitFunctionReport{fn.name, false, fallback_detail, fn.range};
     const auto& active_report = report ? *report : fallback;
-    artifacts.push_back(GccJitNativeArtifact{fn.name, native_ir_file_name_for_function(fn.name),
-                                             emit_native_ir_text(fn, active_report), fn.range});
+    artifacts.push_back(GccJitNativeArtifact{
+        fn.name, native_ir_file_name_for_function(fn.name),
+        emit_native_ir_text(fn, active_report, result.debug_info_enabled), fn.range});
   }
   return artifacts;
 }
@@ -845,8 +951,11 @@ GccJitCompileResult compile_module_with_gccjit(const Module& module) {
 #if SIGIL_HAVE_GCCJIT
   auto context = acquire_configured_context();
   if (!context) {
-    return {
-        false, false, "libgccjit was found at build time, but gcc_jit_context_acquire failed", {}};
+    return {false,
+            false,
+            "libgccjit was found at build time, but gcc_jit_context_acquire failed",
+            {},
+            false};
   }
 
   std::vector<std::string> lowered_names;
@@ -870,7 +979,7 @@ GccJitCompileResult compile_module_with_gccjit(const Module& module) {
   return result;
 #else
   (void)module;
-  return {false, false, unavailable_detail(), {}};
+  return {false, false, unavailable_detail(), {}, false};
 #endif
 }
 

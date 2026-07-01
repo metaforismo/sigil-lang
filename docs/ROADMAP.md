@@ -25,12 +25,13 @@ tests, and docs are in the repo.
 - [x] Emit native lowering diagnostics with source ranges.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
+- [x] Add debug metadata for mapping native code back to Sigil source.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Add debug metadata for mapping native code back to Sigil source.
 - [ ] Add cross-platform backend capability tests.
+- [ ] Render Z3 counterexamples in Sigil source terms.
 
 ## Core Language
 
@@ -42,7 +43,7 @@ tests, and docs are in the repo.
 
 ## Native Lowering
 
-- [ ] Add debug metadata for mapping native code back to Sigil source.
+- [x] Add debug metadata for mapping native code back to Sigil source.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [ ] Add cross-platform backend capability tests.

@@ -91,6 +91,9 @@ operators, and `+`/`-`/`*` arithmetic.
 The ABI smoke path retrieves lowered functions from `gcc_jit_result_get_code`
 and invokes a small set of scalar signatures directly. This keeps native tests
 honest: the backend must produce callable code, not only a compilable IR graph.
+When `libgccjit` is enabled, Sigil also requests GCC debug information and
+attaches source locations to lowered functions, parameters, expressions,
+locals, assignments, branches, jumps, and returns.
 
 Native-lowering reports carry source ranges. Unsupported constructs such as
 division and modulo point at the expression that blocked lowering, while
@@ -99,10 +102,11 @@ statement range.
 
 `sigil compile --save-native-ir <dir>` writes deterministic native-lowering
 artifacts beside SMT artifacts. These files list each function's signature,
-contracts, lowering status, diagnostic range, and body operations using the same
-source expression printer that feeds proof diagnostics. They are intentionally
-plain text so humans and CI can compare the solver-visible surface with the
-native-lowerable surface as the backend grows.
+contracts, lowering status, diagnostic range, body operations, debug-info mode,
+and source-to-native debug location map using the same source expression printer
+that feeds proof diagnostics. They are intentionally plain text so humans and CI
+can compare the solver-visible surface with the native-lowerable surface as the
+backend grows.
 
 Contracts, `assume`, and `assert` remain proof-layer constructs. The native
 backend erases them after static validation and proof generation. Division and

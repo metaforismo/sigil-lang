@@ -43,6 +43,8 @@ production verifier yet.
   constructs.
 - Native IR artifacts that list signatures, contracts, body operations, and
   lowering status for comparison with SMT artifacts.
+- GCCJIT debug-info requests plus deterministic source-to-native debug location
+  maps in saved native artifacts.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
   and a Linux `libgccjit` native-lowering smoke path.
 
@@ -107,6 +109,10 @@ Compile the native-lowerable subset into an in-memory GCC JIT module:
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir
 ```
 
+Saved native artifacts include the debug-info mode and source ranges for the
+function, parameters, contracts, statements, and expression nodes that feed the
+native lowering.
+
 Run a native-lowered scalar function through the JIT ABI:
 
 ```sh
@@ -156,7 +162,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- richer alignment checks between solver-visible IR and native-lowered IR;
+- cross-platform backend capability tests;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

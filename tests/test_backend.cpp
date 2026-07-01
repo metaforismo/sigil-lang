@@ -53,11 +53,22 @@ fn nonzero(x: i64) -> bool
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
   expect(artifacts[0].text.find("assign y") != std::string::npos, "native artifact assignment");
+  expect(artifacts[0].text.find("debug-locations") != std::string::npos,
+         "native artifact debug location section");
+  expect(artifacts[0].text.find("param.x backend.sigil:") != std::string::npos,
+         "native artifact parameter debug location");
+  expect(artifacts[0].text.find("statement.assign.y backend.sigil:") != std::string::npos,
+         "native artifact assignment debug location");
+  expect(artifacts[0].text.find("expr.assign.y.value.rhs backend.sigil:") != std::string::npos,
+         "native artifact nested expression debug location");
   expect(artifacts[1].text.find("if @") != std::string::npos, "native artifact if statement");
 
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
   expect(result.compiled, "gccjit compile result compiled");
+  expect(result.debug_info_enabled, "gccjit debug info enabled");
+  expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
+         "native artifact records enabled debug info");
   expect(result.functions.size() == 3, "three function reports");
   expect(result.functions[0].name == "add_one", "first function name");
   expect(result.functions[0].lowered, "add_one lowered");
@@ -103,6 +114,9 @@ fn nonzero(x: i64) -> bool
 #else
   expect(!result.available, "gccjit compile result unavailable without backend");
   expect(!result.compiled, "gccjit compile result not compiled without backend");
+  expect(!result.debug_info_enabled, "gccjit debug info disabled without backend");
+  expect(artifacts[0].text.find("debug-info disabled") != std::string::npos,
+         "native artifact records disabled debug info");
   const auto invocation =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
   expect(!invocation.available, "gccjit invocation unavailable without backend");
@@ -141,6 +155,11 @@ fn quotient(x: i64, y: i64) -> i64
   expect(unsupported_artifacts[0].text.find("value @unsupported.sigil:6:10-14: (x / y)") !=
              std::string::npos,
          "unsupported native artifact body expression");
+  expect(unsupported_artifacts[0].text.find("debug-info enabled") != std::string::npos,
+         "unsupported native artifact records debug info");
+  expect(unsupported_artifacts[0].text.find("expr.return.value unsupported.sigil:6:10-14") !=
+             std::string::npos,
+         "unsupported native artifact records expression debug location");
 
   const auto unsupported_invocation = sigil::invoke_function_with_gccjit(
       unsupported_module, "quotient", {sigil::gccjit_i64(4), sigil::gccjit_i64(2)});

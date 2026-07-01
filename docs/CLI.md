@@ -66,7 +66,9 @@ unsupported.
 Options:
 
 - `--dump-native-ir`: print deterministic native-lowering artifacts for every
-  function.
+  function. Each artifact includes whether GCCJIT debug information was
+  requested and a `debug-locations` map from native-lowered nodes back to Sigil
+  source ranges.
 - `--save-native-ir <dir>`: write one native-lowering artifact per function to
   `<dir>`, using stable names such as `fn.add_one.native-ir.txt`.
 

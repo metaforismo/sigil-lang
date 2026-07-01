@@ -27,6 +27,7 @@ struct GccJitCompileResult {
   bool compiled = false;
   std::string detail;
   std::vector<GccJitFunctionReport> functions;
+  bool debug_info_enabled = false;
 };
 
 GccJitCompileResult compile_module_with_gccjit(const Module& module);
