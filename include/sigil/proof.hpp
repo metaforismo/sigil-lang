@@ -17,6 +17,7 @@ enum class VerificationStatus {
 
 struct ProofObligation {
   std::string name;
+  SourceLocation location;
   std::vector<NamedPredicate> assumptions;
   NamedPredicate goal;
   SymbolTable symbols;
@@ -26,11 +27,12 @@ struct VerificationResult {
   VerificationResult() = default;
 
   VerificationResult(std::string obligation_name, VerificationStatus status, std::string details,
-                     std::string smt_lib)
-      : obligation_name(std::move(obligation_name)), status(status), details(std::move(details)),
-        smt_lib(std::move(smt_lib)) {}
+                     std::string smt_lib, SourceLocation location = {})
+      : obligation_name(std::move(obligation_name)), location(std::move(location)), status(status),
+        details(std::move(details)), smt_lib(std::move(smt_lib)) {}
 
   std::string obligation_name;
+  SourceLocation location;
   VerificationStatus status = VerificationStatus::Unknown;
   std::string details;
   std::string smt_lib;

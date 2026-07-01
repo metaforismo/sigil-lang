@@ -16,11 +16,12 @@ tests, and docs are in the repo.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.
 - [x] Support typed local `let` bindings in proof obligations.
 - [x] Support expression-level conditionals through SMT `ite`.
+- [x] Report source locations for parser, type, and proof results.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Report source spans for parser, type, and proof diagnostics.
+- [ ] Add full source ranges, not just start locations, to diagnostics.
 - [ ] Add statement-level `if` and join proof contexts at merge points.
 - [ ] Add assignment with explicit mutation rules.
 - [ ] Lower pure integer and boolean functions through `libgccjit`.

@@ -1,6 +1,7 @@
 #include "sigil/parser.hpp"
 #include "sigil/typecheck.hpp"
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -14,13 +15,18 @@ void expect(bool condition, const char* message) {
   }
 }
 
-void expect_diagnostic(const char* source, const std::string& needle) {
+void expect_diagnostic(const char* source, const std::string& needle, std::size_t expected_line,
+                       std::size_t expected_column) {
   try {
     const auto module = sigil::parse_source(source, "typecheck.sigil");
     sigil::validate_module(module);
   } catch (const sigil::Diagnostic& diagnostic) {
     const std::string message = diagnostic.what();
     if (message.find(needle) != std::string::npos) {
+      if (expected_line != 0) {
+        expect(diagnostic.location().line == expected_line, "typecheck diagnostic line");
+        expect(diagnostic.location().column == expected_column, "typecheck diagnostic column");
+      }
       return;
     }
     std::cerr << "FAIL: diagnostic did not contain '" << needle << "': " << message << "\n";
@@ -29,6 +35,10 @@ void expect_diagnostic(const char* source, const std::string& needle) {
 
   std::cerr << "FAIL: expected diagnostic containing '" << needle << "'\n";
   std::exit(1);
+}
+
+void expect_diagnostic(const char* source, const std::string& needle) {
+  expect_diagnostic(source, needle, 0, 0);
 }
 
 } // namespace
@@ -64,7 +74,7 @@ requires nope: y >= 0;
   return x;
 }
 )",
-                    "unknown identifier 'y'");
+                    "unknown identifier 'y'", 4, 16);
 
   expect_diagnostic(R"(
 module bad;

@@ -1,7 +1,9 @@
 #include "sigil/parser.hpp"
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -12,9 +14,28 @@ void expect(bool condition, const char* message) {
   }
 }
 
+void expect_parse_diagnostic(const char* source, const std::string& needle,
+                             std::size_t expected_line, std::size_t expected_column) {
+  try {
+    (void)sigil::parse_source(source, "parse-error.sigil");
+  } catch (const sigil::Diagnostic& diagnostic) {
+    const std::string message = diagnostic.what();
+    expect(message.find(needle) != std::string::npos, "parser diagnostic message");
+    expect(diagnostic.location().line == expected_line, "parser diagnostic line");
+    expect(diagnostic.location().column == expected_column, "parser diagnostic column");
+    return;
+  }
+
+  std::cerr << "FAIL: expected parser diagnostic containing '" << needle << "'\n";
+  std::exit(1);
+}
+
 } // namespace
 
 int main() {
+  expect_parse_diagnostic("module broken;\nfn nope() -> i64 {\n  return 1\n}\n",
+                          "expected ';' after return statement", 4, 1);
+
   const char* source = R"(
 module cache;
 

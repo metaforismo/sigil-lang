@@ -28,6 +28,10 @@ The proof query is implication by contradiction:
 be violated. Solver errors and timeouts should be treated as unknown rather than
 silently accepted.
 
+Each obligation keeps the source location of the `assert` or `ensures` clause
+that created it. The CLI prints that location with every proof result, which
+makes refuted and unknown obligations traceable back to source.
+
 Local `let` bindings are lowered as equality assumptions. This gives the solver
 a simple, checkable representation of straight-line data flow without adding a
 separate proof language.

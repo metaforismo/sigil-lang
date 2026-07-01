@@ -12,4 +12,5 @@ set -e
 printf '%s\n' "$output"
 test "$status" -eq 2
 printf '%s\n' "$output" | grep "\\[REFUTED\\]" >/dev/null
+printf '%s\n' "$output" | grep "at: .*examples/refuted.sigil:5:1" >/dev/null
 printf '%s\n' "$output" | grep "model:" >/dev/null

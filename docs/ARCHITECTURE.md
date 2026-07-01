@@ -49,6 +49,9 @@ The planner walks each function and builds proof obligations:
 - `return expr` records `result == expr`;
 - `ensures` clauses create postcondition obligations.
 
+Every proof obligation carries the source location of the assertion or
+postcondition that produced it.
+
 This is not a full weakest-precondition engine yet. It is the first verifiable
 spine for contracts written in the language itself.
 

@@ -9,7 +9,8 @@ sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]
 
 `check` parses a Sigil module, validates scalar expression types, builds proof
 obligations, emits SMT-LIB, and optionally asks Z3 to discharge obligations that
-the local checker cannot prove.
+the local checker cannot prove. Each proof result includes the source location
+of the `assert` or `ensures` clause that produced it.
 
 Options:
 

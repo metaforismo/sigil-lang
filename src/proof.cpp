@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace sigil {
 
@@ -142,27 +143,32 @@ SolverRun run_z3_query(const ProofObligation& obligation, const std::string& smt
   return SolverRun{false, ""};
 }
 
+VerificationResult make_result(const ProofObligation& obligation, VerificationStatus status,
+                               std::string details, const std::string& smt) {
+  return {obligation.name, status, std::move(details), smt, obligation.location};
+}
+
 VerificationResult verify_with_z3(const ProofObligation& obligation, const std::string& smt,
                                   const ProofOptions& options) {
   SolverRun run;
   try {
     run = run_z3_query(obligation, smt);
   } catch (const std::exception& error) {
-    return {obligation.name, VerificationStatus::Error, error.what(), smt};
+    return make_result(obligation, VerificationStatus::Error, error.what(), smt);
   }
 
   if (!run.launched) {
-    return {obligation.name, VerificationStatus::Unknown,
-            "z3 executable not found; syntactic checks only", smt};
+    return make_result(obligation, VerificationStatus::Unknown,
+                       "z3 executable not found; syntactic checks only", smt);
   }
 
   const auto solver_token = first_solver_token(run.output);
   if (solver_token == "unsat") {
-    return {obligation.name, VerificationStatus::Proven, "proved by z3", smt};
+    return make_result(obligation, VerificationStatus::Proven, "proved by z3", smt);
   }
   if (solver_token == "sat") {
-    VerificationResult result{obligation.name, VerificationStatus::Refuted,
-                              "z3 found a counterexample model violating the goal", smt};
+    auto result = make_result(obligation, VerificationStatus::Refuted,
+                              "z3 found a counterexample model violating the goal", smt);
     if (options.include_models) {
       try {
         const auto model_run = run_z3_query(obligation, smt + "(get-model)\n");
@@ -176,22 +182,23 @@ VerificationResult verify_with_z3(const ProofObligation& obligation, const std::
     return result;
   }
   if (solver_token == "unknown") {
-    return {obligation.name, VerificationStatus::Unknown, "z3 returned unknown", smt};
+    return make_result(obligation, VerificationStatus::Unknown, "z3 returned unknown", smt);
   }
-  return {obligation.name, VerificationStatus::Unknown, "z3 returned: " + run.output, smt};
+  return make_result(obligation, VerificationStatus::Unknown, "z3 returned: " + run.output, smt);
 }
 
 VerificationResult verify_syntactically(const ProofObligation& obligation, const std::string& smt) {
   for (const auto& assumption : obligation.assumptions) {
     if (expressions_equal(assumption.expr, obligation.goal.expr)) {
-      return {obligation.name, VerificationStatus::Proven, "goal is an active assumption", smt};
+      return make_result(obligation, VerificationStatus::Proven, "goal is an active assumption",
+                         smt);
     }
   }
   if (obligation.goal.expr && obligation.goal.expr->kind == ExprNode::Kind::Boolean &&
       obligation.goal.expr->boolean_value) {
-    return {obligation.name, VerificationStatus::Proven, "goal is literal true", smt};
+    return make_result(obligation, VerificationStatus::Proven, "goal is literal true", smt);
   }
-  return {obligation.name, VerificationStatus::Unknown, "no local proof rule matched", smt};
+  return make_result(obligation, VerificationStatus::Unknown, "no local proof rule matched", smt);
 }
 
 } // namespace
@@ -224,6 +231,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
         ProofObligation obligation;
         obligation.name =
             "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
+        obligation.location = statement.location;
         obligation.assumptions = active;
         obligation.goal = NamedPredicate{statement.name, statement.expr, statement.location};
         obligation.symbols = symbols;
@@ -244,6 +252,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       ProofObligation obligation;
       obligation.name =
           "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+      obligation.location = ensure.location;
       obligation.assumptions = active;
       obligation.goal = ensure;
       obligation.symbols = symbols;
@@ -324,8 +333,7 @@ std::vector<VerificationResult> verify_obligations(const std::vector<ProofObliga
       try {
         smt_path = write_smt_artifact(obligation, smt, options.smt_output_dir);
       } catch (const std::exception& error) {
-        results.push_back(
-            VerificationResult{obligation.name, VerificationStatus::Error, error.what(), smt});
+        results.push_back(make_result(obligation, VerificationStatus::Error, error.what(), smt));
         continue;
       }
     }

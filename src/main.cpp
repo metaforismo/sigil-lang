@@ -113,6 +113,7 @@ int check_command(const std::vector<std::string>& args) {
   for (const auto& result : results) {
     std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name << " - "
               << result.details << "\n";
+    std::cout << "  at: " << result.location.display() << "\n";
     if (!result.smt_path.empty()) {
       std::cout << "  smt: " << result.smt_path << "\n";
     }
