@@ -49,7 +49,17 @@ sigil backend
 ```
 
 Reports whether the current binary was built with `libgccjit` support and can
-allocate a GCC JIT context.
+allocate a GCC JIT context. The command also prints the capability surface that
+the current build exposes:
+
+- `compiled-with-libgccjit`: whether this binary was compiled with the backend.
+- `jit-context`: whether a GCC JIT context can be allocated now.
+- `native-lowering`: whether native lowering can run.
+- `abi-invocation`: whether lowered functions can be invoked through the test
+  ABI path.
+- `debug-info`: whether GCCJIT debug information is requested for lowered code.
+- `native-ir-artifacts`: whether deterministic native-lowering artifacts can be
+  emitted.
 
 ## `sigil compile`
 

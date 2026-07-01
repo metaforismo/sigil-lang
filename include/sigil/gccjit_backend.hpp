@@ -15,6 +15,18 @@ struct GccJitStatus {
 
 GccJitStatus gccjit_status();
 
+struct GccJitCapabilities {
+  bool compiled_with_libgccjit = false;
+  bool context_available = false;
+  bool native_lowering = false;
+  bool abi_invocation = false;
+  bool debug_info = false;
+  bool native_ir_artifacts = true;
+  std::string detail;
+};
+
+GccJitCapabilities gccjit_capabilities();
+
 struct GccJitFunctionReport {
   std::string name;
   bool lowered = false;

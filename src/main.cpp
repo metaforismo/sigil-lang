@@ -62,6 +62,14 @@ bool has_range(const sigil::SourceRange& range) {
   return range.start.line != 0;
 }
 
+const char* yes_no(bool value) {
+  return value ? "yes" : "no";
+}
+
+const char* availability(bool value) {
+  return value ? "available" : "unavailable";
+}
+
 void print_range_if_available(const sigil::SourceRange& range) {
   if (has_range(range)) {
     std::cout << "    at: " << range.display() << "\n";
@@ -207,10 +215,21 @@ int check_command(const std::vector<std::string>& args) {
   return 0;
 }
 
-int backend_command() {
-  const auto status = sigil::gccjit_status();
-  std::cout << (status.available ? "available" : "unavailable") << ": " << status.detail << "\n";
-  return status.available ? 0 : 3;
+int backend_command(const std::vector<std::string>& args) {
+  if (!args.empty()) {
+    throw std::runtime_error("unknown argument: " + args.front());
+  }
+
+  const auto capabilities = sigil::gccjit_capabilities();
+  std::cout << availability(capabilities.context_available) << ": " << capabilities.detail << "\n";
+  std::cout << "  compiled-with-libgccjit: " << yes_no(capabilities.compiled_with_libgccjit)
+            << "\n";
+  std::cout << "  jit-context: " << availability(capabilities.context_available) << "\n";
+  std::cout << "  native-lowering: " << availability(capabilities.native_lowering) << "\n";
+  std::cout << "  abi-invocation: " << availability(capabilities.abi_invocation) << "\n";
+  std::cout << "  debug-info: " << (capabilities.debug_info ? "enabled" : "disabled") << "\n";
+  std::cout << "  native-ir-artifacts: " << availability(capabilities.native_ir_artifacts) << "\n";
+  return capabilities.context_available ? 0 : 3;
 }
 
 int compile_command(const std::vector<std::string>& args) {
@@ -345,7 +364,7 @@ int main(int argc, char** argv) {
       return run_command(args);
     }
     if (command == "backend") {
-      return backend_command();
+      return backend_command(args);
     }
 
     std::cerr << "unknown command: " << command << "\n";

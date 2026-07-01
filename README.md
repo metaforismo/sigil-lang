@@ -45,6 +45,8 @@ production verifier yet.
   lowering status for comparison with SMT artifacts.
 - GCCJIT debug-info requests plus deterministic source-to-native debug location
   maps in saved native artifacts.
+- Cross-platform backend capability tests for builds with and without
+  `libgccjit`.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
   and a Linux `libgccjit` native-lowering smoke path.
 
@@ -101,6 +103,9 @@ Check whether the native backend was compiled with `libgccjit`:
 ```sh
 ./build/sigil backend
 ```
+
+The backend report lists the current build's JIT context, native lowering, ABI
+invocation, debug-info, and native artifact capabilities.
 
 Compile the native-lowerable subset into an in-memory GCC JIT module:
 
@@ -162,7 +167,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- cross-platform backend capability tests;
+- source-level rendering for Z3 counterexample models;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

@@ -146,6 +146,11 @@ add_test(
           "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil"
           "${CMAKE_CURRENT_BINARY_DIR}/smt-artifacts")
 
+set(SIGIL_EXPECTED_BACKEND_STATUS unavailable)
+if(SIGIL_GCCJIT_AVAILABLE)
+  set(SIGIL_EXPECTED_BACKEND_STATUS available)
+endif()
+
 set(SIGIL_GCCJIT_TEST_ENV)
 if(SIGIL_GCCJIT_AVAILABLE AND APPLE)
   find_program(SIGIL_XCRUN_EXECUTABLE xcrun)
@@ -175,9 +180,16 @@ if(SIGIL_GCCJIT_AVAILABLE AND APPLE)
   endif()
 endif()
 
+add_test(
+  NAME sigil_cli_backend_capabilities
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_backend_capabilities.sh"
+          "$<TARGET_FILE:sigil>"
+          "${SIGIL_EXPECTED_BACKEND_STATUS}")
+
 if(SIGIL_GCCJIT_AVAILABLE)
   if(SIGIL_GCCJIT_TEST_ENV)
-    set_tests_properties(sigil_backend_tests PROPERTIES ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
+    set_tests_properties(sigil_backend_tests sigil_cli_backend_capabilities
+      PROPERTIES ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
   endif()
   add_test(
     NAME sigil_gccjit_compile_native

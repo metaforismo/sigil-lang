@@ -947,6 +947,21 @@ GccJitStatus gccjit_status() {
 #endif
 }
 
+GccJitCapabilities gccjit_capabilities() {
+  const auto status = gccjit_status();
+  GccJitCapabilities capabilities;
+#if SIGIL_HAVE_GCCJIT
+  capabilities.compiled_with_libgccjit = true;
+  capabilities.debug_info = status.available && kEnableGccJitDebugInfo;
+#endif
+  capabilities.context_available = status.available;
+  capabilities.native_lowering = status.available;
+  capabilities.abi_invocation = status.available;
+  capabilities.native_ir_artifacts = true;
+  capabilities.detail = status.detail;
+  return capabilities;
+}
+
 GccJitCompileResult compile_module_with_gccjit(const Module& module) {
 #if SIGIL_HAVE_GCCJIT
   auto context = acquire_configured_context();

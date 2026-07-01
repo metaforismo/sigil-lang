@@ -26,12 +26,13 @@ tests, and docs are in the repo.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [x] Add debug metadata for mapping native code back to Sigil source.
+- [x] Add cross-platform backend capability tests.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Add cross-platform backend capability tests.
 - [ ] Render Z3 counterexamples in Sigil source terms.
+- [ ] Extend scalar validation into a complete language type checker.
 
 ## Core Language
 
@@ -46,7 +47,7 @@ tests, and docs are in the repo.
 - [x] Add debug metadata for mapping native code back to Sigil source.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
-- [ ] Add cross-platform backend capability tests.
+- [x] Add cross-platform backend capability tests.
 
 ## Struct Invariant Preservation
 
