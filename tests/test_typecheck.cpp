@@ -71,6 +71,15 @@ ensures preserved: result >= 0;
   }
   return z;
 }
+
+fn branch_returns(flag: bool, x: i64) -> i64
+{
+  if flag {
+    return x;
+  } else {
+    return 0;
+  }
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -167,6 +176,28 @@ fn bad_if_branches(flag: bool) -> i64
 }
 )",
                     "if branches must have the same type");
+
+  expect_diagnostic(R"(
+module bad;
+fn missing_return(x: i64) -> i64
+{
+  let y: i64 = x + 1;
+}
+)",
+                    "function 'missing_return' must return a value on every path");
+
+  expect_diagnostic(R"(
+module bad;
+fn partial_return(flag: bool, x: i64) -> i64
+{
+  if flag {
+    return x;
+  } else {
+    assume keep_going: true;
+  }
+}
+)",
+                    "function 'partial_return' must return a value on every path");
 
   expect_diagnostic(R"(
 module bad;

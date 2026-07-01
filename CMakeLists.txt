@@ -146,6 +146,12 @@ add_test(
           "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil"
           "${CMAKE_CURRENT_BINARY_DIR}/smt-artifacts")
 
+add_test(
+  NAME sigil_cli_type_error_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_BINARY_DIR}/type-errors")
+
 set(SIGIL_EXPECTED_BACKEND_STATUS unavailable)
 if(SIGIL_GCCJIT_AVAILABLE)
   set(SIGIL_EXPECTED_BACKEND_STATUS available)

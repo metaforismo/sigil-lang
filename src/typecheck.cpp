@@ -152,6 +152,27 @@ void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symb
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals);
 
+bool block_returns(const std::vector<Statement>& statements);
+
+bool statement_returns(const Statement& statement) {
+  if (statement.kind == StatementKind::Return) {
+    return true;
+  }
+  if (statement.kind == StatementKind::If) {
+    return block_returns(statement.then_branch) && block_returns(statement.else_branch);
+  }
+  return false;
+}
+
+bool block_returns(const std::vector<Statement>& statements) {
+  for (const auto& statement : statements) {
+    if (statement_returns(statement)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
                               SymbolTable locals,
                               std::unordered_set<std::string> assignable_locals) {
@@ -256,6 +277,9 @@ void validate_function(const FunctionDecl& decl) {
   std::unordered_set<std::string> assignable_locals;
   for (const auto& statement : decl.body) {
     validate_statement(statement, decl, locals, assignable_locals);
+  }
+  if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
+    throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
   }
 }
 

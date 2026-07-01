@@ -86,7 +86,9 @@ remain tied to the earlier version.
 
 `assume` extends the local proof context. `assert` creates a proof obligation
 from the active context and then becomes available to later obligations.
-`return` can use parameters and local bindings.
+`return` can use parameters and local bindings. Non-void functions must return a
+value on every syntactic control-flow path. For `if` statements, that means both
+branches must return unless a later statement returns after the branch.
 
 `if condition { ... } else { ... }` creates two statement branches. The
 condition must be `bool`. The then branch is checked under `condition`, and the

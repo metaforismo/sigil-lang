@@ -30,7 +30,7 @@ production verifier yet.
 - Statement-level `if`/`else` branches with branch-local proof contexts and
   guarded facts at merge points.
 - Static validation for predicate types, identifier scope, duplicate symbols,
-  and return types.
+  return types, and non-void return coverage.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.

@@ -21,6 +21,7 @@ tests, and docs are in the repo.
 - [x] Add full source ranges, not just start locations, to diagnostics.
 - [x] Add statement-level `if` and join proof contexts at merge points.
 - [x] Add assignment with explicit mutation rules.
+- [x] Validate non-void return coverage across scalar control flow.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
 - [x] Emit native lowering diagnostics with source ranges.
