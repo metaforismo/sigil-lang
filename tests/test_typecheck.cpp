@@ -16,7 +16,7 @@ void expect(bool condition, const char* message) {
 }
 
 void expect_diagnostic(const char* source, const std::string& needle, std::size_t expected_line,
-                       std::size_t expected_column) {
+                       std::size_t expected_column, const std::string& expected_range = "") {
   try {
     const auto module = sigil::parse_source(source, "typecheck.sigil");
     sigil::validate_module(module);
@@ -26,6 +26,9 @@ void expect_diagnostic(const char* source, const std::string& needle, std::size_
       if (expected_line != 0) {
         expect(diagnostic.location().line == expected_line, "typecheck diagnostic line");
         expect(diagnostic.location().column == expected_column, "typecheck diagnostic column");
+      }
+      if (!expected_range.empty()) {
+        expect(diagnostic.range().display() == expected_range, "typecheck diagnostic range");
       }
       return;
     }
@@ -69,12 +72,12 @@ ensures preserved: result >= 0;
   expect_diagnostic(R"(
 module bad;
 fn missing(x: i64) -> i64
-requires nope: y >= 0;
+requires nope: missing_name >= 0;
 {
   return x;
 }
 )",
-                    "unknown identifier 'y'", 4, 16);
+                    "unknown identifier 'missing_name'", 4, 16, "typecheck.sigil:4:16-27");
 
   expect_diagnostic(R"(
 module bad;

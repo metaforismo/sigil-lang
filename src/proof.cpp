@@ -145,7 +145,7 @@ SolverRun run_z3_query(const ProofObligation& obligation, const std::string& smt
 
 VerificationResult make_result(const ProofObligation& obligation, VerificationStatus status,
                                std::string details, const std::string& smt) {
-  return {obligation.name, status, std::move(details), smt, obligation.location};
+  return {obligation.name, status, std::move(details), smt, obligation.range};
 }
 
 VerificationResult verify_with_z3(const ProofObligation& obligation, const std::string& smt,
@@ -223,26 +223,32 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
         auto equality =
             make_binary(BinaryOp::Equal, make_identifier(statement.name, statement.location),
                         statement.expr, statement.location);
-        active.push_back(NamedPredicate{"let_" + statement.name, equality, statement.location});
+        active.push_back(
+            NamedPredicate{"let_" + statement.name, equality, statement.location, statement.range});
       } else if (statement.kind == StatementKind::Assume) {
-        active.push_back(NamedPredicate{statement.name, statement.expr, statement.location});
+        active.push_back(
+            NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
       } else if (statement.kind == StatementKind::Assert) {
         ++assert_index;
         ProofObligation obligation;
         obligation.name =
             "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
         obligation.location = statement.location;
+        obligation.range = statement.range;
         obligation.assumptions = active;
-        obligation.goal = NamedPredicate{statement.name, statement.expr, statement.location};
+        obligation.goal =
+            NamedPredicate{statement.name, statement.expr, statement.location, statement.range};
         obligation.symbols = symbols;
         obligations.push_back(std::move(obligation));
-        active.push_back(NamedPredicate{statement.name, statement.expr, statement.location});
+        active.push_back(
+            NamedPredicate{statement.name, statement.expr, statement.location, statement.range});
       } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
         ++return_index;
         const auto return_name = "return_" + std::to_string(return_index);
         auto equality = make_binary(BinaryOp::Equal, make_identifier("result", statement.location),
                                     statement.expr, statement.location);
-        active.push_back(NamedPredicate{return_name, equality, statement.location});
+        active.push_back(
+            NamedPredicate{return_name, equality, statement.location, statement.range});
       }
     }
 
@@ -253,6 +259,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       obligation.name =
           "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
       obligation.location = ensure.location;
+      obligation.range = ensure.range;
       obligation.assumptions = active;
       obligation.goal = ensure;
       obligation.symbols = symbols;

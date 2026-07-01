@@ -55,6 +55,7 @@ struct Token {
   TokenKind kind = TokenKind::End;
   std::string text;
   SourceLocation location;
+  SourceRange range;
 };
 
 class Lexer {
@@ -70,6 +71,7 @@ private:
   char advance();
   bool match(char expected);
   void skip_whitespace_and_comments();
+  SourceLocation current_location() const;
   Token make_token(TokenKind kind, std::size_t start, SourceLocation location) const;
   Token identifier(std::size_t start, SourceLocation location);
   Token number(std::size_t start, SourceLocation location);

@@ -15,7 +15,8 @@ void expect(bool condition, const char* message) {
 }
 
 void expect_parse_diagnostic(const char* source, const std::string& needle,
-                             std::size_t expected_line, std::size_t expected_column) {
+                             std::size_t expected_line, std::size_t expected_column,
+                             const std::string& expected_range = "") {
   try {
     (void)sigil::parse_source(source, "parse-error.sigil");
   } catch (const sigil::Diagnostic& diagnostic) {
@@ -23,6 +24,9 @@ void expect_parse_diagnostic(const char* source, const std::string& needle,
     expect(message.find(needle) != std::string::npos, "parser diagnostic message");
     expect(diagnostic.location().line == expected_line, "parser diagnostic line");
     expect(diagnostic.location().column == expected_column, "parser diagnostic column");
+    if (!expected_range.empty()) {
+      expect(diagnostic.range().display() == expected_range, "parser diagnostic range");
+    }
     return;
   }
 
@@ -35,6 +39,8 @@ void expect_parse_diagnostic(const char* source, const std::string& needle,
 int main() {
   expect_parse_diagnostic("module broken;\nfn nope() -> i64 {\n  return 1\n}\n",
                           "expected ';' after return statement", 4, 1);
+  expect_parse_diagnostic("module broken;\nwat\n", "expected struct or function declaration", 2, 1,
+                          "parse-error.sigil:2:1-3");
 
   const char* source = R"(
 module cache;
@@ -71,6 +77,10 @@ ensures preserved: result >= 0;
   expect(sigil::display_expr(module.functions[0].body[0].expr) ==
              "(if (x >= 0) { (x + 1) } else { 1 })",
          "display if expression");
+  expect(module.functions[0].body[0].range.display() == "inline.sigil:14:3-46",
+         "let statement range");
+  expect(module.functions[0].body[0].expr->range.display() == "inline.sigil:14:16-45",
+         "if expression range");
   expect(sigil::display_expr(module.structs[0].invariants[0].expr) == "(!valid || (key >= 0))",
          "display invariant");
   return 0;

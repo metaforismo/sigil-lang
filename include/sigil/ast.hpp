@@ -68,6 +68,7 @@ struct ExprNode {
 
   Kind kind = Kind::Identifier;
   SourceLocation location;
+  SourceRange range;
   std::int64_t integer_value = 0;
   bool boolean_value = false;
   std::string name;
@@ -78,11 +79,17 @@ struct ExprNode {
   Expr rhs;
 };
 
+Expr make_integer(std::int64_t value, SourceRange range);
 Expr make_integer(std::int64_t value, SourceLocation location = {});
+Expr make_boolean(bool value, SourceRange range);
 Expr make_boolean(bool value, SourceLocation location = {});
+Expr make_identifier(std::string name, SourceRange range);
 Expr make_identifier(std::string name, SourceLocation location = {});
+Expr make_unary(UnaryOp op, Expr operand, SourceRange range);
 Expr make_unary(UnaryOp op, Expr operand, SourceLocation location = {});
+Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceRange range);
 Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceLocation location = {});
+Expr make_if(Expr condition, Expr then_branch, Expr else_branch, SourceRange range);
 Expr make_if(Expr condition, Expr then_branch, Expr else_branch, SourceLocation location = {});
 
 std::string display_expr(const Expr& expr);
@@ -93,12 +100,14 @@ struct NamedPredicate {
   std::string name;
   Expr expr;
   SourceLocation location;
+  SourceRange range;
 };
 
 struct FieldDecl {
   std::string name;
   Type type;
   SourceLocation location;
+  SourceRange range;
 };
 
 struct StructDecl {
@@ -106,12 +115,14 @@ struct StructDecl {
   std::vector<FieldDecl> fields;
   std::vector<NamedPredicate> invariants;
   SourceLocation location;
+  SourceRange range;
 };
 
 struct ParamDecl {
   std::string name;
   Type type;
   SourceLocation location;
+  SourceRange range;
 };
 
 enum class StatementKind {
@@ -127,6 +138,7 @@ struct Statement {
   Type type;
   Expr expr;
   SourceLocation location;
+  SourceRange range;
 };
 
 struct FunctionDecl {
@@ -137,6 +149,7 @@ struct FunctionDecl {
   std::vector<NamedPredicate> ensures;
   std::vector<Statement> body;
   SourceLocation location;
+  SourceRange range;
 };
 
 struct Module {
@@ -144,6 +157,7 @@ struct Module {
   std::vector<StructDecl> structs;
   std::vector<FunctionDecl> functions;
   SourceLocation location;
+  SourceRange range;
 };
 
 using SymbolTable = std::unordered_map<std::string, Type>;

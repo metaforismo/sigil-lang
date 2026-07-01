@@ -14,16 +14,28 @@ struct SourceLocation {
   std::string display() const;
 };
 
+struct SourceRange {
+  SourceLocation start;
+  SourceLocation end;
+
+  std::string display() const;
+};
+
 class Diagnostic : public std::runtime_error {
 public:
   Diagnostic(SourceLocation location, const std::string& message);
+  Diagnostic(SourceRange range, const std::string& message);
 
   const SourceLocation& location() const noexcept {
-    return location_;
+    return range_.start;
+  }
+
+  const SourceRange& range() const noexcept {
+    return range_;
   }
 
 private:
-  SourceLocation location_;
+  SourceRange range_;
 };
 
 } // namespace sigil

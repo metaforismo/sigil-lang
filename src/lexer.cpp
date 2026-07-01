@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <unordered_map>
+#include <utility>
 
 namespace sigil {
 
@@ -85,22 +86,25 @@ std::vector<Token> Lexer::tokenize() {
       break;
     case '&':
       if (!match('&')) {
-        throw Diagnostic(location, "expected '&' after '&'");
+        throw Diagnostic(SourceRange{location, current_location()}, "expected '&' after '&'");
       }
       tokens.push_back(make_token(TokenKind::AndAnd, start, location));
       break;
     case '|':
       if (!match('|')) {
-        throw Diagnostic(location, "expected '|' after '|'");
+        throw Diagnostic(SourceRange{location, current_location()}, "expected '|' after '|'");
       }
       tokens.push_back(make_token(TokenKind::OrOr, start, location));
       break;
     default:
-      throw Diagnostic(location, std::string("unexpected character '") + c + "'");
+      throw Diagnostic(SourceRange{location, current_location()},
+                       std::string("unexpected character '") + c + "'");
     }
   }
 
-  tokens.push_back(Token{TokenKind::End, "", SourceLocation{file_name_, line_, column_}});
+  const auto end_location = current_location();
+  tokens.push_back(
+      Token{TokenKind::End, "", end_location, SourceRange{end_location, end_location}});
   return tokens;
 }
 
@@ -152,8 +156,13 @@ void Lexer::skip_whitespace_and_comments() {
   }
 }
 
+SourceLocation Lexer::current_location() const {
+  return SourceLocation{file_name_, line_, column_};
+}
+
 Token Lexer::make_token(TokenKind kind, std::size_t start, SourceLocation location) const {
-  return Token{kind, source_.substr(start, current_ - start), std::move(location)};
+  return Token{kind, source_.substr(start, current_ - start), location,
+               SourceRange{std::move(location), current_location()}};
 }
 
 Token Lexer::identifier(std::size_t start, SourceLocation location) {
@@ -178,8 +187,8 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
   };
   const auto text = source_.substr(start, current_ - start);
   const auto found = keywords.find(text);
-  return Token{found == keywords.end() ? TokenKind::Identifier : found->second, text,
-               std::move(location)};
+  return Token{found == keywords.end() ? TokenKind::Identifier : found->second, text, location,
+               SourceRange{std::move(location), current_location()}};
 }
 
 Token Lexer::number(std::size_t start, SourceLocation location) {

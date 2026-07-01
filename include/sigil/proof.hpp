@@ -18,6 +18,7 @@ enum class VerificationStatus {
 struct ProofObligation {
   std::string name;
   SourceLocation location;
+  SourceRange range;
   std::vector<NamedPredicate> assumptions;
   NamedPredicate goal;
   SymbolTable symbols;
@@ -27,12 +28,19 @@ struct VerificationResult {
   VerificationResult() = default;
 
   VerificationResult(std::string obligation_name, VerificationStatus status, std::string details,
-                     std::string smt_lib, SourceLocation location = {})
-      : obligation_name(std::move(obligation_name)), location(std::move(location)), status(status),
+                     std::string smt_lib, SourceLocation source_location = {})
+      : obligation_name(std::move(obligation_name)), location(source_location),
+        range(SourceRange{source_location, source_location}), status(status),
         details(std::move(details)), smt_lib(std::move(smt_lib)) {}
+
+  VerificationResult(std::string obligation_name, VerificationStatus status, std::string details,
+                     std::string smt_lib, SourceRange range)
+      : obligation_name(std::move(obligation_name)), location(range.start), range(std::move(range)),
+        status(status), details(std::move(details)), smt_lib(std::move(smt_lib)) {}
 
   std::string obligation_name;
   SourceLocation location;
+  SourceRange range;
   VerificationStatus status = VerificationStatus::Unknown;
   std::string details;
   std::string smt_lib;

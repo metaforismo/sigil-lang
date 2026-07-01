@@ -2,8 +2,17 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <utility>
 
 namespace sigil {
+
+namespace {
+
+SourceRange span(SourceRange start, SourceRange end) {
+  return SourceRange{std::move(start.start), std::move(end.end)};
+}
+
+} // namespace
 
 Parser::Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
 
@@ -11,16 +20,21 @@ Module Parser::parse_module() {
   Module module;
   const auto module_token = consume(TokenKind::Module, "expected module declaration");
   module.location = module_token.location;
+  module.range = module_token.range;
   module.name = consume(TokenKind::Identifier, "expected module name").text;
-  consume(TokenKind::Semicolon, "expected ';' after module declaration");
+  const auto module_semicolon =
+      consume(TokenKind::Semicolon, "expected ';' after module declaration");
+  module.range = span(module_token.range, module_semicolon.range);
 
   while (!is_at_end()) {
     if (check(TokenKind::Struct)) {
       module.structs.push_back(parse_struct());
+      module.range.end = module.structs.back().range.end;
     } else if (check(TokenKind::Fn)) {
       module.functions.push_back(parse_function());
+      module.range.end = module.functions.back().range.end;
     } else {
-      throw Diagnostic(peek().location, "expected struct or function declaration");
+      throw Diagnostic(peek().range, "expected struct or function declaration");
     }
   }
   return module;
@@ -63,13 +77,14 @@ Token Parser::consume(TokenKind kind, const std::string& message) {
   }
   std::ostringstream out;
   out << message << ", found " << token_name(peek().kind);
-  throw Diagnostic(peek().location, out.str());
+  throw Diagnostic(peek().range, out.str());
 }
 
 StructDecl Parser::parse_struct() {
   const auto start = consume(TokenKind::Struct, "expected 'struct'");
   StructDecl decl;
   decl.location = start.location;
+  decl.range = start.range;
   decl.name = consume(TokenKind::Identifier, "expected struct name").text;
   consume(TokenKind::LBrace, "expected '{' after struct name");
   while (!check(TokenKind::RBrace)) {
@@ -79,7 +94,8 @@ StructDecl Parser::parse_struct() {
       decl.fields.push_back(parse_field());
     }
   }
-  consume(TokenKind::RBrace, "expected '}' after struct body");
+  const auto end = consume(TokenKind::RBrace, "expected '}' after struct body");
+  decl.range = span(start.range, end.range);
   return decl;
 }
 
@@ -87,6 +103,7 @@ FunctionDecl Parser::parse_function() {
   const auto start = consume(TokenKind::Fn, "expected 'fn'");
   FunctionDecl decl;
   decl.location = start.location;
+  decl.range = start.range;
   decl.name = consume(TokenKind::Identifier, "expected function name").text;
   consume(TokenKind::LParen, "expected '(' after function name");
   decl.params = parse_params();
@@ -106,7 +123,8 @@ FunctionDecl Parser::parse_function() {
   while (!check(TokenKind::RBrace)) {
     decl.body.push_back(parse_statement());
   }
-  consume(TokenKind::RBrace, "expected '}' after function body");
+  const auto end = consume(TokenKind::RBrace, "expected '}' after function body");
+  decl.range = span(start.range, end.range);
   return decl;
 }
 
@@ -114,10 +132,12 @@ FieldDecl Parser::parse_field() {
   FieldDecl field;
   const auto name = consume(TokenKind::Identifier, "expected field name");
   field.location = name.location;
+  field.range = name.range;
   field.name = name.text;
   consume(TokenKind::Colon, "expected ':' after field name");
   field.type = parse_type();
-  consume(TokenKind::Semicolon, "expected ';' after field declaration");
+  const auto end = consume(TokenKind::Semicolon, "expected ';' after field declaration");
+  field.range = span(name.range, end.range);
   return field;
 }
 
@@ -125,10 +145,12 @@ NamedPredicate Parser::parse_named_predicate(TokenKind keyword) {
   const auto start = consume(keyword, "expected predicate keyword");
   NamedPredicate predicate;
   predicate.location = start.location;
+  predicate.range = start.range;
   predicate.name = consume(TokenKind::Identifier, "expected predicate name").text;
   consume(TokenKind::Colon, "expected ':' after predicate name");
   predicate.expr = parse_expr();
-  consume(TokenKind::Semicolon, "expected ';' after predicate");
+  const auto end = consume(TokenKind::Semicolon, "expected ';' after predicate");
+  predicate.range = span(start.range, end.range);
   return predicate;
 }
 
@@ -136,13 +158,16 @@ Statement Parser::parse_statement() {
   Statement statement;
   if (match(TokenKind::Let)) {
     statement.kind = StatementKind::Let;
-    statement.location = previous().location;
+    const auto start = previous();
+    statement.location = start.location;
+    statement.range = start.range;
     statement.name = consume(TokenKind::Identifier, "expected local binding name").text;
     consume(TokenKind::Colon, "expected ':' after local binding name");
     statement.type = parse_type();
     consume(TokenKind::Equal, "expected '=' before local binding expression");
     statement.expr = parse_expr();
-    consume(TokenKind::Semicolon, "expected ';' after let statement");
+    const auto end = consume(TokenKind::Semicolon, "expected ';' after let statement");
+    statement.range = span(start.range, end.range);
     return statement;
   }
 
@@ -151,6 +176,7 @@ Statement Parser::parse_statement() {
     statement.kind =
         keyword.kind == TokenKind::Assume ? StatementKind::Assume : StatementKind::Assert;
     statement.location = keyword.location;
+    statement.range = keyword.range;
     if (check(TokenKind::Identifier) && tokens_[current_ + 1].kind == TokenKind::Colon) {
       statement.name = advance().text;
       consume(TokenKind::Colon, "expected ':' after statement name");
@@ -158,20 +184,24 @@ Statement Parser::parse_statement() {
       statement.name = statement.kind == StatementKind::Assume ? "assume" : "assert";
     }
     statement.expr = parse_expr();
-    consume(TokenKind::Semicolon, "expected ';' after statement");
+    const auto end = consume(TokenKind::Semicolon, "expected ';' after statement");
+    statement.range = span(keyword.range, end.range);
     return statement;
   }
 
   if (match(TokenKind::Return)) {
     statement.kind = StatementKind::Return;
-    statement.location = previous().location;
+    const auto start = previous();
+    statement.location = start.location;
+    statement.range = start.range;
     statement.name = "return";
     statement.expr = parse_expr();
-    consume(TokenKind::Semicolon, "expected ';' after return statement");
+    const auto end = consume(TokenKind::Semicolon, "expected ';' after return statement");
+    statement.range = span(start.range, end.range);
     return statement;
   }
 
-  throw Diagnostic(peek().location, "expected let, assume, assert, or return statement");
+  throw Diagnostic(peek().range, "expected let, assume, assert, or return statement");
 }
 
 std::vector<ParamDecl> Parser::parse_params() {
@@ -183,6 +213,7 @@ std::vector<ParamDecl> Parser::parse_params() {
     ParamDecl param;
     const auto name = consume(TokenKind::Identifier, "expected parameter name");
     param.location = name.location;
+    param.range = name.range;
     param.name = name.text;
     consume(TokenKind::Colon, "expected ':' after parameter name");
     param.type = parse_type();
@@ -203,8 +234,9 @@ Expr Parser::parse_expr() {
 Expr Parser::parse_or() {
   auto expr = parse_and();
   while (match(TokenKind::OrOr)) {
-    const auto op = previous();
-    expr = make_binary(BinaryOp::Or, expr, parse_and(), op.location);
+    auto rhs = parse_and();
+    const auto range = span(expr->range, rhs->range);
+    expr = make_binary(BinaryOp::Or, expr, rhs, range);
   }
   return expr;
 }
@@ -212,8 +244,9 @@ Expr Parser::parse_or() {
 Expr Parser::parse_and() {
   auto expr = parse_equality();
   while (match(TokenKind::AndAnd)) {
-    const auto op = previous();
-    expr = make_binary(BinaryOp::And, expr, parse_equality(), op.location);
+    auto rhs = parse_equality();
+    const auto range = span(expr->range, rhs->range);
+    expr = make_binary(BinaryOp::And, expr, rhs, range);
   }
   return expr;
 }
@@ -222,8 +255,10 @@ Expr Parser::parse_equality() {
   auto expr = parse_comparison();
   while (match(TokenKind::EqualEqual) || match(TokenKind::BangEqual)) {
     const auto op = previous();
+    auto rhs = parse_comparison();
+    const auto range = span(expr->range, rhs->range);
     expr = make_binary(op.kind == TokenKind::EqualEqual ? BinaryOp::Equal : BinaryOp::NotEqual,
-                       expr, parse_comparison(), op.location);
+                       expr, rhs, range);
   }
   return expr;
 }
@@ -241,7 +276,9 @@ Expr Parser::parse_comparison() {
     } else if (op.kind == TokenKind::GreaterEqual) {
       binary = BinaryOp::GreaterEqual;
     }
-    expr = make_binary(binary, expr, parse_term(), op.location);
+    auto rhs = parse_term();
+    const auto range = span(expr->range, rhs->range);
+    expr = make_binary(binary, expr, rhs, range);
   }
   return expr;
 }
@@ -250,8 +287,10 @@ Expr Parser::parse_term() {
   auto expr = parse_factor();
   while (match(TokenKind::Plus) || match(TokenKind::Minus)) {
     const auto op = previous();
-    expr = make_binary(op.kind == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Subtract, expr,
-                       parse_factor(), op.location);
+    auto rhs = parse_factor();
+    const auto range = span(expr->range, rhs->range);
+    expr = make_binary(op.kind == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Subtract, expr, rhs,
+                       range);
   }
   return expr;
 }
@@ -266,7 +305,9 @@ Expr Parser::parse_factor() {
     } else if (op.kind == TokenKind::Percent) {
       binary = BinaryOp::Modulo;
     }
-    expr = make_binary(binary, expr, parse_unary(), op.location);
+    auto rhs = parse_unary();
+    const auto range = span(expr->range, rhs->range);
+    expr = make_binary(binary, expr, rhs, range);
   }
   return expr;
 }
@@ -274,21 +315,23 @@ Expr Parser::parse_factor() {
 Expr Parser::parse_unary() {
   if (match(TokenKind::Bang) || match(TokenKind::Minus)) {
     const auto op = previous();
-    return make_unary(op.kind == TokenKind::Bang ? UnaryOp::Not : UnaryOp::Negate, parse_unary(),
-                      op.location);
+    auto operand = parse_unary();
+    return make_unary(op.kind == TokenKind::Bang ? UnaryOp::Not : UnaryOp::Negate, operand,
+                      span(op.range, operand->range));
   }
   return parse_primary();
 }
 
 Expr Parser::parse_primary() {
   if (match(TokenKind::Number)) {
-    return make_integer(std::strtoll(previous().text.c_str(), nullptr, 10), previous().location);
+    const auto token = previous();
+    return make_integer(std::strtoll(token.text.c_str(), nullptr, 10), token.range);
   }
   if (match(TokenKind::True)) {
-    return make_boolean(true, previous().location);
+    return make_boolean(true, previous().range);
   }
   if (match(TokenKind::False)) {
-    return make_boolean(false, previous().location);
+    return make_boolean(false, previous().range);
   }
   if (match(TokenKind::If)) {
     const auto if_token = previous();
@@ -299,18 +342,19 @@ Expr Parser::parse_primary() {
     consume(TokenKind::Else, "expected 'else' after then expression");
     consume(TokenKind::LBrace, "expected '{' before else expression");
     auto else_branch = parse_expr();
-    consume(TokenKind::RBrace, "expected '}' after else expression");
-    return make_if(condition, then_branch, else_branch, if_token.location);
+    const auto end = consume(TokenKind::RBrace, "expected '}' after else expression");
+    return make_if(condition, then_branch, else_branch, span(if_token.range, end.range));
   }
   if (match(TokenKind::Identifier)) {
-    return make_identifier(previous().text, previous().location);
+    const auto token = previous();
+    return make_identifier(token.text, token.range);
   }
   if (match(TokenKind::LParen)) {
     auto expr = parse_expr();
     consume(TokenKind::RParen, "expected ')' after expression");
     return expr;
   }
-  throw Diagnostic(peek().location, "expected expression");
+  throw Diagnostic(peek().range, "expected expression");
 }
 
 Module parse_source(std::string_view source, const std::string& file_name) {
