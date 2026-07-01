@@ -5,6 +5,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -25,8 +26,22 @@ void print_help() {
   std::cout << "sigil " << SIGIL_VERSION << "\n\n"
             << "Usage:\n"
             << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
-            << "                          [--strict] [--no-z3]\n"
+            << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
             << "  sigil backend\n";
+}
+
+int parse_positive_int(const std::string& value, const std::string& option_name) {
+  std::size_t consumed = 0;
+  long long parsed = 0;
+  try {
+    parsed = std::stoll(value, &consumed, 10);
+  } catch (const std::exception&) {
+    throw std::runtime_error(option_name + " requires a positive integer");
+  }
+  if (consumed != value.size() || parsed <= 0 || parsed > std::numeric_limits<int>::max()) {
+    throw std::runtime_error(option_name + " requires a positive integer");
+  }
+  return static_cast<int>(parsed);
 }
 
 std::string indent_block(const std::string& block, const std::string& indent) {
@@ -60,6 +75,11 @@ int check_command(const std::vector<std::string>& args) {
       proof_options.smt_output_dir = args[++index];
     } else if (arg == "--show-model") {
       proof_options.include_models = true;
+    } else if (arg == "--solver-timeout-ms") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--solver-timeout-ms requires a positive integer");
+      }
+      proof_options.solver_timeout_ms = parse_positive_int(args[++index], "--solver-timeout-ms");
     } else if (arg == "--strict") {
       strict = true;
     } else if (arg == "--no-z3") {

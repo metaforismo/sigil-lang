@@ -3,7 +3,8 @@
 ## `sigil check`
 
 ```sh
-sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model] [--strict] [--no-z3]
+sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]
+                  [--solver-timeout-ms <ms>] [--strict] [--no-z3]
 ```
 
 `check` parses a Sigil module, validates scalar expression types, builds proof
@@ -16,6 +17,8 @@ Options:
 - `--save-smt <dir>`: write every emitted SMT-LIB query to `<dir>`.
 - `--show-model`: when Z3 refutes an obligation, ask Z3 for a model and print it
   under the refuted result.
+- `--solver-timeout-ms <ms>`: emit an SMT timeout option for each query. The
+  timeout is preserved in `--dump-smt` output and `--save-smt` artifacts.
 - `--strict`: exit non-zero if any obligation is `UNKNOWN`.
 - `--no-z3`: skip Z3 and run local checks only.
 

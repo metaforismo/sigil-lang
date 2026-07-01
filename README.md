@@ -76,7 +76,7 @@ SIGIL_Z3=/path/to/z3 ./build/sigil check examples/arithmetic.sigil --strict
 Save SMT artifacts and show counterexample models:
 
 ```sh
-./build/sigil check examples/cache.sigil --strict --save-smt build/smt
+./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
 

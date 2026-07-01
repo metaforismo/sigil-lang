@@ -65,5 +65,8 @@ ensures non_negative: result >= 0;
   const auto conditional_smt = sigil::emit_smt_lib(conditional_obligations[0]);
   expect(conditional_smt.find("(assert (= y (ite (>= x 0) x (- x))))") != std::string::npos,
          "emits ite for if expression");
+  const auto timeout_smt = sigil::emit_smt_lib(conditional_obligations[0], 250);
+  expect(timeout_smt.find("(set-option :timeout 250)") != std::string::npos,
+         "emits solver timeout");
   return 0;
 }

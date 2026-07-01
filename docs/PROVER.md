@@ -38,6 +38,10 @@ Conditional expressions are emitted as SMT `ite` terms. For example,
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
 
+Use `--solver-timeout-ms <ms>` to emit an SMT timeout option for each query. The
+timeout is part of dumped and saved SMT-LIB, so standalone solver runs can
+reproduce the same budget.
+
 Sigil runs static validation before SMT emission. That matters for soundness:
 undeclared identifiers and mismatched predicate types are rejected instead of
 being guessed into SMT declarations.

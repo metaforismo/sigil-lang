@@ -71,5 +71,6 @@ jobs:
 
       - name: SMT artifact smoke
         run: |
-          ./build/sigil check examples/cache.sigil --strict --save-smt build/smt
+          ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
           test -f build/smt/fn.preserve_capacity.ensures.1.still_bounded.smt2
+          grep "(set-option :timeout 250)" build/smt/fn.preserve_capacity.ensures.1.still_bounded.smt2

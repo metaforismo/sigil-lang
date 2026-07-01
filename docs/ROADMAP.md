@@ -10,6 +10,7 @@
 - Validate scalar proof expressions before SMT emission.
 - Report Z3 refutations with optional counterexample models.
 - Save emitted SMT-LIB queries as reproducible artifacts.
+- Preserve solver timeout budgets in emitted SMT-LIB.
 - Support typed local `let` bindings in proof obligations.
 - Support expression-level conditionals through SMT `ite`.
 - Keep CI dependency-light and reproducible.

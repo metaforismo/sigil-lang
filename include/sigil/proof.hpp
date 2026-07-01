@@ -41,11 +41,13 @@ struct VerificationResult {
 struct ProofOptions {
   bool use_z3 = true;
   bool include_models = false;
+  int solver_timeout_ms = 0;
   std::string smt_output_dir;
 };
 
 std::vector<ProofObligation> build_obligations(const Module& module);
 std::string emit_smt_lib(const ProofObligation& obligation);
+std::string emit_smt_lib(const ProofObligation& obligation, int solver_timeout_ms);
 std::string smt_file_name_for_obligation(const std::string& obligation_name);
 std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
                                                    const ProofOptions& options);

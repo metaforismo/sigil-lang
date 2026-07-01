@@ -253,7 +253,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
   return obligations;
 }
 
-std::string emit_smt_lib(const ProofObligation& obligation) {
+std::string emit_smt_lib(const ProofObligation& obligation, int solver_timeout_ms) {
   SymbolTable symbols = obligation.symbols;
   std::vector<std::string> identifiers;
   for (const auto& assumption : obligation.assumptions) {
@@ -267,6 +267,9 @@ std::string emit_smt_lib(const ProofObligation& obligation) {
   }
 
   std::ostringstream out;
+  if (solver_timeout_ms > 0) {
+    out << "(set-option :timeout " << solver_timeout_ms << ")\n";
+  }
   out << "(set-logic ALL)\n";
   for (const auto& [name, type] : symbols) {
     out << "(declare-const " << sanitize_symbol(name) << " " << type.smt_sort() << ")\n";
@@ -277,6 +280,10 @@ std::string emit_smt_lib(const ProofObligation& obligation) {
   out << "(assert (not " << emit_smt_expr(obligation.goal.expr) << "))\n";
   out << "(check-sat)\n";
   return out.str();
+}
+
+std::string emit_smt_lib(const ProofObligation& obligation) {
+  return emit_smt_lib(obligation, 0);
 }
 
 std::string smt_file_name_for_obligation(const std::string& obligation_name) {
@@ -311,7 +318,7 @@ std::vector<VerificationResult> verify_obligations(const std::vector<ProofObliga
                                                    const ProofOptions& options) {
   std::vector<VerificationResult> results;
   for (const auto& obligation : obligations) {
-    const auto smt = emit_smt_lib(obligation);
+    const auto smt = emit_smt_lib(obligation, options.solver_timeout_ms);
     std::string smt_path;
     if (!options.smt_output_dir.empty()) {
       try {
