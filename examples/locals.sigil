@@ -1,0 +1,17 @@
+module locals;
+
+fn add_one_preserves_lower_bound(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures still_non_negative: result >= 0;
+{
+  let y: i64 = x + 1;
+  assert y_above_x: y >= x;
+  return y;
+}
+
+fn boolean_local(flag: bool) -> bool
+ensures preserved: result == flag;
+{
+  let same: bool = flag;
+  return same;
+}

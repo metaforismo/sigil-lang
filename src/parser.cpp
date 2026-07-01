@@ -134,6 +134,18 @@ NamedPredicate Parser::parse_named_predicate(TokenKind keyword) {
 
 Statement Parser::parse_statement() {
   Statement statement;
+  if (match(TokenKind::Let)) {
+    statement.kind = StatementKind::Let;
+    statement.location = previous().location;
+    statement.name = consume(TokenKind::Identifier, "expected local binding name").text;
+    consume(TokenKind::Colon, "expected ':' after local binding name");
+    statement.type = parse_type();
+    consume(TokenKind::Equal, "expected '=' before local binding expression");
+    statement.expr = parse_expr();
+    consume(TokenKind::Semicolon, "expected ';' after let statement");
+    return statement;
+  }
+
   if (match(TokenKind::Assume) || match(TokenKind::Assert)) {
     const auto keyword = previous();
     statement.kind =
@@ -159,7 +171,7 @@ Statement Parser::parse_statement() {
     return statement;
   }
 
-  throw Diagnostic(peek().location, "expected assume, assert, or return statement");
+  throw Diagnostic(peek().location, "expected let, assume, assert, or return statement");
 }
 
 std::vector<ParamDecl> Parser::parse_params() {

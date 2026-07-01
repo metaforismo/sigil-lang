@@ -46,8 +46,10 @@ fn id(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
+  let y: i64 = x + 1;
   assert visible: x >= 0;
-  return x;
+  assert y_visible: y >= x;
+  return y;
 }
 )";
 
@@ -71,6 +73,37 @@ fn mismatched(flag: bool) -> i64
 }
 )",
                     "return type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_let(x: i64) -> i64
+{
+  let flag: bool = x + 1;
+  return x;
+}
+)",
+                    "let type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn duplicate_local(x: i64) -> i64
+{
+  let x: i64 = 1;
+  return x;
+}
+)",
+                    "duplicate local 'x'");
+
+  expect_diagnostic(R"(
+module bad;
+fn ensure_leaks_local(x: i64) -> i64
+ensures leaked: tmp >= 0;
+{
+  let tmp: i64 = x;
+  return tmp;
+}
+)",
+                    "unknown identifier 'tmp'");
 
   expect_diagnostic(R"(
 module bad;

@@ -80,10 +80,8 @@ std::vector<Token> Lexer::tokenize() {
           make_token(match('=') ? TokenKind::GreaterEqual : TokenKind::Greater, start, location));
       break;
     case '=':
-      if (!match('=')) {
-        throw Diagnostic(location, "expected '=' after '='");
-      }
-      tokens.push_back(make_token(TokenKind::EqualEqual, start, location));
+      tokens.push_back(
+          make_token(match('=') ? TokenKind::EqualEqual : TokenKind::Equal, start, location));
       break;
     case '&':
       if (!match('&')) {
@@ -163,11 +161,17 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
     advance();
   }
   static const std::unordered_map<std::string, TokenKind> keywords = {
-      {"module", TokenKind::Module},       {"struct", TokenKind::Struct},
-      {"invariant", TokenKind::Invariant}, {"fn", TokenKind::Fn},
-      {"requires", TokenKind::Requires},   {"ensures", TokenKind::Ensures},
-      {"assume", TokenKind::Assume},       {"assert", TokenKind::Assert},
-      {"return", TokenKind::Return},       {"true", TokenKind::True},
+      {"module", TokenKind::Module},
+      {"struct", TokenKind::Struct},
+      {"invariant", TokenKind::Invariant},
+      {"fn", TokenKind::Fn},
+      {"requires", TokenKind::Requires},
+      {"ensures", TokenKind::Ensures},
+      {"let", TokenKind::Let},
+      {"assume", TokenKind::Assume},
+      {"assert", TokenKind::Assert},
+      {"return", TokenKind::Return},
+      {"true", TokenKind::True},
       {"false", TokenKind::False},
   };
   const auto text = source_.substr(start, current_ - start);
@@ -207,6 +211,8 @@ const char* token_name(TokenKind kind) {
     return "','";
   case TokenKind::Arrow:
     return "'->'";
+  case TokenKind::Equal:
+    return "'='";
   case TokenKind::Plus:
     return "'+'";
   case TokenKind::Minus:
@@ -247,6 +253,8 @@ const char* token_name(TokenKind kind) {
     return "'requires'";
   case TokenKind::Ensures:
     return "'ensures'";
+  case TokenKind::Let:
+    return "'let'";
   case TokenKind::Assume:
     return "'assume'";
   case TokenKind::Assert:

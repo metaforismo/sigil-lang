@@ -112,6 +112,7 @@ struct ParamDecl {
 };
 
 enum class StatementKind {
+  Let,
   Assume,
   Assert,
   Return,
@@ -120,6 +121,7 @@ enum class StatementKind {
 struct Statement {
   StatementKind kind = StatementKind::Assume;
   std::string name;
+  Type type;
   Expr expr;
   SourceLocation location;
 };

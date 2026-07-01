@@ -61,16 +61,27 @@ postconditions for non-void functions.
 ## Statements
 
 ```sigil
+let next: i64 = size + 1;
 assume cache_bounds: size <= capacity;
 assert still_bounded: size <= capacity;
-return size;
+return next;
 ```
+
+`let` introduces a typed local binding. The binding expression can use
+parameters and earlier locals, and the binding becomes a proof fact of the form
+`name == expr` for later assertions and returns. Local bindings cannot shadow
+parameters or earlier locals.
 
 `assume` extends the local proof context. `assert` creates a proof obligation
 from the active context and then becomes available to later obligations.
+`return` can use parameters and local bindings.
 
-The current body language is deliberately tiny. Real assignments, branches,
-loops, references, and memory operations will require proper control-flow and
+Function postconditions can mention parameters and `result`, but not body-local
+binding names. This keeps contracts independent from implementation-local
+details.
+
+The current body language is deliberately tiny. Reassignment, branches, loops,
+references, and memory operations will require proper control-flow and
 weakest-precondition generation.
 
 ## Expressions

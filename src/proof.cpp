@@ -211,7 +211,13 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     int assert_index = 0;
     int return_index = 0;
     for (const auto& statement : fn.body) {
-      if (statement.kind == StatementKind::Assume) {
+      if (statement.kind == StatementKind::Let) {
+        symbols[statement.name] = statement.type;
+        auto equality =
+            make_binary(BinaryOp::Equal, make_identifier(statement.name, statement.location),
+                        statement.expr, statement.location);
+        active.push_back(NamedPredicate{"let_" + statement.name, equality, statement.location});
+      } else if (statement.kind == StatementKind::Assume) {
         active.push_back(NamedPredicate{statement.name, statement.expr, statement.location});
       } else if (statement.kind == StatementKind::Assert) {
         ++assert_index;

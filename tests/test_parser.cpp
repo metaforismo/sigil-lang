@@ -28,8 +28,10 @@ fn keep(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
+  let y: i64 = x + 1;
+  assert advanced: y >= x;
   assert non_negative: x >= 0;
-  return x;
+  return y;
 }
 )";
 
@@ -41,7 +43,10 @@ ensures preserved: result >= 0;
   expect(module.functions.size() == 1, "function count");
   expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
-  expect(module.functions[0].body.size() == 2, "body count");
+  expect(module.functions[0].body.size() == 4, "body count");
+  expect(module.functions[0].body[0].kind == sigil::StatementKind::Let, "let statement kind");
+  expect(module.functions[0].body[0].name == "y", "let binding name");
+  expect(module.functions[0].body[0].type.kind == sigil::TypeKind::I64, "let binding type");
   expect(sigil::display_expr(module.structs[0].invariants[0].expr) == "(!valid || (key >= 0))",
          "display invariant");
   return 0;

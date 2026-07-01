@@ -53,7 +53,9 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Strict proof smoke
-        run: ./build/sigil check examples/cache.sigil --strict
+        run: |
+          ./build/sigil check examples/cache.sigil --strict
+          ./build/sigil check examples/locals.sigil --strict
 
       - name: Refutation smoke
         run: |

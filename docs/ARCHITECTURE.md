@@ -30,6 +30,7 @@ system:
 - struct invariant expressions must be `bool`;
 - function preconditions and postconditions must be `bool`;
 - identifiers must be declared in the active scope;
+- local `let` bindings cannot shadow parameters or earlier locals;
 - `result` is only available in postconditions for non-void functions;
 - returns must match the declared function return type;
 - unsupported user-defined value types are rejected until the type checker and
@@ -40,6 +41,8 @@ system:
 The planner walks each function and builds proof obligations:
 
 - active `requires` predicates become assumptions;
+- `let name: type = expr` adds `name` to the symbol table and records
+  `name == expr` as an assumption for later obligations;
 - `assume` statements add local assumptions;
 - `assert` statements create obligations;
 - `return expr` records `result == expr`;

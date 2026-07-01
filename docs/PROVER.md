@@ -19,6 +19,7 @@ The proof query is implication by contradiction:
 ```smt2
 (assert A)
 (assert B)
+(assert (= local expr))
 (assert (not Goal))
 (check-sat)
 ```
@@ -26,6 +27,10 @@ The proof query is implication by contradiction:
 `unsat` means the goal is proven under the assumptions. `sat` means the goal can
 be violated. Solver errors and timeouts should be treated as unknown rather than
 silently accepted.
+
+Local `let` bindings are lowered as equality assumptions. This gives the solver
+a simple, checkable representation of straight-line data flow without adding a
+separate proof language.
 
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.

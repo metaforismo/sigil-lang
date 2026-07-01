@@ -20,6 +20,8 @@ production verifier yet.
 - Hand-written lexer and parser for `.sigil` modules.
 - First-class syntax for struct invariants, function preconditions,
   postconditions, assumptions, assertions, and returns.
+- Typed local `let` bindings that become proof facts for later assertions and
+  returns.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   and return types.
 - Verification-condition generation for function assertions and postconditions.
@@ -37,8 +39,9 @@ fn keep(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
-  assert still_non_negative: x >= 0;
-  return x;
+  let y: i64 = x + 1;
+  assert y_above_x: y >= x;
+  return y;
 }
 ```
 

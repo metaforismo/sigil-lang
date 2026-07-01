@@ -182,16 +182,27 @@ void validate_function(const FunctionDecl& decl) {
     validate_predicate(ensure, post_symbols, "postcondition");
   }
 
+  SymbolTable locals = params;
   for (const auto& statement : decl.body) {
-    if (statement.kind == StatementKind::Assume) {
-      require_type(statement.expr, params, TypeKind::Bool, "assume statement");
+    if (statement.kind == StatementKind::Let) {
+      require_value_type(statement.type, statement.location,
+                         "local '" + decl.name + "." + statement.name + "'");
+      const auto actual = infer_expr(statement.expr, locals);
+      if (!same_type(actual, statement.type)) {
+        throw Diagnostic(statement.location, "let type mismatch: expected " +
+                                                 statement.type.display() + ", found " +
+                                                 actual.display());
+      }
+      insert_symbol(locals, statement.name, statement.type, statement.location, "local");
+    } else if (statement.kind == StatementKind::Assume) {
+      require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
     } else if (statement.kind == StatementKind::Assert) {
-      require_type(statement.expr, params, TypeKind::Bool, "assert statement");
+      require_type(statement.expr, locals, TypeKind::Bool, "assert statement");
     } else if (statement.kind == StatementKind::Return) {
       if (decl.return_type.kind == TypeKind::Void) {
         throw Diagnostic(statement.location, "void functions cannot return a value yet");
       }
-      const auto actual = infer_expr(statement.expr, params);
+      const auto actual = infer_expr(statement.expr, locals);
       if (!same_type(actual, decl.return_type)) {
         throw Diagnostic(statement.location, "return type mismatch: expected " +
                                                  decl.return_type.display() + ", found " +
