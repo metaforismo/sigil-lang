@@ -1,52 +1,63 @@
 # Roadmap
 
-## Phase 0: Public Scaffold
+This file is the project TODO list. Items move to completed only after code,
+tests, and docs are in the repo.
 
-- Parse `.sigil` modules.
-- Represent contracts and invariants in the AST.
-- Emit SMT-LIB proof obligations.
-- Run local checks and optional Z3.
-- Detect `libgccjit` in CMake.
-- Validate scalar proof expressions before SMT emission.
-- Report Z3 refutations with optional counterexample models.
-- Save emitted SMT-LIB queries as reproducible artifacts.
-- Preserve solver timeout budgets in emitted SMT-LIB.
-- Support typed local `let` bindings in proof obligations.
-- Support expression-level conditionals through SMT `ite`.
-- Keep CI dependency-light and reproducible.
+## Completed
 
-## Phase 1: Useful Core Language
+- [x] Parse `.sigil` modules.
+- [x] Represent contracts and invariants in the AST.
+- [x] Emit SMT-LIB proof obligations.
+- [x] Run local checks and optional Z3.
+- [x] Detect `libgccjit` in CMake.
+- [x] Validate scalar proof expressions before SMT emission.
+- [x] Report Z3 refutations with optional counterexample models.
+- [x] Save emitted SMT-LIB queries as reproducible artifacts.
+- [x] Preserve solver timeout budgets in emitted SMT-LIB.
+- [x] Support typed local `let` bindings in proof obligations.
+- [x] Support expression-level conditionals through SMT `ite`.
+- [x] Keep CI dependency-light and reproducible.
 
-- Extend the scalar type checker into a real language type checker.
-- Add assignment, statement-level if/else, loops, and simple structs.
-- Generate weakest-precondition obligations for control flow.
-- Report source spans for failed or unknown obligations.
-- Add counterexample rendering from Z3 models.
+## Immediate Queue
 
-## Phase 2: Native Lowering
+- [ ] Report source spans for parser, type, and proof diagnostics.
+- [ ] Add statement-level `if` and join proof contexts at merge points.
+- [ ] Add assignment with explicit mutation rules.
+- [ ] Lower pure integer and boolean functions through `libgccjit`.
+- [ ] Add ABI tests for JIT-compiled functions.
 
-- Lower pure integer and boolean functions through `libgccjit`.
-- Add ABI tests for compiled functions.
-- Add debug metadata for mapping native code back to Sigil source.
-- Keep solver-visible IR and native-lowered IR aligned.
+## Core Language
 
-## Phase 3: Struct Invariant Preservation
+- [ ] Extend scalar validation into a complete language type checker.
+- [ ] Add loops with user-written invariants.
+- [ ] Add simple user-defined struct values.
+- [ ] Generate weakest-precondition obligations for control flow.
+- [ ] Render Z3 counterexamples in Sigil source terms.
 
-- Treat invariants as obligations on construction, mutation, and public exits.
-- Add ownership and aliasing rules for low-level memory.
-- Support user-defined lemmas for data-structure correctness.
-- Build examples for ring buffers, freelists, caches, and intrusive lists.
+## Native Lowering
 
-## Phase 4: Agentic Prover
+- [ ] Add debug metadata for mapping native code back to Sigil source.
+- [ ] Keep solver-visible IR and native-lowered IR aligned.
+- [ ] Save lowered IR artifacts beside SMT artifacts.
+- [ ] Add cross-platform backend capability tests.
 
-- Let an LLM propose lemmas, splits, and candidate invariants.
-- Validate every proposal with Z3 or another deterministic checker.
-- Save proof traces as reproducible artifacts.
-- Add budgets, timeouts, and failure modes that are visible to users.
+## Struct Invariant Preservation
 
-## Phase 5: Binary-Level Experiments
+- [ ] Treat invariants as obligations on construction, mutation, and public exits.
+- [ ] Add ownership and aliasing rules for low-level memory.
+- [ ] Support user-defined lemmas for data-structure correctness.
+- [ ] Build examples for ring buffers, freelists, caches, and intrusive lists.
 
-- Export lowered IR and native code facts.
-- Model selected target instructions.
-- Attempt bounded runtime and crash-safety proofs on small functions.
-- Publish negative results and limitations alongside successful proofs.
+## Agentic Prover
+
+- [ ] Let an LLM propose lemmas, splits, and candidate invariants.
+- [ ] Validate every proposal with Z3 or another deterministic checker.
+- [ ] Save proof traces as reproducible artifacts.
+- [ ] Add budgets, timeouts, and failure modes that are visible to users.
+
+## Binary-Level Experiments
+
+- [ ] Export lowered IR and native code facts.
+- [ ] Model selected target instructions.
+- [ ] Attempt bounded runtime and crash-safety proofs on small functions.
+- [ ] Publish negative results and limitations alongside successful proofs.
