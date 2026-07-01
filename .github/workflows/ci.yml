@@ -54,3 +54,19 @@ jobs:
 
       - name: Strict proof smoke
         run: ./build/sigil check examples/cache.sigil --strict
+
+      - name: Refutation smoke
+        run: |
+          set +e
+          output="$(./build/sigil check examples/refuted.sigil --strict --show-model 2>&1)"
+          status="$?"
+          set -e
+          echo "$output"
+          test "$status" -eq 2
+          grep "\\[REFUTED\\]" <<<"$output"
+          grep "model:" <<<"$output"
+
+      - name: SMT artifact smoke
+        run: |
+          ./build/sigil check examples/cache.sigil --strict --save-smt build/smt
+          test -f build/smt/fn.preserve_capacity.ensures.1.still_bounded.smt2

@@ -97,12 +97,27 @@ add_executable(sigil_typecheck_tests tests/test_typecheck.cpp)
 target_link_libraries(sigil_typecheck_tests PRIVATE sigil_core)
 add_test(NAME sigil_typecheck_tests COMMAND sigil_typecheck_tests)
 
+add_test(
+  NAME sigil_cli_artifact_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_artifacts.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/smt-artifacts")
+
 find_program(SIGIL_Z3_EXECUTABLE z3)
 if(SIGIL_Z3_EXECUTABLE)
   add_test(
     NAME sigil_z3_strict_cache
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil" --strict)
   set_tests_properties(sigil_z3_strict_cache PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_refuted_example
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_refuted.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/refuted.sigil")
+  set_tests_properties(sigil_z3_refuted_example PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 endif()
 

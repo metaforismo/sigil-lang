@@ -24,8 +24,19 @@ std::string read_file(const std::string& path) {
 void print_help() {
   std::cout << "sigil " << SIGIL_VERSION << "\n\n"
             << "Usage:\n"
-            << "  sigil check <file.sigil> [--dump-smt] [--strict] [--no-z3]\n"
+            << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
+            << "                          [--strict] [--no-z3]\n"
             << "  sigil backend\n";
+}
+
+std::string indent_block(const std::string& block, const std::string& indent) {
+  std::istringstream lines(block);
+  std::ostringstream out;
+  std::string line;
+  while (std::getline(lines, line)) {
+    out << indent << line << "\n";
+  }
+  return out.str();
 }
 
 int check_command(const std::vector<std::string>& args) {
@@ -37,14 +48,22 @@ int check_command(const std::vector<std::string>& args) {
   std::string path;
   bool dump_smt = false;
   bool strict = false;
-  bool use_z3 = true;
-  for (const auto& arg : args) {
+  sigil::ProofOptions proof_options;
+  for (std::size_t index = 0; index < args.size(); ++index) {
+    const auto& arg = args[index];
     if (arg == "--dump-smt") {
       dump_smt = true;
+    } else if (arg == "--save-smt") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-smt requires an output directory");
+      }
+      proof_options.smt_output_dir = args[++index];
+    } else if (arg == "--show-model") {
+      proof_options.include_models = true;
     } else if (arg == "--strict") {
       strict = true;
     } else if (arg == "--no-z3") {
-      use_z3 = false;
+      proof_options.use_z3 = false;
     } else if (path.empty()) {
       path = arg;
     } else {
@@ -56,7 +75,7 @@ int check_command(const std::vector<std::string>& args) {
   const auto module = sigil::parse_source(source, path);
   sigil::validate_module(module);
   const auto obligations = sigil::build_obligations(module);
-  const auto results = sigil::verify_obligations(obligations, use_z3);
+  const auto results = sigil::verify_obligations(obligations, proof_options);
 
   std::size_t invariant_count = 0;
   for (const auto& decl : module.structs) {
@@ -74,6 +93,12 @@ int check_command(const std::vector<std::string>& args) {
   for (const auto& result : results) {
     std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name << " - "
               << result.details << "\n";
+    if (!result.smt_path.empty()) {
+      std::cout << "  smt: " << result.smt_path << "\n";
+    }
+    if (!result.model.empty()) {
+      std::cout << "  model:\n" << indent_block(result.model, "    ");
+    }
     if (dump_smt) {
       std::cout << result.smt_lib << "\n";
     }

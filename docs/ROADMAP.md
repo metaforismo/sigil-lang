@@ -8,6 +8,8 @@
 - Run local checks and optional Z3.
 - Detect `libgccjit` in CMake.
 - Validate scalar proof expressions before SMT emission.
+- Report Z3 refutations with optional counterexample models.
+- Save emitted SMT-LIB queries as reproducible artifacts.
 - Keep CI dependency-light and reproducible.
 
 ## Phase 1: Useful Core Language

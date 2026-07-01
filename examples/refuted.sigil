@@ -1,0 +1,8 @@
+module refuted;
+
+fn impossible_postcondition(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures negative_result: result < 0;
+{
+  return x;
+}

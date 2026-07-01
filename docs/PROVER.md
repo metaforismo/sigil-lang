@@ -34,6 +34,12 @@ Sigil runs static validation before SMT emission. That matters for soundness:
 undeclared identifiers and mismatched predicate types are rejected instead of
 being guessed into SMT declarations.
 
+When `--show-model` is enabled and Z3 returns `sat`, Sigil asks a second query
+for `(get-model)` and prints that model under the `REFUTED` obligation. The
+model is counterexample evidence, not a proof artifact. The proof artifact is
+the SMT-LIB query that produced the result; use `--save-smt <dir>` to keep those
+queries on disk.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.

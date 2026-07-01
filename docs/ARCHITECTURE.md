@@ -60,7 +60,8 @@ The SMT emitter serializes each obligation as:
 ```
 
 An `unsat` result proves that the assumptions imply the goal. A `sat` result is
-a counterexample. Anything else is unknown.
+a counterexample. Anything else is unknown. The CLI can write each query to a
+stable `.smt2` artifact path so proof runs can be reproduced outside Sigil.
 
 ## GCC JIT Backend
 

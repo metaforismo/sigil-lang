@@ -3,6 +3,7 @@
 #include "sigil/ast.hpp"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace sigil {
@@ -22,14 +23,32 @@ struct ProofObligation {
 };
 
 struct VerificationResult {
+  VerificationResult() = default;
+
+  VerificationResult(std::string obligation_name, VerificationStatus status, std::string details,
+                     std::string smt_lib)
+      : obligation_name(std::move(obligation_name)), status(status), details(std::move(details)),
+        smt_lib(std::move(smt_lib)) {}
+
   std::string obligation_name;
   VerificationStatus status = VerificationStatus::Unknown;
   std::string details;
   std::string smt_lib;
+  std::string model;
+  std::string smt_path;
+};
+
+struct ProofOptions {
+  bool use_z3 = true;
+  bool include_models = false;
+  std::string smt_output_dir;
 };
 
 std::vector<ProofObligation> build_obligations(const Module& module);
 std::string emit_smt_lib(const ProofObligation& obligation);
+std::string smt_file_name_for_obligation(const std::string& obligation_name);
+std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
+                                                   const ProofOptions& options);
 std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
                                                    bool use_z3);
 

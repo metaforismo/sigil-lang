@@ -36,8 +36,9 @@ struct CacheLine {
 ```
 
 Struct invariants are parsed and attached to the type. The current checker
-registers them but does not yet prove preservation across constructors or
-mutating functions. That preservation check is a core roadmap item.
+validates that they are boolean predicates over declared fields, then registers
+them. It does not yet prove preservation across constructors or mutating
+functions. That preservation check is a core roadmap item.
 
 ## Function Contracts
 
@@ -53,6 +54,9 @@ ensures preserved: result >= 0;
 `requires` predicates are added to the proof context for the function.
 `ensures` predicates become postcondition proof obligations. `result` names the
 returned value.
+
+Contract predicates must be boolean. `result` is available only in
+postconditions for non-void functions.
 
 ## Statements
 

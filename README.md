@@ -25,8 +25,8 @@ production verifier yet.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
-- Portable CI that exercises the compiler core without external solver/runtime
-  dependencies.
+- CI that exercises the portable compiler core and a solver-backed Z3 smoke
+  path.
 
 ## Example
 
@@ -68,6 +68,13 @@ binary:
 SIGIL_Z3=/path/to/z3 ./build/sigil check examples/arithmetic.sigil --strict
 ```
 
+Save SMT artifacts and show counterexample models:
+
+```sh
+./build/sigil check examples/cache.sigil --strict --save-smt build/smt
+./build/sigil check examples/refuted.sigil --strict --show-model
+```
+
 Check whether the native backend was compiled with `libgccjit`:
 
 ```sh
@@ -78,6 +85,8 @@ Check whether the native backend was compiled with `libgccjit`:
 contract expressions must be boolean, identifiers must be declared, return
 expressions must match the function return type, and unsupported value types are
 rejected before SMT is emitted.
+
+Full command details are in [docs/CLI.md](docs/CLI.md).
 
 ## Language Shape
 
@@ -104,7 +113,8 @@ More detail is in [docs/LANGUAGE.md](docs/LANGUAGE.md).
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/PROVER.md](docs/PROVER.md).
+[docs/PROVER.md](docs/PROVER.md). CLI behavior is documented in
+[docs/CLI.md](docs/CLI.md).
 
 ## Roadmap
 

@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 
 namespace sigil {
 
@@ -23,6 +25,10 @@ std::string shell_quote(const std::filesystem::path& path) {
   }
   quoted += "'";
   return quoted;
+}
+
+std::string shell_quote_string(const std::string& value) {
+  return shell_quote(std::filesystem::path(value));
 }
 
 bool expressions_equal(const Expr& lhs, const Expr& rhs) {
@@ -59,6 +65,11 @@ std::string run_command(const std::string& command, int& exit_code) {
   return output;
 }
 
+bool command_was_missing(int exit_code, const std::string& output) {
+  return exit_code != 0 && (output.find("command not found") != std::string::npos ||
+                            output.find("not found") != std::string::npos);
+}
+
 std::string first_solver_token(const std::string& output) {
   std::istringstream lines(output);
   std::string line;
@@ -73,45 +84,101 @@ std::string first_solver_token(const std::string& output) {
   return "";
 }
 
-VerificationResult verify_with_z3(const ProofObligation& obligation, const std::string& smt) {
-  const auto temp_path = std::filesystem::temp_directory_path() /
-                         ("sigil-" + obligation.name + "-" + std::to_string(std::rand()) + ".smt2");
+std::string solver_tail(const std::string& output) {
+  std::istringstream lines(output);
+  std::string line;
+  std::ostringstream tail;
+  bool skipped_status = false;
+  while (std::getline(lines, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (!skipped_status && !line.empty()) {
+      skipped_status = true;
+      continue;
+    }
+    if (skipped_status) {
+      tail << line << "\n";
+    }
+  }
+  return tail.str();
+}
+
+std::filesystem::path temporary_smt_path(const std::string& obligation_name) {
+  const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
+  return std::filesystem::temp_directory_path() /
+         ("sigil-" + smt_file_name_for_obligation(obligation_name) + "-" + std::to_string(tick));
+}
+
+struct SolverRun {
+  bool launched = false;
+  std::string output;
+};
+
+SolverRun run_z3_query(const ProofObligation& obligation, const std::string& smt) {
+  const auto temp_path = temporary_smt_path(obligation.name);
   {
     std::ofstream file(temp_path);
     if (!file) {
-      return {obligation.name, VerificationStatus::Error, "could not create temporary SMT file",
-              smt};
+      throw std::runtime_error("could not create temporary SMT file");
     }
     file << smt;
   }
 
   for (const auto& command : z3_command_candidates()) {
     int code = 0;
-    const auto output = run_command(command + " -smt2 " + shell_quote(temp_path), code);
-    if (output.find("command not found") != std::string::npos ||
-        output.find("not found") != std::string::npos) {
+    const auto output =
+        run_command(shell_quote_string(command) + " -smt2 " + shell_quote(temp_path), code);
+    if (command_was_missing(code, output)) {
       continue;
     }
     std::error_code ignored;
     std::filesystem::remove(temp_path, ignored);
-    const auto solver_token = first_solver_token(output);
-    if (solver_token == "unsat") {
-      return {obligation.name, VerificationStatus::Proven, "proved by z3", smt};
-    }
-    if (solver_token == "sat") {
-      return {obligation.name, VerificationStatus::Refuted, "z3 found a model violating the goal",
-              smt};
-    }
-    if (solver_token == "unknown") {
-      return {obligation.name, VerificationStatus::Unknown, "z3 returned unknown", smt};
-    }
-    return {obligation.name, VerificationStatus::Unknown, "z3 returned: " + output, smt};
+    return SolverRun{true, output};
   }
 
   std::error_code ignored;
   std::filesystem::remove(temp_path, ignored);
-  return {obligation.name, VerificationStatus::Unknown,
-          "z3 executable not found; syntactic checks only", smt};
+  return SolverRun{false, ""};
+}
+
+VerificationResult verify_with_z3(const ProofObligation& obligation, const std::string& smt,
+                                  const ProofOptions& options) {
+  SolverRun run;
+  try {
+    run = run_z3_query(obligation, smt);
+  } catch (const std::exception& error) {
+    return {obligation.name, VerificationStatus::Error, error.what(), smt};
+  }
+
+  if (!run.launched) {
+    return {obligation.name, VerificationStatus::Unknown,
+            "z3 executable not found; syntactic checks only", smt};
+  }
+
+  const auto solver_token = first_solver_token(run.output);
+  if (solver_token == "unsat") {
+    return {obligation.name, VerificationStatus::Proven, "proved by z3", smt};
+  }
+  if (solver_token == "sat") {
+    VerificationResult result{obligation.name, VerificationStatus::Refuted,
+                              "z3 found a counterexample model violating the goal", smt};
+    if (options.include_models) {
+      try {
+        const auto model_run = run_z3_query(obligation, smt + "(get-model)\n");
+        if (model_run.launched && first_solver_token(model_run.output) == "sat") {
+          result.model = solver_tail(model_run.output);
+        }
+      } catch (const std::exception& error) {
+        result.details += std::string("; model query failed: ") + error.what();
+      }
+    }
+    return result;
+  }
+  if (solver_token == "unknown") {
+    return {obligation.name, VerificationStatus::Unknown, "z3 returned unknown", smt};
+  }
+  return {obligation.name, VerificationStatus::Unknown, "z3 returned: " + run.output, smt};
 }
 
 VerificationResult verify_syntactically(const ProofObligation& obligation, const std::string& smt) {
@@ -206,19 +273,68 @@ std::string emit_smt_lib(const ProofObligation& obligation) {
   return out.str();
 }
 
+std::string smt_file_name_for_obligation(const std::string& obligation_name) {
+  std::string file_name;
+  file_name.reserve(obligation_name.size() + 5);
+  for (const char c : obligation_name) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' ||
+        c == '-' || c == '_') {
+      file_name += c;
+    } else {
+      file_name += '_';
+    }
+  }
+  file_name += ".smt2";
+  return file_name;
+}
+
+std::string write_smt_artifact(const ProofObligation& obligation, const std::string& smt,
+                               const std::string& output_dir) {
+  std::filesystem::create_directories(output_dir);
+  const auto path =
+      std::filesystem::path(output_dir) / smt_file_name_for_obligation(obligation.name);
+  std::ofstream file(path);
+  if (!file) {
+    throw std::runtime_error("could not write SMT artifact: " + path.string());
+  }
+  file << smt;
+  return path.string();
+}
+
 std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
-                                                   bool use_z3) {
+                                                   const ProofOptions& options) {
   std::vector<VerificationResult> results;
   for (const auto& obligation : obligations) {
     const auto smt = emit_smt_lib(obligation);
+    std::string smt_path;
+    if (!options.smt_output_dir.empty()) {
+      try {
+        smt_path = write_smt_artifact(obligation, smt, options.smt_output_dir);
+      } catch (const std::exception& error) {
+        results.push_back(
+            VerificationResult{obligation.name, VerificationStatus::Error, error.what(), smt});
+        continue;
+      }
+    }
+
     auto syntactic = verify_syntactically(obligation, smt);
-    if (syntactic.status == VerificationStatus::Proven || !use_z3) {
+    syntactic.smt_path = smt_path;
+    if (syntactic.status == VerificationStatus::Proven || !options.use_z3) {
       results.push_back(std::move(syntactic));
       continue;
     }
-    results.push_back(verify_with_z3(obligation, smt));
+    auto result = verify_with_z3(obligation, smt, options);
+    result.smt_path = smt_path;
+    results.push_back(std::move(result));
   }
   return results;
+}
+
+std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
+                                                   bool use_z3) {
+  ProofOptions options;
+  options.use_z3 = use_z3;
+  return verify_obligations(obligations, options);
 }
 
 const char* status_name(VerificationStatus status) {
