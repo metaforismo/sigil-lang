@@ -54,4 +54,15 @@ GccJitInvocationResult invoke_function_with_gccjit(const Module& module,
                                                    const std::string& function_name,
                                                    const std::vector<GccJitScalarValue>& arguments);
 
+struct GccJitNativeArtifact {
+  std::string function_name;
+  std::string file_name;
+  std::string text;
+  SourceRange range;
+};
+
+std::string native_ir_file_name_for_function(const std::string& function_name);
+std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module,
+                                                            const GccJitCompileResult& result);
+
 } // namespace sigil

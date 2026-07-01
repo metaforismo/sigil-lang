@@ -36,6 +36,115 @@ namespace {
   return "this binary was built without libgccjit; install libgccjit and reconfigure CMake";
 }
 
+std::string artifact_symbol(std::string value) {
+  for (auto& ch : value) {
+    const bool valid = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                       (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.';
+    if (!valid) {
+      ch = '_';
+    }
+  }
+  return value;
+}
+
+const GccJitFunctionReport* report_for_function(const GccJitCompileResult& result,
+                                                const std::string& function_name) {
+  for (const auto& report : result.functions) {
+    if (report.name == function_name) {
+      return &report;
+    }
+  }
+  return nullptr;
+}
+
+void emit_native_expr_line(std::ostringstream& out, const std::string& indent,
+                           const std::string& label, const Expr& expr) {
+  out << indent << label << " @" << (expr ? expr->range.display() : SourceRange{}.display()) << ": "
+      << display_expr(expr) << "\n";
+}
+
+void emit_native_statement(std::ostringstream& out, const Statement& statement,
+                           const std::string& indent) {
+  switch (statement.kind) {
+  case StatementKind::Let:
+    out << indent << "let " << statement.name << ": " << statement.type.display() << " @"
+        << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "value", statement.expr);
+    return;
+  case StatementKind::Assign:
+    out << indent << "assign " << statement.name << " @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "value", statement.expr);
+    return;
+  case StatementKind::If:
+    out << indent << "if @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "condition", statement.expr);
+    out << indent << "  then\n";
+    for (const auto& nested : statement.then_branch) {
+      emit_native_statement(out, nested, indent + "    ");
+    }
+    out << indent << "  else\n";
+    for (const auto& nested : statement.else_branch) {
+      emit_native_statement(out, nested, indent + "    ");
+    }
+    return;
+  case StatementKind::Assume:
+    out << indent << "assume " << statement.name << " @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "predicate", statement.expr);
+    return;
+  case StatementKind::Assert:
+    out << indent << "assert " << statement.name << " @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "predicate", statement.expr);
+    return;
+  case StatementKind::Return:
+    out << indent << "return @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "value", statement.expr);
+    return;
+  }
+}
+
+void emit_native_predicates(std::ostringstream& out, const std::string& label,
+                            const std::vector<NamedPredicate>& predicates) {
+  out << label << "\n";
+  if (predicates.empty()) {
+    out << "  (none)\n";
+    return;
+  }
+  for (const auto& predicate : predicates) {
+    out << "  " << predicate.name << " @" << predicate.range.display() << ": "
+        << display_expr(predicate.expr) << "\n";
+  }
+}
+
+std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionReport& report) {
+  std::ostringstream out;
+  out << "sigil-native-ir v0\n";
+  out << "function " << fn.name << "\n";
+  out << "range " << fn.range.display() << "\n";
+  out << "status " << (report.lowered ? "lowered" : "skipped") << "\n";
+  out << "detail " << report.detail << "\n";
+  if (!report.lowered && report.range.start.line != 0) {
+    out << "diagnostic " << report.range.display() << "\n";
+  }
+  out << "signature " << fn.name << "(";
+  for (std::size_t index = 0; index < fn.params.size(); ++index) {
+    if (index > 0) {
+      out << ", ";
+    }
+    out << fn.params[index].name << ": " << fn.params[index].type.display();
+  }
+  out << ") -> " << fn.return_type.display() << "\n";
+  emit_native_predicates(out, "requires", fn.preconditions);
+  emit_native_predicates(out, "ensures", fn.ensures);
+  out << "body\n";
+  if (fn.body.empty()) {
+    out << "  (empty)\n";
+  }
+  for (const auto& statement : fn.body) {
+    emit_native_statement(out, statement, "  ");
+  }
+  return out.str();
+}
+
 #if SIGIL_HAVE_GCCJIT
 
 struct ContextDeleter {
@@ -699,6 +808,25 @@ GccJitScalarValue invoke_code(void* code, const FunctionDecl& fn,
 #endif
 
 } // namespace
+
+std::string native_ir_file_name_for_function(const std::string& function_name) {
+  return "fn." + artifact_symbol(function_name) + ".native-ir.txt";
+}
+
+std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module,
+                                                            const GccJitCompileResult& result) {
+  std::vector<GccJitNativeArtifact> artifacts;
+  artifacts.reserve(module.functions.size());
+  for (const auto& fn : module.functions) {
+    const auto* report = report_for_function(result, fn.name);
+    const auto fallback_detail = result.detail.empty() ? "not lowered" : result.detail;
+    const auto fallback = GccJitFunctionReport{fn.name, false, fallback_detail, fn.range};
+    const auto& active_report = report ? *report : fallback;
+    artifacts.push_back(GccJitNativeArtifact{fn.name, native_ir_file_name_for_function(fn.name),
+                                             emit_native_ir_text(fn, active_report), fn.range});
+  }
+  return artifacts;
+}
 
 GccJitStatus gccjit_status() {
 #if SIGIL_HAVE_GCCJIT

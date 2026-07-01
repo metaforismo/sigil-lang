@@ -108,3 +108,9 @@ jobs:
       - name: Native ABI run smoke
         run: |
           ./build/sigil run examples/native.sigil add_one 41 | grep "result: 42"
+
+      - name: Native IR artifact smoke
+        run: |
+          ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir
+          test -f build/native-ir/fn.add_one.native-ir.txt
+          grep "signature add_one(x: i64) -> i64" build/native-ir/fn.add_one.native-ir.txt

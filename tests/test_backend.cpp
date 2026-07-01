@@ -47,6 +47,13 @@ fn nonzero(x: i64) -> bool
   const auto module = sigil::parse_source(source, "backend.sigil");
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
+  const auto artifacts = sigil::build_native_ir_artifacts(module, result);
+  expect(artifacts.size() == 3, "native artifact count");
+  expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
+  expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
+         "native artifact signature");
+  expect(artifacts[0].text.find("assign y") != std::string::npos, "native artifact assignment");
+  expect(artifacts[1].text.find("if @") != std::string::npos, "native artifact if statement");
 
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
@@ -123,6 +130,17 @@ fn quotient(x: i64, y: i64) -> i64
          "division skip explains semantic gap");
   expect(unsupported_result.functions[0].range.display() == "unsupported.sigil:6:10-14",
          "division skip points to expression range");
+  const auto unsupported_artifacts =
+      sigil::build_native_ir_artifacts(unsupported_module, unsupported_result);
+  expect(unsupported_artifacts.size() == 1, "unsupported native artifact count");
+  expect(unsupported_artifacts[0].text.find("status skipped") != std::string::npos,
+         "unsupported native artifact status");
+  expect(unsupported_artifacts[0].text.find("diagnostic unsupported.sigil:6:10-14") !=
+             std::string::npos,
+         "unsupported native artifact diagnostic range");
+  expect(unsupported_artifacts[0].text.find("value @unsupported.sigil:6:10-14: (x / y)") !=
+             std::string::npos,
+         "unsupported native artifact body expression");
 
   const auto unsupported_invocation = sigil::invoke_function_with_gccjit(
       unsupported_module, "quotient", {sigil::gccjit_i64(4), sigil::gccjit_i64(2)});

@@ -54,7 +54,7 @@ allocate a GCC JIT context.
 ## `sigil compile`
 
 ```sh
-sigil compile <file.sigil>
+sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]
 ```
 
 Parses and validates a module, then asks the GCC JIT backend to lower every
@@ -62,6 +62,13 @@ native-supported function into an in-memory JIT result. The command reports each
 function as `lowered` or `skipped`. When a function is skipped, the report
 includes an `at:` source range for the construct that made native lowering
 unsupported.
+
+Options:
+
+- `--dump-native-ir`: print deterministic native-lowering artifacts for every
+  function.
+- `--save-native-ir <dir>`: write one native-lowering artifact per function to
+  `<dir>`, using stable names such as `fn.add_one.native-ir.txt`.
 
 The current native subset supports pure scalar functions over `i64` and `bool`
 using:

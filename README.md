@@ -41,6 +41,8 @@ production verifier yet.
   `i64`/`bool` values.
 - Native-lowering diagnostics that report source ranges for unsupported
   constructs.
+- Native IR artifacts that list signatures, contracts, body operations, and
+  lowering status for comparison with SMT artifacts.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
   and a Linux `libgccjit` native-lowering smoke path.
 
@@ -102,6 +104,7 @@ Compile the native-lowerable subset into an in-memory GCC JIT module:
 
 ```sh
 ./build/sigil compile examples/native.sigil
+./build/sigil compile examples/native.sigil --save-native-ir build/native-ir
 ```
 
 Run a native-lowered scalar function through the JIT ABI:
@@ -153,7 +156,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- alignment checks between solver-visible IR and native-lowered IR;
+- richer alignment checks between solver-visible IR and native-lowered IR;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

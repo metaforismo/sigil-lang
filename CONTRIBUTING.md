@@ -20,6 +20,7 @@ cmake -S . -B build-gccjit
 cmake --build build-gccjit
 ./build-gccjit/sigil backend
 ./build-gccjit/sigil compile examples/native.sigil
+./build-gccjit/sigil compile examples/native.sigil --save-native-ir build-gccjit/native-ir
 ./build-gccjit/sigil run examples/native.sigil add_one 41
 ```
 

@@ -3,6 +3,7 @@
 #include "sigil/proof.hpp"
 #include "sigil/typecheck.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -28,7 +29,7 @@ void print_help() {
             << "Usage:\n"
             << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
-            << "  sigil compile <file.sigil>\n"
+            << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
             << "  sigil run <file.sigil> <function> [args...]\n"
             << "  sigil backend\n";
 }
@@ -106,6 +107,24 @@ sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigi
 
   throw std::runtime_error("argument " + std::to_string(index + 1) + " has unsupported type '" +
                            type.display() + "'");
+}
+
+std::vector<std::string>
+write_native_artifacts(const std::vector<sigil::GccJitNativeArtifact>& artifacts,
+                       const std::string& output_dir) {
+  std::filesystem::create_directories(output_dir);
+  std::vector<std::string> paths;
+  paths.reserve(artifacts.size());
+  for (const auto& artifact : artifacts) {
+    const auto path = std::filesystem::path(output_dir) / artifact.file_name;
+    std::ofstream file(path);
+    if (!file) {
+      throw std::runtime_error("could not write native IR artifact: " + path.string());
+    }
+    file << artifact.text;
+    paths.push_back(path.string());
+  }
+  return paths;
 }
 
 int check_command(const std::vector<std::string>& args) {
@@ -195,16 +214,43 @@ int backend_command() {
 }
 
 int compile_command(const std::vector<std::string>& args) {
-  if (args.size() != 1) {
+  if (args.empty()) {
     print_help();
     return 1;
   }
 
-  const auto& path = args[0];
+  std::string path;
+  bool dump_native_ir = false;
+  std::string native_ir_output_dir;
+  for (std::size_t index = 0; index < args.size(); ++index) {
+    const auto& arg = args[index];
+    if (arg == "--dump-native-ir") {
+      dump_native_ir = true;
+    } else if (arg == "--save-native-ir") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-native-ir requires an output directory");
+      }
+      native_ir_output_dir = args[++index];
+    } else if (path.empty()) {
+      path = arg;
+    } else {
+      throw std::runtime_error("unknown argument: " + arg);
+    }
+  }
+  if (path.empty()) {
+    print_help();
+    return 1;
+  }
+
   const auto source = read_file(path);
   const auto module = sigil::parse_source(source, path);
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
+  const auto artifacts = sigil::build_native_ir_artifacts(module, result);
+  std::vector<std::string> artifact_paths;
+  if (!native_ir_output_dir.empty()) {
+    artifact_paths = write_native_artifacts(artifacts, native_ir_output_dir);
+  }
 
   std::cout << "module " << module.name << "\n";
   std::cout << "  backend: libgccjit\n";
@@ -217,6 +263,14 @@ int compile_command(const std::vector<std::string>& args) {
     }
     std::cout << "\n";
     print_range_if_available(fn.range);
+  }
+  for (const auto& artifact_path : artifact_paths) {
+    std::cout << "  native-ir: " << artifact_path << "\n";
+  }
+  if (dump_native_ir) {
+    for (const auto& artifact : artifacts) {
+      std::cout << "--- " << artifact.file_name << "\n" << artifact.text;
+    }
   }
 
   if (!result.available) {

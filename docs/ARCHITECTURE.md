@@ -97,6 +97,13 @@ division and modulo point at the expression that blocked lowering, while
 signature and control-flow issues point at the nearest function, parameter, or
 statement range.
 
+`sigil compile --save-native-ir <dir>` writes deterministic native-lowering
+artifacts beside SMT artifacts. These files list each function's signature,
+contracts, lowering status, diagnostic range, and body operations using the same
+source expression printer that feeds proof diagnostics. They are intentionally
+plain text so humans and CI can compare the solver-visible surface with the
+native-lowerable surface as the backend grows.
+
 Contracts, `assume`, and `assert` remain proof-layer constructs. The native
 backend erases them after static validation and proof generation. Division and
 modulo are deliberately not lowered yet, because Sigil still needs an explicit
