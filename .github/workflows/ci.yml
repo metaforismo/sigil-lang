@@ -56,6 +56,7 @@ jobs:
         run: |
           ./build/sigil check examples/cache.sigil --strict
           ./build/sigil check examples/locals.sigil --strict
+          ./build/sigil check examples/conditionals.sigil --strict
 
       - name: Refutation smoke
         run: |

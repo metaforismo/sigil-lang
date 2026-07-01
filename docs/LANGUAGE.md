@@ -95,7 +95,12 @@ Supported expression forms:
 - arithmetic: `+`, `-`, `*`, `/`, `%`
 - comparisons: `<`, `<=`, `>`, `>=`, `==`, `!=`
 - boolean connectives: `&&`, `||`
+- conditionals: `if condition { then_expr } else { else_expr }`
 - parentheses
+
+Conditional expressions require a `bool` condition, and both branches must have
+the same non-void type. They are expressions, not statement blocks: each branch
+contains one expression.
 
 These expressions are also the proof language. There is no separate annotation
 language.

@@ -47,9 +47,10 @@ requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
   let y: i64 = x + 1;
+  let z: i64 = if y >= 0 { y } else { 0 };
   assert visible: x >= 0;
-  assert y_visible: y >= x;
-  return y;
+  assert y_visible: z >= x;
+  return z;
 }
 )";
 
@@ -83,6 +84,26 @@ fn bad_let(x: i64) -> i64
 }
 )",
                     "let type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_if_condition(x: i64) -> i64
+{
+  let y: i64 = if x { 1 } else { 0 };
+  return y;
+}
+)",
+                    "if condition must be bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_if_branches(flag: bool) -> i64
+{
+  let y: i64 = if flag { 1 } else { false };
+  return y;
+}
+)",
+                    "if branches must have the same type");
 
   expect_diagnostic(R"(
 module bad;

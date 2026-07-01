@@ -47,5 +47,23 @@ ensures preserved: result >= 0;
   expect(results[0].status == sigil::VerificationStatus::Proven, "let assert proven syntactically");
   expect(results[1].status == sigil::VerificationStatus::Proven, "precondition assert proven");
   expect(results[2].status == sigil::VerificationStatus::Unknown, "ensure needs SMT solver");
+
+  const char* conditional_source = R"(
+module conditional;
+
+fn abs_value(x: i64) -> i64
+ensures non_negative: result >= 0;
+{
+  let y: i64 = if x >= 0 { x } else { -x };
+  return y;
+}
+)";
+
+  const auto conditional_module = sigil::parse_source(conditional_source, "conditional.sigil");
+  const auto conditional_obligations = sigil::build_obligations(conditional_module);
+  expect(conditional_obligations.size() == 1, "conditional ensure obligation");
+  const auto conditional_smt = sigil::emit_smt_lib(conditional_obligations[0]);
+  expect(conditional_smt.find("(assert (= y (ite (>= x 0) x (- x))))") != std::string::npos,
+         "emits ite for if expression");
   return 0;
 }

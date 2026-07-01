@@ -98,6 +98,16 @@ Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceLocation location) {
   return expr;
 }
 
+Expr make_if(Expr condition, Expr then_branch, Expr else_branch, SourceLocation location) {
+  auto expr = std::make_shared<ExprNode>();
+  expr->kind = ExprNode::Kind::If;
+  expr->condition = std::move(condition);
+  expr->lhs = std::move(then_branch);
+  expr->rhs = std::move(else_branch);
+  expr->location = std::move(location);
+  return expr;
+}
+
 namespace {
 
 std::string unary_display(UnaryOp op) {
@@ -198,6 +208,9 @@ std::string display_expr(const Expr& expr) {
   case ExprNode::Kind::Binary:
     return "(" + display_expr(expr->lhs) + " " + binary_display(expr->binary_op) + " " +
            display_expr(expr->rhs) + ")";
+  case ExprNode::Kind::If:
+    return "(if " + display_expr(expr->condition) + " { " + display_expr(expr->lhs) + " } else { " +
+           display_expr(expr->rhs) + " })";
   }
   return "<expr>";
 }
@@ -221,6 +234,9 @@ std::string emit_smt_expr(const Expr& expr) {
   case ExprNode::Kind::Binary:
     return "(" + smt_binary(expr->binary_op) + " " + emit_smt_expr(expr->lhs) + " " +
            emit_smt_expr(expr->rhs) + ")";
+  case ExprNode::Kind::If:
+    return "(ite " + emit_smt_expr(expr->condition) + " " + emit_smt_expr(expr->lhs) + " " +
+           emit_smt_expr(expr->rhs) + ")";
   }
   throw std::runtime_error("unknown expression kind");
 }
@@ -235,6 +251,7 @@ void collect_identifiers(const Expr& expr, std::vector<std::string>& names) {
     }
     return;
   }
+  collect_identifiers(expr->condition, names);
   collect_identifiers(expr->lhs, names);
   collect_identifiers(expr->rhs, names);
 }

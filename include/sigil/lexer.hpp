@@ -42,6 +42,8 @@ enum class TokenKind {
   Requires,
   Ensures,
   Let,
+  If,
+  Else,
   Assume,
   Assert,
   Return,

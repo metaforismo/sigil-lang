@@ -290,6 +290,18 @@ Expr Parser::parse_primary() {
   if (match(TokenKind::False)) {
     return make_boolean(false, previous().location);
   }
+  if (match(TokenKind::If)) {
+    const auto if_token = previous();
+    auto condition = parse_expr();
+    consume(TokenKind::LBrace, "expected '{' before then expression");
+    auto then_branch = parse_expr();
+    consume(TokenKind::RBrace, "expected '}' after then expression");
+    consume(TokenKind::Else, "expected 'else' after then expression");
+    consume(TokenKind::LBrace, "expected '{' before else expression");
+    auto else_branch = parse_expr();
+    consume(TokenKind::RBrace, "expected '}' after else expression");
+    return make_if(condition, then_branch, else_branch, if_token.location);
+  }
   if (match(TokenKind::Identifier)) {
     return make_identifier(previous().text, previous().location);
   }

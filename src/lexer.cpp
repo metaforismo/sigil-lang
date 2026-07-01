@@ -168,6 +168,8 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
       {"requires", TokenKind::Requires},
       {"ensures", TokenKind::Ensures},
       {"let", TokenKind::Let},
+      {"if", TokenKind::If},
+      {"else", TokenKind::Else},
       {"assume", TokenKind::Assume},
       {"assert", TokenKind::Assert},
       {"return", TokenKind::Return},
@@ -255,6 +257,10 @@ const char* token_name(TokenKind kind) {
     return "'ensures'";
   case TokenKind::Let:
     return "'let'";
+  case TokenKind::If:
+    return "'if'";
+  case TokenKind::Else:
+    return "'else'";
   case TokenKind::Assume:
     return "'assume'";
   case TokenKind::Assert:

@@ -63,6 +63,7 @@ struct ExprNode {
     Identifier,
     Unary,
     Binary,
+    If,
   };
 
   Kind kind = Kind::Identifier;
@@ -72,6 +73,7 @@ struct ExprNode {
   std::string name;
   UnaryOp unary_op = UnaryOp::Not;
   BinaryOp binary_op = BinaryOp::Equal;
+  Expr condition;
   Expr lhs;
   Expr rhs;
 };
@@ -81,6 +83,7 @@ Expr make_boolean(bool value, SourceLocation location = {});
 Expr make_identifier(std::string name, SourceLocation location = {});
 Expr make_unary(UnaryOp op, Expr operand, SourceLocation location = {});
 Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceLocation location = {});
+Expr make_if(Expr condition, Expr then_branch, Expr else_branch, SourceLocation location = {});
 
 std::string display_expr(const Expr& expr);
 std::string emit_smt_expr(const Expr& expr);

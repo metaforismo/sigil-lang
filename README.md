@@ -22,6 +22,8 @@ production verifier yet.
   postconditions, assumptions, assertions, and returns.
 - Typed local `let` bindings that become proof facts for later assertions and
   returns.
+- Expression-level `if condition { then } else { else }` conditionals that lower
+  to SMT `ite`.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   and return types.
 - Verification-condition generation for function assertions and postconditions.
@@ -39,7 +41,7 @@ fn keep(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
-  let y: i64 = x + 1;
+  let y: i64 = if x >= 0 { x + 1 } else { 1 };
   assert y_above_x: y >= x;
   return y;
 }

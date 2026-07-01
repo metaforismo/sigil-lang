@@ -11,12 +11,13 @@
 - Report Z3 refutations with optional counterexample models.
 - Save emitted SMT-LIB queries as reproducible artifacts.
 - Support typed local `let` bindings in proof obligations.
+- Support expression-level conditionals through SMT `ite`.
 - Keep CI dependency-light and reproducible.
 
 ## Phase 1: Useful Core Language
 
 - Extend the scalar type checker into a real language type checker.
-- Add assignment, if/else, loops, and simple structs.
+- Add assignment, statement-level if/else, loops, and simple structs.
 - Generate weakest-precondition obligations for control flow.
 - Report source spans for failed or unknown obligations.
 - Add counterexample rendering from Z3 models.

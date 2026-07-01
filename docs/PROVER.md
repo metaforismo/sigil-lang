@@ -32,6 +32,9 @@ Local `let` bindings are lowered as equality assumptions. This gives the solver
 a simple, checkable representation of straight-line data flow without adding a
 separate proof language.
 
+Conditional expressions are emitted as SMT `ite` terms. For example,
+`if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
+
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
 

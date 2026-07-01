@@ -128,6 +128,19 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols) {
   }
   case ExprNode::Kind::Binary:
     return infer_binary_expr(expr, symbols);
+  case ExprNode::Kind::If: {
+    require_type(expr->condition, symbols, TypeKind::Bool, "if condition");
+    const auto then_type = infer_expr(expr->lhs, symbols);
+    const auto else_type = infer_expr(expr->rhs, symbols);
+    if (!same_type(then_type, else_type)) {
+      throw Diagnostic(expr->location, "if branches must have the same type, found " +
+                                           then_type.display() + " and " + else_type.display());
+    }
+    if (then_type.kind == TypeKind::Void) {
+      throw Diagnostic(expr->location, "if expression cannot produce void");
+    }
+    return then_type;
+  }
   }
 
   throw Diagnostic(expr->location, "unknown expression kind");

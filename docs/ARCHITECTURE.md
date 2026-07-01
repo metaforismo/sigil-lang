@@ -31,6 +31,7 @@ system:
 - function preconditions and postconditions must be `bool`;
 - identifiers must be declared in the active scope;
 - local `let` bindings cannot shadow parameters or earlier locals;
+- conditional expression conditions must be `bool`, and branch types must match;
 - `result` is only available in postconditions for non-void functions;
 - returns must match the declared function return type;
 - unsupported user-defined value types are rejected until the type checker and
@@ -65,6 +66,7 @@ The SMT emitter serializes each obligation as:
 An `unsat` result proves that the assumptions imply the goal. A `sat` result is
 a counterexample. Anything else is unknown. The CLI can write each query to a
 stable `.smt2` artifact path so proof runs can be reproduced outside Sigil.
+Expression-level conditionals are represented directly as SMT `ite` terms.
 
 ## GCC JIT Backend
 
