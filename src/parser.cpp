@@ -168,6 +168,19 @@ Statement Parser::parse_statement() {
     return statement;
   }
 
+  if (check(TokenKind::Identifier) && tokens_[current_ + 1].kind == TokenKind::Equal) {
+    const auto start = advance();
+    statement.kind = StatementKind::Assign;
+    statement.location = start.location;
+    statement.range = start.range;
+    statement.name = start.text;
+    consume(TokenKind::Equal, "expected '=' before assignment expression");
+    statement.expr = parse_expr();
+    const auto end = consume(TokenKind::Semicolon, "expected ';' after assignment");
+    statement.range = span(start.range, end.range);
+    return statement;
+  }
+
   if (match(TokenKind::If)) {
     const auto start = previous();
     statement.kind = StatementKind::If;
@@ -212,7 +225,8 @@ Statement Parser::parse_statement() {
     return statement;
   }
 
-  throw Diagnostic(peek().range, "expected let, assume, assert, or return statement");
+  throw Diagnostic(peek().range,
+                   "expected let, assignment, if, assume, assert, or return statement");
 }
 
 std::vector<Statement> Parser::parse_statement_block(const std::string& owner) {

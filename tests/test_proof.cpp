@@ -106,5 +106,45 @@ ensures non_negative: result >= 0;
          "emits guarded then return fact");
   expect(branch_smt.find("(assert (or (>= x 0) (= result (- x))))") != std::string::npos,
          "emits guarded else return fact");
+
+  const char* assignment_source = R"(
+module assignment;
+
+fn increment_once(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  let y: i64 = x;
+  y = y + 1;
+  return y;
+}
+
+fn branch_mutation(flag: bool, x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= 0;
+{
+  let y: i64 = 0;
+  if flag {
+    y = x;
+  } else {
+    y = 0;
+  }
+  return y;
+}
+)";
+
+  const auto assignment_module = sigil::parse_source(assignment_source, "assignment.sigil");
+  const auto assignment_obligations = sigil::build_obligations(assignment_module);
+  expect(assignment_obligations.size() == 2, "assignment examples produce two ensures");
+  const auto assignment_smt = sigil::emit_smt_lib(assignment_obligations[0]);
+  expect(assignment_smt.find("y_assign_") != std::string::npos,
+         "assignment creates versioned symbol");
+  expect(assignment_smt.find("(assert (= y_assign_") != std::string::npos,
+         "assignment emits version equality");
+  const auto branch_assignment_smt = sigil::emit_smt_lib(assignment_obligations[1]);
+  expect(branch_assignment_smt.find("y_join_") != std::string::npos,
+         "branch assignment creates join symbol");
+  expect(branch_assignment_smt.find("(ite flag") != std::string::npos,
+         "branch assignment join uses ite");
   return 0;
 }

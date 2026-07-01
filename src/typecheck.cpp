@@ -149,16 +149,19 @@ void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symb
   require_type(predicate.expr, symbols, TypeKind::Bool, owner + " '" + predicate.name + "'");
 }
 
-void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals);
+void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
+                        std::unordered_set<std::string>& assignable_locals);
 
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
-                              SymbolTable locals) {
+                              SymbolTable locals,
+                              std::unordered_set<std::string> assignable_locals) {
   for (const auto& statement : statements) {
-    validate_statement(statement, decl, locals);
+    validate_statement(statement, decl, locals, assignable_locals);
   }
 }
 
-void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals) {
+void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
+                        std::unordered_set<std::string>& assignable_locals) {
   if (statement.kind == StatementKind::Let) {
     require_value_type(statement.type, statement.range,
                        "local '" + decl.name + "." + statement.name + "'");
@@ -168,10 +171,27 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
                                             ", found " + actual.display());
     }
     insert_symbol(locals, statement.name, statement.type, statement.range, "local");
+    assignable_locals.insert(statement.name);
+  } else if (statement.kind == StatementKind::Assign) {
+    const auto found = locals.find(statement.name);
+    if (found == locals.end()) {
+      throw Diagnostic(statement.range,
+                       "assignment target '" + statement.name + "' is not declared");
+    }
+    if (assignable_locals.find(statement.name) == assignable_locals.end()) {
+      throw Diagnostic(statement.range,
+                       "assignment target '" + statement.name + "' is not a mutable local");
+    }
+    const auto actual = infer_expr(statement.expr, locals);
+    if (!same_type(actual, found->second)) {
+      throw Diagnostic(statement.range, "assignment type mismatch: expected " +
+                                            found->second.display() + ", found " +
+                                            actual.display());
+    }
   } else if (statement.kind == StatementKind::If) {
     require_type(statement.expr, locals, TypeKind::Bool, "if statement condition");
-    validate_statement_block(statement.then_branch, decl, locals);
-    validate_statement_block(statement.else_branch, decl, locals);
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals);
+    validate_statement_block(statement.else_branch, decl, locals, assignable_locals);
   } else if (statement.kind == StatementKind::Assume) {
     require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
   } else if (statement.kind == StatementKind::Assert) {
@@ -233,8 +253,9 @@ void validate_function(const FunctionDecl& decl) {
   }
 
   SymbolTable locals = params;
+  std::unordered_set<std::string> assignable_locals;
   for (const auto& statement : decl.body) {
-    validate_statement(statement, decl, locals);
+    validate_statement(statement, decl, locals, assignable_locals);
   }
 }
 

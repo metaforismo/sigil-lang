@@ -1,0 +1,23 @@
+module assignments;
+
+fn increment_once(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  let y: i64 = x;
+  y = y + 1;
+  return y;
+}
+
+fn branch_mutation(flag: bool, x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= 0;
+{
+  let y: i64 = 0;
+  if flag {
+    y = x;
+  } else {
+    y = 0;
+  }
+  return y;
+}

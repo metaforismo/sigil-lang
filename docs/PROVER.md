@@ -36,6 +36,12 @@ Local `let` bindings are lowered as equality assumptions. This gives the solver
 a simple, checkable representation of straight-line data flow without adding a
 separate proof language.
 
+Assignments are lowered into fresh internal symbols. For `y = y + 1`, later
+uses of `y` refer to the fresh symbol, while assumptions about the old `y`
+continue to refer to the earlier symbol. This keeps mutation explicit in the
+SMT-LIB encoding instead of reusing one solver constant for multiple program
+states.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 

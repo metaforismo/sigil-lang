@@ -56,6 +56,7 @@ requires non_negative: x >= 0;
 ensures preserved: result >= 0;
 {
   let y: i64 = if x >= 0 { x + 1 } else { 1 };
+  y = y + 1;
   assert advanced: y >= x;
   assert non_negative: x >= 0;
   return y;
@@ -79,10 +80,13 @@ fn choose(x: i64) -> i64
   expect(module.functions.size() == 2, "function count");
   expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
-  expect(module.functions[0].body.size() == 4, "body count");
+  expect(module.functions[0].body.size() == 5, "body count");
   expect(module.functions[0].body[0].kind == sigil::StatementKind::Let, "let statement kind");
   expect(module.functions[0].body[0].name == "y", "let binding name");
   expect(module.functions[0].body[0].type.kind == sigil::TypeKind::I64, "let binding type");
+  expect(module.functions[0].body[1].kind == sigil::StatementKind::Assign,
+         "assignment statement kind");
+  expect(module.functions[0].body[1].name == "y", "assignment target name");
   expect(sigil::display_expr(module.functions[0].body[0].expr) ==
              "(if (x >= 0) { (x + 1) } else { 1 })",
          "display if expression");
@@ -98,7 +102,7 @@ fn choose(x: i64) -> i64
          "if statement condition");
   expect(module.functions[1].body[0].then_branch.size() == 1, "then branch count");
   expect(module.functions[1].body[0].else_branch.size() == 1, "else branch count");
-  expect(module.functions[1].body[0].range.display() == "inline.sigil:22:3-26:3",
+  expect(module.functions[1].body[0].range.display() == "inline.sigil:23:3-27:3",
          "if statement range");
   return 0;
 }

@@ -127,6 +127,7 @@ struct ParamDecl {
 
 enum class StatementKind {
   Let,
+  Assign,
   If,
   Assume,
   Assert,

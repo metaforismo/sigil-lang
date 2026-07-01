@@ -31,6 +31,8 @@ system:
 - function preconditions and postconditions must be `bool`;
 - identifiers must be declared in the active scope;
 - local `let` bindings cannot shadow parameters or earlier locals;
+- assignments can only target declared local bindings and must preserve the
+  local type;
 - conditional expression conditions must be `bool`, and branch types must match;
 - statement-level `if` conditions must be `bool`, and branch-local bindings do
   not escape their branch;
@@ -46,6 +48,8 @@ The planner walks each function and builds proof obligations:
 - active `requires` predicates become assumptions;
 - `let name: type = expr` adds `name` to the symbol table and records
   `name == expr` as an assumption for later obligations;
+- `name = expr` creates a fresh internal version of `name` and records that the
+  fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
 - `assert` statements create obligations;
 - `if` statements build separate then/else proof contexts and merge

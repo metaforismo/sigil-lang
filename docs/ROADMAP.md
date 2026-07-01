@@ -19,11 +19,11 @@ tests, and docs are in the repo.
 - [x] Report source locations for parser, type, and proof results.
 - [x] Add full source ranges, not just start locations, to diagnostics.
 - [x] Add statement-level `if` and join proof contexts at merge points.
+- [x] Add assignment with explicit mutation rules.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Add assignment with explicit mutation rules.
 - [ ] Lower pure integer and boolean functions through `libgccjit`.
 - [ ] Add ABI tests for JIT-compiled functions.
 

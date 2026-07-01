@@ -62,6 +62,7 @@ postconditions for non-void functions.
 
 ```sigil
 let next: i64 = size + 1;
+next = next + 1;
 assume cache_bounds: size <= capacity;
 assert still_bounded: size <= capacity;
 if size >= 0 {
@@ -76,6 +77,12 @@ return next;
 parameters and earlier locals, and the binding becomes a proof fact of the form
 `name == expr` for later assertions and returns. Local bindings cannot shadow
 parameters or earlier locals.
+
+`name = expr;` assigns a new value to a previously declared local binding.
+Parameters are immutable, undeclared names cannot be assigned, and the assigned
+expression must have the same type as the local. The prover represents each
+assignment as a new internal version of the local, so facts about earlier values
+remain tied to the earlier version.
 
 `assume` extends the local proof context. `assert` creates a proof obligation
 from the active context and then becomes available to later obligations.

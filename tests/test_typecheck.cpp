@@ -61,6 +61,7 @@ ensures preserved: result >= 0;
 {
   let y: i64 = x + 1;
   let z: i64 = if y >= 0 { y } else { 0 };
+  z = z + 1;
   assert visible: x >= 0;
   assert y_visible: z >= x;
   if z >= x {
@@ -102,6 +103,37 @@ fn bad_let(x: i64) -> i64
 }
 )",
                     "let type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn assign_parameter(x: i64) -> i64
+{
+  x = x + 1;
+  return x;
+}
+)",
+                    "assignment target 'x' is not a mutable local");
+
+  expect_diagnostic(R"(
+module bad;
+fn assign_missing(x: i64) -> i64
+{
+  y = x + 1;
+  return x;
+}
+)",
+                    "assignment target 'y' is not declared");
+
+  expect_diagnostic(R"(
+module bad;
+fn assign_wrong_type(x: i64) -> i64
+{
+  let y: i64 = x;
+  y = false;
+  return y;
+}
+)",
+                    "assignment type mismatch");
 
   expect_diagnostic(R"(
 module bad;

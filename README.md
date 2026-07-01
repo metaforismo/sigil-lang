@@ -22,6 +22,8 @@ production verifier yet.
   postconditions, assumptions, assertions, and returns.
 - Typed local `let` bindings that become proof facts for later assertions and
   returns.
+- Assignment to previously declared locals, lowered through versioned proof
+  symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
   to SMT `ite`.
 - Statement-level `if`/`else` branches with branch-local proof contexts and
