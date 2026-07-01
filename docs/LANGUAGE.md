@@ -99,9 +99,8 @@ Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local
 details.
 
-The current body language is deliberately tiny. Reassignment, loops, references,
-and memory operations will require proper control-flow and weakest-precondition
-generation.
+The current body language is deliberately tiny. Loops, references, and memory
+operations will require proper control-flow and weakest-precondition generation.
 
 ## Expressions
 
@@ -123,3 +122,9 @@ contains one expression.
 
 These expressions are also the proof language. There is no separate annotation
 language.
+
+The native GCC JIT backend lowers the scalar subset that has a clear source to
+native mapping today. It supports `+`, `-`, `*`, comparisons, equality, boolean
+operators, conditionals, locals, assignment, and returns. Division and modulo
+remain proof-language constructs until their exact runtime semantics are pinned
+down.

@@ -31,8 +31,8 @@ Exit codes:
 - `1`: command-line, parse, validation, or file-read error.
 - `2`: at least one obligation was `REFUTED` or `ERROR`, or `--strict` found an
   `UNKNOWN` obligation.
-- `3`: `sigil backend` was run and the binary was built without a usable
-  `libgccjit` backend.
+- `3`: `sigil backend` or `sigil compile` was run and the binary was built
+  without a usable `libgccjit` backend.
 
 Result statuses:
 
@@ -50,3 +50,36 @@ sigil backend
 
 Reports whether the current binary was built with `libgccjit` support and can
 allocate a GCC JIT context.
+
+## `sigil compile`
+
+```sh
+sigil compile <file.sigil>
+```
+
+Parses and validates a module, then asks the GCC JIT backend to lower every
+native-supported function into an in-memory JIT result. The command reports each
+function as `lowered` or `skipped`.
+
+The current native subset supports pure scalar functions over `i64` and `bool`
+using:
+
+- parameters and local `let` bindings;
+- assignment to declared locals;
+- statement and expression conditionals;
+- unary `!` and `-`;
+- arithmetic `+`, `-`, and `*`;
+- comparisons, equality, `&&`, and `||`;
+- proof-only `assume` and `assert` statements, which are erased before native
+  lowering.
+
+Division and modulo are intentionally skipped until Sigil pins down the exact
+source semantics and proves they match the native lowering.
+
+Exit codes:
+
+- `0`: at least one function was lowered and GCC JIT compilation succeeded.
+- `1`: command-line, parse, validation, or file-read error.
+- `2`: `libgccjit` was available, but no function could be lowered or GCC JIT
+  compilation failed.
+- `3`: the binary was built without a usable `libgccjit` backend.

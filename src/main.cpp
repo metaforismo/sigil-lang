@@ -27,6 +27,7 @@ void print_help() {
             << "Usage:\n"
             << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
+            << "  sigil compile <file.sigil>\n"
             << "  sigil backend\n";
 }
 
@@ -140,6 +141,36 @@ int backend_command() {
   return status.available ? 0 : 3;
 }
 
+int compile_command(const std::vector<std::string>& args) {
+  if (args.size() != 1) {
+    print_help();
+    return 1;
+  }
+
+  const auto& path = args[0];
+  const auto source = read_file(path);
+  const auto module = sigil::parse_source(source, path);
+  sigil::validate_module(module);
+  const auto result = sigil::compile_module_with_gccjit(module);
+
+  std::cout << "module " << module.name << "\n";
+  std::cout << "  backend: libgccjit\n";
+  std::cout << "  status: " << (result.compiled ? "compiled" : "not compiled") << "\n";
+  std::cout << "  detail: " << result.detail << "\n";
+  for (const auto& fn : result.functions) {
+    std::cout << "  " << (fn.lowered ? "lowered" : "skipped") << ": " << fn.name;
+    if (!fn.detail.empty()) {
+      std::cout << " - " << fn.detail;
+    }
+    std::cout << "\n";
+  }
+
+  if (!result.available) {
+    return 3;
+  }
+  return result.compiled ? 0 : 2;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -154,6 +185,9 @@ int main(int argc, char** argv) {
     args.erase(args.begin());
     if (command == "check") {
       return check_command(args);
+    }
+    if (command == "compile") {
+      return compile_command(args);
     }
     if (command == "backend") {
       return backend_command();

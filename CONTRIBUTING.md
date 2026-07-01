@@ -19,6 +19,7 @@ If you have `libgccjit` installed, configure without disabling it:
 cmake -S . -B build-gccjit
 cmake --build build-gccjit
 ./build-gccjit/sigil backend
+./build-gccjit/sigil compile examples/native.sigil
 ```
 
 If you have Z3 installed, run at least one strict solver-backed smoke check:

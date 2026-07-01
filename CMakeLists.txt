@@ -40,12 +40,15 @@ else()
   endif()
 endif()
 
+set(SIGIL_GCCJIT_AVAILABLE OFF)
+
 if(SIGIL_ENABLE_GCCJIT)
   set(SIGIL_GCCJIT_HINTS
     /opt/homebrew/opt/libgccjit
     /opt/homebrew
     /usr/local/opt/libgccjit
-    /usr/local)
+    /usr/local
+    /usr)
 
   find_program(SIGIL_BREW_EXECUTABLE brew)
   if(SIGIL_BREW_EXECUTABLE)
@@ -62,15 +65,50 @@ if(SIGIL_ENABLE_GCCJIT)
   find_path(SIGIL_GCCJIT_INCLUDE_DIR
     NAMES libgccjit.h
     HINTS ${SIGIL_GCCJIT_HINTS}
-    PATH_SUFFIXES include)
+    PATH_SUFFIXES
+      include
+      lib/gcc/current/include
+      lib/gcc/16/include
+      lib/gcc/15/include
+      lib/gcc/14/include
+      lib/gcc/13/include
+      lib/gcc/12/include
+      lib/gcc/x86_64-linux-gnu/16/include
+      lib/gcc/x86_64-linux-gnu/15/include
+      lib/gcc/x86_64-linux-gnu/14/include
+      lib/gcc/x86_64-linux-gnu/13/include
+      lib/gcc/x86_64-linux-gnu/12/include
+      lib/gcc/aarch64-linux-gnu/16/include
+      lib/gcc/aarch64-linux-gnu/15/include
+      lib/gcc/aarch64-linux-gnu/14/include
+      lib/gcc/aarch64-linux-gnu/13/include
+      lib/gcc/aarch64-linux-gnu/12/include)
 
   find_library(SIGIL_GCCJIT_LIBRARY
     NAMES gccjit libgccjit
     HINTS ${SIGIL_GCCJIT_HINTS}
-    PATH_SUFFIXES lib lib/gcc/current lib/gcc/16 lib/gcc/15 lib/gcc/14 lib/gcc/13 lib/gcc/12)
+    PATH_SUFFIXES
+      lib
+      lib/gcc/current
+      lib/gcc/16
+      lib/gcc/15
+      lib/gcc/14
+      lib/gcc/13
+      lib/gcc/12
+      lib/gcc/x86_64-linux-gnu/16
+      lib/gcc/x86_64-linux-gnu/15
+      lib/gcc/x86_64-linux-gnu/14
+      lib/gcc/x86_64-linux-gnu/13
+      lib/gcc/x86_64-linux-gnu/12
+      lib/gcc/aarch64-linux-gnu/16
+      lib/gcc/aarch64-linux-gnu/15
+      lib/gcc/aarch64-linux-gnu/14
+      lib/gcc/aarch64-linux-gnu/13
+      lib/gcc/aarch64-linux-gnu/12)
 endif()
 
 if(SIGIL_ENABLE_GCCJIT AND SIGIL_GCCJIT_INCLUDE_DIR AND SIGIL_GCCJIT_LIBRARY)
+  set(SIGIL_GCCJIT_AVAILABLE ON)
   target_compile_definitions(sigil_core PUBLIC SIGIL_HAVE_GCCJIT=1)
   target_include_directories(sigil_core PRIVATE "${SIGIL_GCCJIT_INCLUDE_DIR}")
   target_link_libraries(sigil_core PRIVATE "${SIGIL_GCCJIT_LIBRARY}")
@@ -97,12 +135,58 @@ add_executable(sigil_typecheck_tests tests/test_typecheck.cpp)
 target_link_libraries(sigil_typecheck_tests PRIVATE sigil_core)
 add_test(NAME sigil_typecheck_tests COMMAND sigil_typecheck_tests)
 
+add_executable(sigil_backend_tests tests/test_backend.cpp)
+target_link_libraries(sigil_backend_tests PRIVATE sigil_core)
+add_test(NAME sigil_backend_tests COMMAND sigil_backend_tests)
+
 add_test(
   NAME sigil_cli_artifact_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_artifacts.sh"
           "$<TARGET_FILE:sigil>"
           "${CMAKE_CURRENT_SOURCE_DIR}/examples/cache.sigil"
           "${CMAKE_CURRENT_BINARY_DIR}/smt-artifacts")
+
+set(SIGIL_GCCJIT_TEST_ENV)
+if(SIGIL_GCCJIT_AVAILABLE AND APPLE)
+  find_program(SIGIL_XCRUN_EXECUTABLE xcrun)
+  if(SIGIL_XCRUN_EXECUTABLE)
+    execute_process(
+      COMMAND "${SIGIL_XCRUN_EXECUTABLE}" --show-sdk-path
+      OUTPUT_VARIABLE SIGIL_APPLE_SDKROOT
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(SIGIL_APPLE_SDKROOT)
+      list(APPEND SIGIL_GCCJIT_TEST_ENV "SDKROOT=${SIGIL_APPLE_SDKROOT}")
+    endif()
+  endif()
+
+  file(GLOB SIGIL_GCC_EMUTLS_CANDIDATES
+    "/opt/homebrew/lib/gcc/current/gcc/*/*/libemutls_w.a"
+    "/opt/homebrew/opt/gcc/lib/gcc/current/gcc/*/*/libemutls_w.a"
+    "/usr/local/lib/gcc/current/gcc/*/*/libemutls_w.a"
+    "/usr/local/opt/gcc/lib/gcc/current/gcc/*/*/libemutls_w.a")
+  list(LENGTH SIGIL_GCC_EMUTLS_CANDIDATES SIGIL_GCC_EMUTLS_COUNT)
+  if(SIGIL_GCC_EMUTLS_COUNT GREATER 0)
+    list(GET SIGIL_GCC_EMUTLS_CANDIDATES 0 SIGIL_GCC_EMUTLS_LIBRARY)
+    get_filename_component(SIGIL_GCC_EMUTLS_DIR "${SIGIL_GCC_EMUTLS_LIBRARY}" DIRECTORY)
+    get_filename_component(SIGIL_GCC_RUNTIME_DIR "${SIGIL_GCC_EMUTLS_DIR}/../../.." ABSOLUTE)
+    list(APPEND SIGIL_GCCJIT_TEST_ENV
+      "LIBRARY_PATH=${SIGIL_GCC_EMUTLS_DIR}:${SIGIL_GCC_RUNTIME_DIR}")
+  endif()
+endif()
+
+if(SIGIL_GCCJIT_AVAILABLE)
+  if(SIGIL_GCCJIT_TEST_ENV)
+    set_tests_properties(sigil_backend_tests PROPERTIES ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
+  endif()
+  add_test(
+    NAME sigil_gccjit_compile_native
+    COMMAND sigil compile "${CMAKE_CURRENT_SOURCE_DIR}/examples/native.sigil")
+  if(SIGIL_GCCJIT_TEST_ENV)
+    set_tests_properties(sigil_gccjit_compile_native PROPERTIES
+      ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
+  endif()
+endif()
 
 find_program(SIGIL_Z3_EXECUTABLE z3)
 if(SIGIL_Z3_EXECUTABLE)
@@ -122,6 +206,12 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_assignments
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/assignments.sigil" --strict)
   set_tests_properties(sigil_z3_assignments PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_native
+    COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/native.sigil" --strict)
+  set_tests_properties(sigil_z3_native PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

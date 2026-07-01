@@ -20,12 +20,13 @@ tests, and docs are in the repo.
 - [x] Add full source ranges, not just start locations, to diagnostics.
 - [x] Add statement-level `if` and join proof contexts at merge points.
 - [x] Add assignment with explicit mutation rules.
+- [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Keep CI dependency-light and reproducible.
 
 ## Immediate Queue
 
-- [ ] Lower pure integer and boolean functions through `libgccjit`.
 - [ ] Add ABI tests for JIT-compiled functions.
+- [ ] Emit native lowering diagnostics with source ranges.
 
 ## Core Language
 

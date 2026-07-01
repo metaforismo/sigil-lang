@@ -7,7 +7,8 @@ The compiler frontend parses ordinary language declarations plus `requires`,
 `ensures`, `assert`, `assume`, and `invariant` clauses written in the same
 expression syntax as the program. It emits verification conditions as SMT-LIB,
 can ask Z3 to discharge them at compile time, and includes a conditional
-`libgccjit` backend probe for native lowering work.
+`libgccjit` backend that lowers a small scalar subset into an in-memory GCC JIT
+module.
 
 The long-term direction is a compiler where low-level data-structure
 correctness, cache invariants, crash-safety properties, and eventually bounded
@@ -33,8 +34,11 @@ production verifier yet.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
-- CI that exercises the portable compiler core and a solver-backed Z3 smoke
-  path.
+- Native lowering for pure `i64`/`bool` functions using `let`, assignment,
+  conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
+  returns.
+- CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
+  and a Linux `libgccjit` native-lowering smoke path.
 
 ## Example
 
@@ -90,6 +94,12 @@ Check whether the native backend was compiled with `libgccjit`:
 ./build/sigil backend
 ```
 
+Compile the native-lowerable subset into an in-memory GCC JIT module:
+
+```sh
+./build/sigil compile examples/native.sigil
+```
+
 `sigil check` also runs static validation before building proof obligations:
 contract expressions must be boolean, identifiers must be declared, return
 expressions must match the function return type, and unsupported value types are
@@ -118,7 +128,7 @@ More detail is in [docs/LANGUAGE.md](docs/LANGUAGE.md).
   -> verification-condition planner
   -> SMT-LIB emitter
   -> local syntactic prover or Z3
-  -> GCC JIT backend work
+  -> GCC JIT native lowering
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
@@ -133,7 +143,7 @@ The next hard pieces are:
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
-- real `libgccjit` lowering for a useful subset of functions;
+- ABI tests for JIT-compiled scalar functions;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

@@ -1,0 +1,34 @@
+module native;
+
+fn add_one(x: i64) -> i64
+requires bounded_input: x >= 0;
+ensures advanced: result > x;
+{
+  let y: i64 = x;
+  y = y + 1;
+  return y;
+}
+
+fn choose(flag: bool, x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= 0;
+{
+  if flag {
+    return x;
+  } else {
+    return 0;
+  }
+}
+
+fn abs_value(x: i64) -> i64
+ensures non_negative: result >= 0;
+{
+  let y: i64 = if x >= 0 { x } else { -x };
+  return y;
+}
+
+fn nonzero(x: i64) -> bool
+ensures same_truth: result == (x != 0);
+{
+  return x != 0;
+}

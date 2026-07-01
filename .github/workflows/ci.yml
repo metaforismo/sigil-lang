@@ -59,6 +59,7 @@ jobs:
           ./build/sigil check examples/conditionals.sigil --strict
           ./build/sigil check examples/branches.sigil --strict
           ./build/sigil check examples/assignments.sigil --strict
+          ./build/sigil check examples/native.sigil --strict
 
       - name: Refutation smoke
         run: |
@@ -76,3 +77,30 @@ jobs:
           ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
           test -f build/smt/fn.preserve_capacity.ensures.1.still_bounded.smt2
           grep "(set-option :timeout 250)" build/smt/fn.preserve_capacity.ensures.1.still_bounded.smt2
+
+  native-backend:
+    name: GCCJIT native lowering smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install libgccjit
+        run: |
+          sudo apt-get update
+          package="$(apt-cache search '^libgccjit-[0-9]+-dev$' | awk '{print $1}' | sort -V | tail -n1)"
+          test -n "$package"
+          sudo apt-get install -y "$package"
+
+      - name: Configure
+        run: cmake -S . -B build -DSIGIL_ENABLE_GCCJIT=ON -DSIGIL_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Native compile smoke
+        run: ./build/sigil compile examples/native.sigil
