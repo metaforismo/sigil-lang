@@ -1,0 +1,28 @@
+module cache;
+
+struct CacheLine {
+  key: i64;
+  value: i64;
+  valid: bool;
+
+  invariant valid_key: !valid || key >= 0;
+}
+
+struct CacheStats {
+  hits: i64;
+  misses: i64;
+
+  invariant non_negative_hits: hits >= 0;
+  invariant non_negative_misses: misses >= 0;
+}
+
+fn preserve_capacity(entries: i64, capacity: i64) -> i64
+requires bounded: entries <= capacity;
+requires non_negative_entries: entries >= 0;
+ensures still_bounded: result <= capacity;
+ensures still_non_negative: result >= 0;
+{
+  assert bounded_now: entries <= capacity;
+  assert non_negative_now: entries >= 0;
+  return entries;
+}

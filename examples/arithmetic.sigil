@@ -1,0 +1,16 @@
+module arithmetic;
+
+fn keep(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= 0;
+{
+  assert still_non_negative: x >= 0;
+  return x;
+}
+
+fn clamp_low(x: i64, lo: i64) -> i64
+requires already_high_enough: x >= lo;
+ensures above_low: result >= lo;
+{
+  return x;
+}

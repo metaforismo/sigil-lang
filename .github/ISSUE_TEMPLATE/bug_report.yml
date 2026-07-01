@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible compiler, parser, or verifier bug.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Minimal Sigil input
+      render: sigil
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Commands run
+      render: sh
+    validations:
+      required: false

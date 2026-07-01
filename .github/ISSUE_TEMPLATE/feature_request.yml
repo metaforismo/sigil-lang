@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a language, compiler, backend, or prover change.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What property or workflow should this unlock?
+    validations:
+      required: true
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Design sketch
+      description: Include syntax, proof behavior, or backend implications if relevant.
+    validations:
+      required: false
+  - type: textarea
+    id: soundness
+    attributes:
+      label: Proof-soundness considerations
+      description: What could make this feature unsound or hard to validate?
+    validations:
+      required: false

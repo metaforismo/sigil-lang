@@ -1,0 +1,23 @@
+# Build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+
+# Generated binaries and objects
+*.a
+*.dylib
+*.dll
+*.exe
+*.o
+*.so
+
+# Editor state
+.DS_Store
+.idea/
+.vscode/
+
+# Local solver and runtime scratch
+*.smt2.tmp
+tmp/
