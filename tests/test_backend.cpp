@@ -71,9 +71,26 @@ fn sum4(a: i64, b: i64, c: i64, d: i64) -> i64
   return total;
 }
 
+fn sum8(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) -> i64
+{
+  let total: i64 = a + b;
+  total = total + c;
+  total = total + d;
+  total = total + e;
+  total = total + f;
+  total = total + g;
+  total = total + h;
+  return total;
+}
+
 fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
 {
   return a && b && c && d;
+}
+
+fn all8(a: bool, b: bool, c: bool, d: bool, e: bool, f: bool, g: bool, h: bool) -> bool
+{
+  return a && b && c && d && e && f && g && h;
 }
 
 fn observe(flag: bool, x: i64) -> void
@@ -90,7 +107,7 @@ fn observe(flag: bool, x: i64) -> void
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
-  expect(artifacts.size() == 8, "native artifact count");
+  expect(artifacts.size() == 10, "native artifact count");
   expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
@@ -110,7 +127,13 @@ fn observe(flag: bool, x: i64) -> void
   expect(artifacts[5].text.find("signature sum4(a: i64, b: i64, c: i64, d: i64) -> i64") !=
              std::string::npos,
          "native artifact four-parameter signature");
-  expect(artifacts[7].text.find("signature observe(flag: bool, x: i64) -> void") !=
+  expect(artifacts[6].text.find("signature sum8(a: i64, b: i64, c: i64, d: i64, "
+                                "e: i64, f: i64, g: i64, h: i64) -> i64") != std::string::npos,
+         "native artifact eight-parameter i64 signature");
+  expect(artifacts[8].text.find("signature all8(a: bool, b: bool, c: bool, d: bool, "
+                                "e: bool, f: bool, g: bool, h: bool) -> bool") != std::string::npos,
+         "native artifact eight-parameter bool signature");
+  expect(artifacts[9].text.find("signature observe(flag: bool, x: i64) -> void") !=
              std::string::npos,
          "native artifact void signature");
 
@@ -120,7 +143,7 @@ fn observe(flag: bool, x: i64) -> void
   expect(result.debug_info_enabled, "gccjit debug info enabled");
   expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
          "native artifact records enabled debug info");
-  expect(result.functions.size() == 8, "eight function reports");
+  expect(result.functions.size() == 10, "ten function reports");
   expect(result.functions[0].name == "add_one", "first function name");
   expect(result.functions[0].lowered, "add_one lowered");
   expect(result.functions[1].name == "choose", "second function name");
@@ -133,10 +156,14 @@ fn observe(flag: bool, x: i64) -> void
   expect(result.functions[4].lowered, "choose3 lowered");
   expect(result.functions[5].name == "sum4", "sixth function name");
   expect(result.functions[5].lowered, "sum4 lowered");
-  expect(result.functions[6].name == "all4", "seventh function name");
-  expect(result.functions[6].lowered, "all4 lowered");
-  expect(result.functions[7].name == "observe", "eighth function name");
-  expect(result.functions[7].lowered, "observe lowered");
+  expect(result.functions[6].name == "sum8", "seventh function name");
+  expect(result.functions[6].lowered, "sum8 lowered");
+  expect(result.functions[7].name == "all4", "eighth function name");
+  expect(result.functions[7].lowered, "all4 lowered");
+  expect(result.functions[8].name == "all8", "ninth function name");
+  expect(result.functions[8].lowered, "all8 lowered");
+  expect(result.functions[9].name == "observe", "tenth function name");
+  expect(result.functions[9].lowered, "observe lowered");
 
   const auto add_one =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
@@ -192,6 +219,14 @@ fn observe(flag: bool, x: i64) -> void
   expect(sum4.value.kind == sigil::TypeKind::I64, "sum4 result kind");
   expect(sum4.value.integer == 10, "sum4 ABI result");
 
+  const auto sum8 = sigil::invoke_function_with_gccjit(
+      module, "sum8",
+      {sigil::gccjit_i64(1), sigil::gccjit_i64(2), sigil::gccjit_i64(3), sigil::gccjit_i64(4),
+       sigil::gccjit_i64(5), sigil::gccjit_i64(6), sigil::gccjit_i64(7), sigil::gccjit_i64(8)});
+  expect(sum8.invoked, "sum8 invoked");
+  expect(sum8.value.kind == sigil::TypeKind::I64, "sum8 result kind");
+  expect(sum8.value.integer == 36, "sum8 ABI result");
+
   const auto all4_true =
       sigil::invoke_function_with_gccjit(module, "all4",
                                          {sigil::gccjit_bool(true), sigil::gccjit_bool(true),
@@ -206,6 +241,23 @@ fn observe(flag: bool, x: i64) -> void
                                           sigil::gccjit_bool(false), sigil::gccjit_bool(true)});
   expect(all4_false.invoked, "all4 false invoked");
   expect(!all4_false.value.boolean, "all4 false ABI result");
+
+  const auto all8_true = sigil::invoke_function_with_gccjit(
+      module, "all8",
+      {sigil::gccjit_bool(true), sigil::gccjit_bool(true), sigil::gccjit_bool(true),
+       sigil::gccjit_bool(true), sigil::gccjit_bool(true), sigil::gccjit_bool(true),
+       sigil::gccjit_bool(true), sigil::gccjit_bool(true)});
+  expect(all8_true.invoked, "all8 true invoked");
+  expect(all8_true.value.kind == sigil::TypeKind::Bool, "all8 result kind");
+  expect(all8_true.value.boolean, "all8 true ABI result");
+
+  const auto all8_false = sigil::invoke_function_with_gccjit(
+      module, "all8",
+      {sigil::gccjit_bool(true), sigil::gccjit_bool(true), sigil::gccjit_bool(true),
+       sigil::gccjit_bool(true), sigil::gccjit_bool(false), sigil::gccjit_bool(true),
+       sigil::gccjit_bool(true), sigil::gccjit_bool(true)});
+  expect(all8_false.invoked, "all8 false invoked");
+  expect(!all8_false.value.boolean, "all8 false ABI result");
 
   const auto observe_true = sigil::invoke_function_with_gccjit(
       module, "observe", {sigil::gccjit_bool(true), sigil::gccjit_i64(7)});

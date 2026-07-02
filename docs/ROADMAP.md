@@ -36,8 +36,8 @@ tests, and docs are in the repo.
 - [x] Reject early returns inside loops until control-flow proofs support them.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
-- [x] Invoke native `libgccjit` functions with up to three scalar parameters.
-- [x] Replace native ABI case tables with bounded recursive dispatch up to four parameters.
+- [x] Invoke native `libgccjit` functions with mixed scalar signatures.
+- [x] Replace native ABI case tables with bounded recursive dispatch up to eight parameters.
 - [x] Lower `void` functions through `libgccjit`.
 - [x] Invoke native `void` functions through `sigil run`.
 - [x] Check `i64` argument ranges for native `sigil run` invocations.

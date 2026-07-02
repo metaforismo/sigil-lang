@@ -136,7 +136,7 @@ sigil run examples/native.sigil add_one 41
 ```
 
 The command currently supports `i64`, `bool`, and `void` return values with up
-to four scalar parameters. That is enough to exercise the first ABI contract
+to eight scalar parameters. That is enough to exercise the first ABI contract
 without pretending Sigil has a complete FFI or runtime yet.
 
 Exit codes:

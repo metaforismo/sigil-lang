@@ -65,10 +65,29 @@ ensures exact: result == a + b + c + d;
   return total;
 }
 
+fn sum8(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) -> i64
+ensures exact: result == a + b + c + d + e + f + g + h;
+{
+  let total: i64 = a + b;
+  total = total + c;
+  total = total + d;
+  total = total + e;
+  total = total + f;
+  total = total + g;
+  total = total + h;
+  return total;
+}
+
 fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
 ensures exact: result == (a && b && c && d);
 {
   return a && b && c && d;
+}
+
+fn all8(a: bool, b: bool, c: bool, d: bool, e: bool, f: bool, g: bool, h: bool) -> bool
+ensures exact: result == (a && b && c && d && e && f && g && h);
+{
+  return a && b && c && d && e && f && g && h;
 }
 
 fn observe(flag: bool, x: i64) -> void

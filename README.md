@@ -46,7 +46,8 @@ production verifier yet.
 - Native lowering for pure `i64`/`bool` functions using `let`, assignment,
   conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
   `i64`/`bool`/`void` returns.
-- ABI smoke tests that invoke JIT-compiled scalar and `void` functions.
+- ABI smoke tests that invoke JIT-compiled scalar and `void` functions with up
+  to eight scalar parameters.
 - Native-lowering diagnostics that report source ranges for unsupported
   constructs.
 - Native IR artifacts that list signatures, contracts, body operations, and

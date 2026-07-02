@@ -924,7 +924,7 @@ Return invoke_raw(void* code, const std::vector<GccJitScalarValue>& arguments) {
   return invoke_raw_impl<Return, Args...>(code, arguments, std::index_sequence_for<Args...>{});
 }
 
-constexpr std::size_t kMaxAbiParameters = 4;
+constexpr std::size_t kMaxAbiParameters = 8;
 
 template <typename Return, typename... Args>
 Return invoke_with_signature(void* code, const FunctionDecl& fn,
@@ -934,7 +934,7 @@ Return invoke_with_signature(void* code, const FunctionDecl& fn,
   }
 
   if constexpr (sizeof...(Args) >= kMaxAbiParameters) {
-    throw LoweringError("ABI invocation currently supports up to four scalar parameters");
+    throw LoweringError("ABI invocation currently supports up to eight scalar parameters");
   } else {
     const auto next_type = fn.params[sizeof...(Args)].type.kind;
     if (next_type == TypeKind::I64) {
