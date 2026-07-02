@@ -139,7 +139,9 @@ contains one expression.
 Every division or modulo expression creates a compile-time proof obligation
 that the divisor is nonzero. The obligation is checked in the expression's
 active control-flow context, so a divisor used only inside one conditional
-branch can rely on that branch condition.
+branch can rely on that branch condition. Boolean `&&` and `||` also act as
+short-circuit guards for these safety checks: the right side of `a && b` is
+checked under `a`, and the right side of `a || b` is checked under `!a`.
 
 These expressions are also the proof language. There is no separate annotation
 language.

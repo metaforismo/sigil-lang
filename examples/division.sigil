@@ -13,3 +13,15 @@ requires divisor_safe_when_used: !flag || y != 0;
   let value: i64 = if flag { x / y } else { 0 };
   return value;
 }
+
+fn and_guarded_quotient(x: i64, y: i64) -> i64
+requires divisor_safe_on_rhs: y != 0 && x / y >= 0;
+{
+  return x;
+}
+
+fn or_guarded_quotient(x: i64, y: i64) -> i64
+requires zero_or_divisor_safe: y == 0 || x / y >= 0;
+{
+  return x;
+}

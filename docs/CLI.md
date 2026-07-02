@@ -15,7 +15,8 @@ printed as `file:line:start-end`.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
-obligations point at the divisor expression that must be proven nonzero.
+obligations point at the divisor expression that must be proven nonzero. Guards
+from `if`, `&&`, and `||` are reflected in the assumptions for the safety query.
 
 Options:
 

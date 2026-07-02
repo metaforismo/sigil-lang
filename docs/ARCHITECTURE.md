@@ -57,7 +57,8 @@ The planner walks each function and builds proof obligations:
 - `assume` statements add local assumptions;
 - `assert` statements create obligations;
 - division and modulo expressions create `divisor_nonzero` safety obligations at
-  the point where the expression is evaluated;
+  the point where the expression is evaluated, with `if`, `&&`, and `||`
+  guards reflected in the active assumptions;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

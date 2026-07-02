@@ -36,7 +36,8 @@ production verifier yet.
   guaranteed returns.
 - Verification-condition generation for function assertions and return-path
   postconditions.
-- Arithmetic safety obligations for division and modulo divisors.
+- Branch- and short-circuit-aware arithmetic safety obligations for division and
+  modulo divisors.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
 - CMake detection for `libgccjit`; builds without it and reports backend status.

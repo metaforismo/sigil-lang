@@ -390,9 +390,21 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     return;
   }
 
-  append_expression_safety_obligations(expr->condition, fn, context, safety_index, obligations);
-  append_expression_safety_obligations(expr->lhs, fn, context, safety_index, obligations);
-  append_expression_safety_obligations(expr->rhs, fn, context, safety_index, obligations);
+  if (expr->kind == ExprNode::Kind::Binary) {
+    append_expression_safety_obligations(expr->lhs, fn, context, safety_index, obligations);
+    if (expr->binary_op == BinaryOp::And || expr->binary_op == BinaryOp::Or) {
+      const auto lhs = rewrite_expr(expr->lhs, context.bindings);
+      auto rhs_context = context;
+      rhs_context.active.push_back(make_branch_condition(lhs, expr->binary_op == BinaryOp::And));
+      append_expression_safety_obligations(expr->rhs, fn, rhs_context, safety_index, obligations);
+      return;
+    }
+    append_expression_safety_obligations(expr->rhs, fn, context, safety_index, obligations);
+  } else {
+    append_expression_safety_obligations(expr->condition, fn, context, safety_index, obligations);
+    append_expression_safety_obligations(expr->lhs, fn, context, safety_index, obligations);
+    append_expression_safety_obligations(expr->rhs, fn, context, safety_index, obligations);
+  }
 
   if (expr->kind == ExprNode::Kind::Binary && needs_nonzero_divisor(expr->binary_op)) {
     ++safety_index;
