@@ -139,3 +139,24 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "duplicate top-level declaration 'Thing'" >/dev/null
 printf '%s\n' "$output" | grep "duplicate-top-level.sigil:7:1-10:1" >/dev/null
+
+source_file="$outdir/integer-overflow.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn integer_overflow() -> i64
+{
+  return 9223372036854775808;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "integer literal is out of range for i64" >/dev/null
+printf '%s\n' "$output" | grep "integer-overflow.sigil:5:10-28" >/dev/null

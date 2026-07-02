@@ -154,6 +154,10 @@ checked under `a`, and the right side of `a || b` is checked under `!a`.
 These expressions are also the proof language. There is no separate annotation
 language.
 
+Integer literal tokens are decimal and must fit in the non-negative `i64` range
+`0..9223372036854775807`. A leading `-` is parsed as unary negation, not as part
+of the literal token.
+
 The native GCC JIT backend lowers the scalar subset that has a clear source to
 native mapping today. It supports `+`, `-`, `*`, comparisons, equality, boolean
 operators, conditionals, locals, assignment, and valued returns. Void functions,

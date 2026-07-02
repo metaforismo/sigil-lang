@@ -44,6 +44,14 @@ int main() {
   expect_parse_diagnostic(
       "module broken;\nfn nope(x: i64) -> i64 {\n  while x < 10 {\n  }\n  return x;\n}\n",
       "expected at least one invariant before while body", 3, 16);
+  expect_parse_diagnostic("module broken;\nfn nope() -> i64 {\n  return 9223372036854775808;\n}\n",
+                          "integer literal is out of range for i64", 3, 10,
+                          "parse-error.sigil:3:10-28");
+
+  const auto max_literal_module = sigil::parse_source(
+      "module ok;\nfn max_literal() -> i64 { return 9223372036854775807; }\n", "max-literal.sigil");
+  expect(max_literal_module.functions[0].body[0].expr->integer_value == 9223372036854775807LL,
+         "max i64 literal parses exactly");
 
   const char* source = R"(
 module cache;

@@ -1,7 +1,9 @@
 #include "sigil/parser.hpp"
 
-#include <cstdlib>
+#include <charconv>
+#include <cstdint>
 #include <sstream>
+#include <system_error>
 #include <utility>
 
 namespace sigil {
@@ -10,6 +12,17 @@ namespace {
 
 SourceRange span(SourceRange start, SourceRange end) {
   return SourceRange{std::move(start.start), std::move(end.end)};
+}
+
+std::int64_t parse_i64_literal(const Token& token) {
+  std::int64_t value = 0;
+  const auto* begin = token.text.data();
+  const auto* end = begin + token.text.size();
+  const auto [parsed_end, error] = std::from_chars(begin, end, value);
+  if (error != std::errc{} || parsed_end != end) {
+    throw Diagnostic(token.range, "integer literal is out of range for i64");
+  }
+  return value;
 }
 
 } // namespace
@@ -381,7 +394,7 @@ Expr Parser::parse_unary() {
 Expr Parser::parse_primary() {
   if (match(TokenKind::Number)) {
     const auto token = previous();
-    return make_integer(std::strtoll(token.text.c_str(), nullptr, 10), token.range);
+    return make_integer(parse_i64_literal(token), token.range);
   }
   if (match(TokenKind::True)) {
     return make_boolean(true, previous().range);
