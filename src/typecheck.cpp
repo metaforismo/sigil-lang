@@ -178,6 +178,20 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
                         std::unordered_set<std::string>& assignable_locals,
                         std::unordered_set<std::string>& proof_labels);
 
+void reject_loop_body_returns(const std::vector<Statement>& statements) {
+  for (const auto& statement : statements) {
+    if (statement.kind == StatementKind::Return) {
+      throw Diagnostic(statement.range, "while bodies cannot contain return statements yet");
+    }
+    if (statement.kind == StatementKind::If) {
+      reject_loop_body_returns(statement.then_branch);
+      reject_loop_body_returns(statement.else_branch);
+    } else if (statement.kind == StatementKind::While) {
+      reject_loop_body_returns(statement.then_branch);
+    }
+  }
+}
+
 bool block_returns(const std::vector<Statement>& statements);
 
 bool statement_returns(const Statement& statement) {
@@ -266,6 +280,7 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       }
       validate_predicate(invariant, locals, "loop invariant");
     }
+    reject_loop_body_returns(statement.then_branch);
     validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels);
   } else if (statement.kind == StatementKind::Assume) {
     validate_statement_label(statement, proof_labels);

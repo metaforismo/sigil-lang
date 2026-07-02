@@ -436,6 +436,41 @@ fn duplicate_loop_invariant(x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn return_inside_while(n: i64) -> i64
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  {
+    return i;
+  }
+  return i;
+}
+)",
+                    "while bodies cannot contain return statements yet", 9, 5,
+                    "typecheck.sigil:9:5-13");
+
+  expect_diagnostic(R"(
+module bad;
+fn nested_return_inside_while(n: i64, stop: bool) -> i64
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  {
+    if stop {
+      return i;
+    } else {
+      i = i + 1;
+    }
+  }
+  return i;
+}
+)",
+                    "while bodies cannot contain return statements yet");
+
+  expect_diagnostic(R"(
+module bad;
 fn branch_local_does_not_escape(x: i64) -> i64
 {
   if x >= 0 {

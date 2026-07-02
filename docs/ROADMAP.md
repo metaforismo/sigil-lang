@@ -33,6 +33,7 @@ tests, and docs are in the repo.
 - [x] Generate nonzero-divisor safety obligations for `/` and `%`.
 - [x] Honor `if`, `&&`, and `||` guards in expression safety obligations.
 - [x] Add loops with user-written invariants.
+- [x] Reject early returns inside loops until control-flow proofs support them.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
 - [x] Check `i64` argument ranges for native `sigil run` invocations.

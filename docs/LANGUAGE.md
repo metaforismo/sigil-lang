@@ -125,7 +125,9 @@ branch.
 before the body. Sigil proves each invariant before entering the loop and proves
 that one symbolic iteration preserves it. After the loop, the prover assumes the
 invariants and the negated loop condition for the loop-exit state. Locals
-declared inside the loop body are scoped to the body.
+declared inside the loop body are scoped to the body. Loop bodies cannot contain
+`return` statements yet; early loop exits need a real control-flow and
+weakest-precondition model before Sigil can prove them honestly.
 
 Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local

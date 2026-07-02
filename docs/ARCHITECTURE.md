@@ -44,6 +44,8 @@ system:
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
   escape their loop body;
+- `while` bodies cannot contain `return` statements until the proof planner has
+  a full control-flow model for early loop exits;
 - explicit `assume` and `assert` labels must be unique within a function;
 - `result` is only available in postconditions for non-void functions and cannot
   be reused as a parameter, local binding, or field;

@@ -181,3 +181,30 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "integer literal is out of range for i64" >/dev/null
 printf '%s\n' "$output" | grep "integer-overflow.sigil:5:10-28" >/dev/null
+
+source_file="$outdir/return-inside-while.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn return_inside_while(n: i64) -> i64
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  {
+    return i;
+  }
+  return i;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "while bodies cannot contain return statements yet" >/dev/null
+printf '%s\n' "$output" | grep "return-inside-while.sigil:9:5-13" >/dev/null
