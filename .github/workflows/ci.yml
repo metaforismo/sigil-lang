@@ -60,6 +60,7 @@ jobs:
           ./build/sigil check examples/branches.sigil --strict
           ./build/sigil check examples/assignments.sigil --strict
           ./build/sigil check examples/native.sigil --strict
+          ./build/sigil check examples/loops.sigil --strict
 
       - name: Refutation smoke
         run: |

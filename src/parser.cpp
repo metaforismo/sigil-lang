@@ -195,6 +195,24 @@ Statement Parser::parse_statement() {
     return statement;
   }
 
+  if (match(TokenKind::While)) {
+    const auto start = previous();
+    statement.kind = StatementKind::While;
+    statement.location = start.location;
+    statement.range = start.range;
+    statement.name = "while";
+    statement.expr = parse_expr();
+    if (!check(TokenKind::Invariant)) {
+      throw Diagnostic(peek().range, "expected at least one invariant before while body");
+    }
+    while (check(TokenKind::Invariant)) {
+      statement.loop_invariants.push_back(parse_named_predicate(TokenKind::Invariant));
+    }
+    statement.then_branch = parse_statement_block("while body");
+    statement.range = span(start.range, previous().range);
+    return statement;
+  }
+
   if (match(TokenKind::Assume) || match(TokenKind::Assert)) {
     const auto keyword = previous();
     statement.kind =
@@ -226,7 +244,7 @@ Statement Parser::parse_statement() {
   }
 
   throw Diagnostic(peek().range,
-                   "expected let, assignment, if, assume, assert, or return statement");
+                   "expected let, assignment, if, while, assume, assert, or return statement");
 }
 
 std::vector<Statement> Parser::parse_statement_block(const std::string& owner) {

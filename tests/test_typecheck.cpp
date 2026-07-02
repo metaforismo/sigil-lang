@@ -80,6 +80,20 @@ fn branch_returns(flag: bool, x: i64) -> i64
     return 0;
   }
 }
+
+fn loop_valid(n: i64) -> i64
+requires non_negative: n >= 0;
+ensures bounded: result <= n;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -208,6 +222,52 @@ fn duplicate_local(x: i64) -> i64
 }
 )",
                     "duplicate local 'x'");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_while_condition(x: i64) -> i64
+{
+  let i: i64 = 0;
+  while i
+  invariant lower: i >= 0;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)",
+                    "while condition must be bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_loop_invariant(x: i64) -> i64
+{
+  let i: i64 = 0;
+  while i < x
+  invariant not_bool: i + 1;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)",
+                    "loop invariant 'not_bool' must be bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn duplicate_loop_invariant(x: i64) -> i64
+{
+  let i: i64 = 0;
+  while i < x
+  invariant bound: i >= 0;
+  invariant bound: i <= x;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)",
+                    "duplicate loop invariant 'bound'");
 
   expect_diagnostic(R"(
 module bad;

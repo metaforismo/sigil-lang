@@ -36,6 +36,8 @@ system:
 - conditional expression conditions must be `bool`, and branch types must match;
 - statement-level `if` conditions must be `bool`, and branch-local bindings do
   not escape their branch;
+- loop conditions and invariants must be `bool`, and loop-body locals do not
+  escape their loop body;
 - `result` is only available in postconditions for non-void functions;
 - returns must match the declared function return type;
 - non-void functions must return a value on every syntactic control-flow path;
@@ -55,6 +57,9 @@ The planner walks each function and builds proof obligations:
 - `assert` statements create obligations;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
+- `while` statements create initialization and preservation obligations for
+  each user-written invariant, then expose invariant and exit-condition facts at
+  the merge point;
 - `return expr` records `result == expr`;
 - `ensures` clauses create postcondition obligations.
 
@@ -109,11 +114,12 @@ that feeds proof diagnostics. They are intentionally plain text so humans and CI
 can compare the solver-visible surface with the native-lowerable surface as the
 backend grows.
 
-Contracts, `assume`, and `assert` remain proof-layer constructs. The native
-backend erases them after static validation and proof generation. Division and
-modulo are deliberately not lowered yet, because Sigil still needs an explicit
-source-level semantics that is known to match the native backend for negative
-operands and zero divisors.
+Contracts, loop invariants, `assume`, and `assert` remain proof-layer
+constructs. The native backend erases proof-only constructs after static
+validation and proof generation, and currently skips functions containing loops.
+Division and modulo are deliberately not lowered yet, because Sigil still needs
+an explicit source-level semantics that is known to match the native backend for
+negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.

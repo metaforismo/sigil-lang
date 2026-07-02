@@ -170,5 +170,41 @@ fn quotient(x: i64, y: i64) -> i64
   expect(!unsupported_result.available, "unsupported unavailable without backend");
 #endif
 
+  const char* loop_source = R"(
+module native;
+
+fn count_to(n: i64) -> i64
+requires non_negative: n >= 0;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)";
+
+  const auto loop_module = sigil::parse_source(loop_source, "loop-native.sigil");
+  sigil::validate_module(loop_module);
+  const auto loop_result = sigil::compile_module_with_gccjit(loop_module);
+#if SIGIL_HAVE_GCCJIT
+  expect(loop_result.available, "loop result sees backend");
+  expect(!loop_result.compiled, "loop function is not compiled");
+  expect(loop_result.functions.size() == 1, "loop function report count");
+  expect(!loop_result.functions[0].lowered, "loop function skipped");
+  expect(loop_result.functions[0].detail.find("while loops") != std::string::npos,
+         "loop skip explains native gap");
+  const auto loop_artifacts = sigil::build_native_ir_artifacts(loop_module, loop_result);
+  expect(loop_artifacts[0].text.find("while @loop-native.sigil:8:3-13:3") != std::string::npos,
+         "loop native artifact body");
+  expect(loop_artifacts[0].text.find("lower @loop-native.sigil:9:3-26") != std::string::npos,
+         "loop native artifact invariant");
+#else
+  expect(!loop_result.available, "loop unavailable without backend");
+#endif
+
   return 0;
 }

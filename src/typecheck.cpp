@@ -213,6 +213,16 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     require_type(statement.expr, locals, TypeKind::Bool, "if statement condition");
     validate_statement_block(statement.then_branch, decl, locals, assignable_locals);
     validate_statement_block(statement.else_branch, decl, locals, assignable_locals);
+  } else if (statement.kind == StatementKind::While) {
+    require_type(statement.expr, locals, TypeKind::Bool, "while condition");
+    std::unordered_set<std::string> invariant_names;
+    for (const auto& invariant : statement.loop_invariants) {
+      if (!invariant_names.insert(invariant.name).second) {
+        throw Diagnostic(invariant.range, "duplicate loop invariant '" + invariant.name + "'");
+      }
+      validate_predicate(invariant, locals, "loop invariant");
+    }
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals);
   } else if (statement.kind == StatementKind::Assume) {
     require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
   } else if (statement.kind == StatementKind::Assert) {

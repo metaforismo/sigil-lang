@@ -44,6 +44,7 @@ enum class TokenKind {
   Let,
   If,
   Else,
+  While,
   Assume,
   Assert,
   Return,

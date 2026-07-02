@@ -87,6 +87,19 @@ void emit_native_statement(std::ostringstream& out, const Statement& statement,
       emit_native_statement(out, nested, indent + "    ");
     }
     return;
+  case StatementKind::While:
+    out << indent << "while @" << statement.range.display() << "\n";
+    emit_native_expr_line(out, indent + "  ", "condition", statement.expr);
+    out << indent << "  invariants\n";
+    for (const auto& invariant : statement.loop_invariants) {
+      out << indent << "    " << invariant.name << " @" << invariant.range.display() << ": "
+          << display_expr(invariant.expr) << "\n";
+    }
+    out << indent << "  body\n";
+    for (const auto& nested : statement.then_branch) {
+      emit_native_statement(out, nested, indent + "    ");
+    }
+    return;
   case StatementKind::Assume:
     out << indent << "assume " << statement.name << " @" << statement.range.display() << "\n";
     emit_native_expr_line(out, indent + "  ", "predicate", statement.expr);
@@ -175,6 +188,15 @@ void emit_debug_statement_locations(std::ostringstream& out, const Statement& st
     emit_debug_expr_locations(out, prefix + "expr.if.condition", statement.expr);
     emit_debug_nested_statements(out, prefix + "then.", statement.then_branch);
     emit_debug_nested_statements(out, prefix + "else.", statement.else_branch);
+    return;
+  case StatementKind::While:
+    emit_debug_location(out, prefix + "statement.while", statement.range);
+    emit_debug_expr_locations(out, prefix + "expr.while.condition", statement.expr);
+    for (const auto& invariant : statement.loop_invariants) {
+      emit_debug_location(out, prefix + "invariant." + invariant.name, invariant.range);
+      emit_debug_expr_locations(out, prefix + "expr.invariant." + invariant.name, invariant.expr);
+    }
+    emit_debug_nested_statements(out, prefix + "body.", statement.then_branch);
     return;
   case StatementKind::Assume:
     emit_debug_location(out, prefix + "statement.assume." + statement.name, statement.range);
@@ -357,6 +379,10 @@ bool statement_is_lowerable(const Statement& statement, LoweringDiagnostic& diag
     return expression_is_lowerable(statement.expr, diagnostic) &&
            statements_are_lowerable(statement.then_branch, diagnostic) &&
            statements_are_lowerable(statement.else_branch, diagnostic);
+  case StatementKind::While:
+    diagnostic =
+        make_lowering_diagnostic("while loops are not native-lowered yet", statement.range);
+    return false;
   }
 
   diagnostic = make_lowering_diagnostic("unknown statement kind", statement.range);
@@ -691,6 +717,8 @@ private:
     case StatementKind::If:
       lower_if_statement(statement, variables, state);
       return;
+    case StatementKind::While:
+      throw LoweringError("while loops are not native-lowered yet", statement.range);
     case StatementKind::Assume:
     case StatementKind::Assert:
       return;

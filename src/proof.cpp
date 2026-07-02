@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace sigil {
@@ -352,7 +353,7 @@ NamedPredicate make_guarded_fact(const Expr& condition, const NamedPredicate& fa
 
 void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
                         ProofContext& context, int& assert_index, int& return_index,
-                        std::vector<ProofObligation>& obligations);
+                        int& loop_index, std::vector<ProofObligation>& obligations);
 
 void preserve_branch_facts(const Expr& condition, const ProofContext& branch,
                            std::size_t fact_start, bool then_branch, ProofContext& target) {
@@ -395,8 +396,100 @@ void merge_branch_bindings(const Statement& statement, const Expr& condition,
   }
 }
 
+void collect_assigned_names(const std::vector<Statement>& statements,
+                            std::unordered_set<std::string>& names) {
+  for (const auto& statement : statements) {
+    if (statement.kind == StatementKind::Assign) {
+      names.insert(statement.name);
+    } else if (statement.kind == StatementKind::If) {
+      collect_assigned_names(statement.then_branch, names);
+      collect_assigned_names(statement.else_branch, names);
+    } else if (statement.kind == StatementKind::While) {
+      collect_assigned_names(statement.then_branch, names);
+    }
+  }
+}
+
+std::unordered_set<std::string> assigned_outer_names(const Statement& statement,
+                                                     const ProofContext& context) {
+  std::unordered_set<std::string> assigned;
+  collect_assigned_names(statement.then_branch, assigned);
+
+  std::unordered_set<std::string> outer_names;
+  for (const auto& name : assigned) {
+    if (context.bindings.find(name) != context.bindings.end()) {
+      outer_names.insert(name);
+    }
+  }
+  return outer_names;
+}
+
+bool predicate_mentions_any_symbol(const NamedPredicate& predicate,
+                                   const std::unordered_set<std::string>& symbols) {
+  std::vector<std::string> identifiers;
+  collect_identifiers(predicate.expr, identifiers);
+  for (const auto& identifier : identifiers) {
+    if (symbols.find(identifier) != symbols.end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::unordered_set<std::string>
+current_symbols_for_names(const ProofContext& context,
+                          const std::unordered_set<std::string>& names) {
+  std::unordered_set<std::string> symbols;
+  for (const auto& name : names) {
+    const auto found = context.bindings.find(name);
+    if (found != context.bindings.end()) {
+      symbols.insert(found->second);
+    }
+  }
+  return symbols;
+}
+
+std::vector<NamedPredicate>
+filter_stale_mutable_facts(const ProofContext& context,
+                           const std::unordered_set<std::string>& assigned_names) {
+  const auto stale_symbols = current_symbols_for_names(context, assigned_names);
+  std::vector<NamedPredicate> facts;
+  facts.reserve(context.active.size());
+  for (const auto& predicate : context.active) {
+    if (!predicate_mentions_any_symbol(predicate, stale_symbols)) {
+      facts.push_back(predicate);
+    }
+  }
+  return facts;
+}
+
+void rebind_loop_state(const Statement& statement, ProofContext& context,
+                       const std::unordered_set<std::string>& assigned_names,
+                       const std::string& purpose) {
+  for (const auto& name : assigned_names) {
+    const auto current = context.bindings.at(name);
+    const auto symbol = scoped_symbol(name, statement.location, purpose);
+    context.symbols[symbol] = context.symbols.at(current);
+    context.bindings[name] = symbol;
+  }
+}
+
+ProofObligation make_loop_obligation(const FunctionDecl& fn, const Statement& statement,
+                                     int loop_index, int invariant_index, const std::string& phase,
+                                     const NamedPredicate& invariant, const ProofContext& context) {
+  ProofObligation obligation;
+  obligation.name = "fn." + fn.name + ".loop." + std::to_string(loop_index) + ".invariant." +
+                    std::to_string(invariant_index) + "." + invariant.name + "." + phase;
+  obligation.location = invariant.location;
+  obligation.range = invariant.range.start.line == 0 ? statement.range : invariant.range;
+  obligation.assumptions = context.active;
+  obligation.goal = rewrite_predicate(invariant, context.bindings);
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 void process_if_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
-                          int& assert_index, int& return_index,
+                          int& assert_index, int& return_index, int& loop_index,
                           std::vector<ProofObligation>& obligations) {
   const auto condition = rewrite_expr(statement.expr, context.bindings);
 
@@ -405,22 +498,70 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
   then_context.active.push_back(make_branch_condition(condition, true));
   const auto then_fact_start = then_context.active.size();
   process_statements(statement.then_branch, fn, then_context, assert_index, return_index,
-                     obligations);
+                     loop_index, obligations);
 
   auto else_context = context;
   else_context.scope_depth = context.scope_depth + 1;
   else_context.active.push_back(make_branch_condition(condition, false));
   const auto else_fact_start = else_context.active.size();
   process_statements(statement.else_branch, fn, else_context, assert_index, return_index,
-                     obligations);
+                     loop_index, obligations);
 
   preserve_branch_facts(condition, then_context, then_fact_start, true, context);
   preserve_branch_facts(condition, else_context, else_fact_start, false, context);
   merge_branch_bindings(statement, condition, then_context, else_context, context);
 }
 
+void process_while_statement(const Statement& statement, const FunctionDecl& fn,
+                             ProofContext& context, int& assert_index, int& return_index,
+                             int& loop_index, std::vector<ProofObligation>& obligations) {
+  ++loop_index;
+  const auto current_loop = loop_index;
+
+  int invariant_index = 0;
+  for (const auto& invariant : statement.loop_invariants) {
+    ++invariant_index;
+    obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
+                                               "initial", invariant, context));
+  }
+
+  const auto assigned_names = assigned_outer_names(statement, context);
+
+  ProofContext head_context = context;
+  head_context.active = filter_stale_mutable_facts(context, assigned_names);
+  rebind_loop_state(statement, head_context, assigned_names, "loop");
+  for (const auto& invariant : statement.loop_invariants) {
+    head_context.active.push_back(rewrite_predicate(invariant, head_context.bindings));
+  }
+  head_context.active.push_back(
+      NamedPredicate{"while_condition", rewrite_expr(statement.expr, head_context.bindings),
+                     statement.location, statement.expr ? statement.expr->range : statement.range});
+
+  auto body_context = head_context;
+  body_context.scope_depth = context.scope_depth + 1;
+  process_statements(statement.then_branch, fn, body_context, assert_index, return_index,
+                     loop_index, obligations);
+
+  invariant_index = 0;
+  for (const auto& invariant : statement.loop_invariants) {
+    ++invariant_index;
+    obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
+                                               "preserved", invariant, body_context));
+  }
+
+  context.active = filter_stale_mutable_facts(context, assigned_names);
+  rebind_loop_state(statement, context, assigned_names, "loop_exit");
+  for (const auto& invariant : statement.loop_invariants) {
+    context.active.push_back(rewrite_predicate(invariant, context.bindings));
+  }
+  auto exit_condition =
+      make_unary(UnaryOp::Not, rewrite_expr(statement.expr, context.bindings), statement.range);
+  context.active.push_back(
+      NamedPredicate{"while_exit", exit_condition, statement.location, statement.range});
+}
+
 void process_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
-                       int& assert_index, int& return_index,
+                       int& assert_index, int& return_index, int& loop_index,
                        std::vector<ProofObligation>& obligations) {
   if (statement.kind == StatementKind::Let) {
     const auto symbol = context.scope_depth == 0
@@ -444,7 +585,11 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     context.active.push_back(
         NamedPredicate{"assign_" + statement.name, equality, statement.location, statement.range});
   } else if (statement.kind == StatementKind::If) {
-    process_if_statement(statement, fn, context, assert_index, return_index, obligations);
+    process_if_statement(statement, fn, context, assert_index, return_index, loop_index,
+                         obligations);
+  } else if (statement.kind == StatementKind::While) {
+    process_while_statement(statement, fn, context, assert_index, return_index, loop_index,
+                            obligations);
   } else if (statement.kind == StatementKind::Assume) {
     context.active.push_back(NamedPredicate{statement.name,
                                             rewrite_expr(statement.expr, context.bindings),
@@ -477,9 +622,9 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
 
 void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
                         ProofContext& context, int& assert_index, int& return_index,
-                        std::vector<ProofObligation>& obligations) {
+                        int& loop_index, std::vector<ProofObligation>& obligations) {
   for (const auto& statement : statements) {
-    process_statement(statement, fn, context, assert_index, return_index, obligations);
+    process_statement(statement, fn, context, assert_index, return_index, loop_index, obligations);
   }
 }
 
@@ -503,7 +648,8 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     }
     int assert_index = 0;
     int return_index = 0;
-    process_statements(fn.body, fn, context, assert_index, return_index, obligations);
+    int loop_index = 0;
+    process_statements(fn.body, fn, context, assert_index, return_index, loop_index, obligations);
 
     int ensure_index = 0;
     for (const auto& ensure : fn.ensures) {

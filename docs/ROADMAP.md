@@ -22,6 +22,7 @@ tests, and docs are in the repo.
 - [x] Add statement-level `if` and join proof contexts at merge points.
 - [x] Add assignment with explicit mutation rules.
 - [x] Validate non-void return coverage across scalar control flow.
+- [x] Add loops with user-written invariants.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
 - [x] Emit native lowering diagnostics with source ranges.
@@ -34,12 +35,12 @@ tests, and docs are in the repo.
 ## Immediate Queue
 
 - [ ] Extend scalar validation into a complete language type checker.
-- [ ] Add loops with user-written invariants.
+- [ ] Generate weakest-precondition obligations for control flow.
 
 ## Core Language
 
 - [ ] Extend scalar validation into a complete language type checker.
-- [ ] Add loops with user-written invariants.
+- [x] Add loops with user-written invariants.
 - [ ] Add simple user-defined struct values.
 - [ ] Generate weakest-precondition obligations for control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.

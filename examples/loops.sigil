@@ -1,0 +1,30 @@
+module loops;
+
+fn count_to(n: i64) -> i64
+requires non_negative: n >= 0;
+ensures exact: result == n;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+
+fn clamp_with_loop(start: i64, limit: i64) -> i64
+requires start_non_negative: start >= 0;
+requires ordered: start <= limit;
+ensures bounded: result <= limit;
+{
+  let value: i64 = start;
+  while value < limit
+  invariant lower: value >= start;
+  invariant upper: value <= limit;
+  {
+    value = value + 1;
+  }
+  return value;
+}

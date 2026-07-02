@@ -70,6 +70,12 @@ if size >= 0 {
 } else {
   assume impossible: false;
 }
+while next < capacity
+invariant lower_bound: next >= 0;
+invariant upper_bound: next <= capacity;
+{
+  next = next + 1;
+}
 return next;
 ```
 
@@ -97,12 +103,18 @@ guarded by the branch condition, so a fact from only one branch is not treated a
 unconditionally true. Local bindings declared inside a branch are scoped to that
 branch.
 
+`while condition` requires one or more `invariant name: predicate;` clauses
+before the body. Sigil proves each invariant before entering the loop and proves
+that one symbolic iteration preserves it. After the loop, the prover assumes the
+invariants and the negated loop condition for the loop-exit state. Locals
+declared inside the loop body are scoped to the body.
+
 Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local
 details.
 
-The current body language is deliberately tiny. Loops, references, and memory
-operations will require proper control-flow and weakest-precondition generation.
+The current body language is deliberately tiny. References and memory operations
+will require proper control-flow and weakest-precondition generation.
 
 ## Expressions
 
@@ -127,6 +139,6 @@ language.
 
 The native GCC JIT backend lowers the scalar subset that has a clear source to
 native mapping today. It supports `+`, `-`, `*`, comparisons, equality, boolean
-operators, conditionals, locals, assignment, and returns. Division and modulo
-remain proof-language constructs until their exact runtime semantics are pinned
-down.
+operators, conditionals, locals, assignment, and returns. Loops, division, and
+modulo remain proof-language constructs until their exact runtime semantics are
+pinned down for native lowering.

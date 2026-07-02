@@ -41,6 +41,9 @@ int main() {
                           "expected ';' after return statement", 4, 1);
   expect_parse_diagnostic("module broken;\nwat\n", "expected struct or function declaration", 2, 1,
                           "parse-error.sigil:2:1-3");
+  expect_parse_diagnostic(
+      "module broken;\nfn nope(x: i64) -> i64 {\n  while x < 10 {\n  }\n  return x;\n}\n",
+      "expected at least one invariant before while body", 3, 16);
 
   const char* source = R"(
 module cache;
@@ -70,6 +73,18 @@ fn choose(x: i64) -> i64
     return -x;
   }
 }
+
+fn count_to(n: i64) -> i64
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
 )";
 
   const auto module = sigil::parse_source(source, "inline.sigil");
@@ -77,7 +92,7 @@ fn choose(x: i64) -> i64
   expect(module.structs.size() == 1, "struct count");
   expect(module.structs[0].fields.size() == 2, "field count");
   expect(module.structs[0].invariants.size() == 1, "invariant count");
-  expect(module.functions.size() == 2, "function count");
+  expect(module.functions.size() == 3, "function count");
   expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
   expect(module.functions[0].body.size() == 5, "body count");
@@ -104,5 +119,11 @@ fn choose(x: i64) -> i64
   expect(module.functions[1].body[0].else_branch.size() == 1, "else branch count");
   expect(module.functions[1].body[0].range.display() == "inline.sigil:23:3-27:3",
          "if statement range");
+  expect(module.functions[2].body.size() == 3, "loop function body count");
+  expect(module.functions[2].body[1].kind == sigil::StatementKind::While, "while statement kind");
+  expect(module.functions[2].body[1].loop_invariants.size() == 2, "loop invariant count");
+  expect(module.functions[2].body[1].loop_invariants[0].name == "lower", "loop invariant name");
+  expect(sigil::display_expr(module.functions[2].body[1].expr) == "(i < n)", "while condition");
+  expect(module.functions[2].body[1].then_branch.size() == 1, "while body count");
   return 0;
 }

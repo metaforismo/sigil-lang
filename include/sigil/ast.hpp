@@ -129,6 +129,7 @@ enum class StatementKind {
   Let,
   Assign,
   If,
+  While,
   Assume,
   Assert,
   Return,
@@ -139,6 +140,7 @@ struct Statement {
   std::string name;
   Type type;
   Expr expr;
+  std::vector<NamedPredicate> loop_invariants;
   std::vector<Statement> then_branch;
   std::vector<Statement> else_branch;
   SourceLocation location;

@@ -51,6 +51,13 @@ learned in the else branch is merged as `c || fact`. This keeps branch-local
 reasoning useful for later obligations without treating one branch's facts as
 globally true.
 
+Loops are represented through user-written invariants. For each `while`, Sigil
+emits an initialization obligation for every invariant and a preservation
+obligation that assumes the invariant and loop condition, symbolically checks
+one body iteration, and proves the invariant again. Values assigned in the loop
+are treated as fresh loop-exit symbols after the loop; only the invariant and
+the negated loop condition survive for those mutated values.
+
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
 

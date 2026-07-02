@@ -29,6 +29,8 @@ production verifier yet.
   to SMT `ite`.
 - Statement-level `if`/`else` branches with branch-local proof contexts and
   guarded facts at merge points.
+- `while` loops with user-written invariants, initialization and preservation
+  proof obligations, and loop-exit facts.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   return types, and non-void return coverage.
 - Verification-condition generation for function assertions and postconditions.
@@ -168,7 +170,6 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are:
 
 - type checking beyond the current scalar proof-expression validator;
-- loops with user-written invariants;
 - weakest-precondition generation for real control flow;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;

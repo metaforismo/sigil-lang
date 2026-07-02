@@ -255,6 +255,12 @@ if(SIGIL_Z3_EXECUTABLE)
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(
+    NAME sigil_z3_loops
+    COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/loops.sigil" --strict)
+  set_tests_properties(sigil_z3_loops PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
     NAME sigil_z3_refuted_example
     COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_refuted.sh"
             "$<TARGET_FILE:sigil>"

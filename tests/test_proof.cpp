@@ -158,5 +158,42 @@ ensures preserved: result >= 0;
          "branch assignment creates join symbol");
   expect(branch_assignment_smt.find("(ite flag") != std::string::npos,
          "branch assignment join uses ite");
+
+  const char* loop_source = R"(
+module loops;
+
+fn count_to(n: i64) -> i64
+requires non_negative: n >= 0;
+ensures exact: result == n;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)";
+
+  const auto loop_module = sigil::parse_source(loop_source, "loops.sigil");
+  const auto loop_obligations = sigil::build_obligations(loop_module);
+  expect(loop_obligations.size() == 5, "loop invariants plus ensure obligations");
+  expect(loop_obligations[0].name == "fn.count_to.loop.1.invariant.1.lower.initial",
+         "loop initial invariant name");
+  expect(loop_obligations[2].name == "fn.count_to.loop.1.invariant.1.lower.preserved",
+         "loop preserved invariant name");
+  expect(loop_obligations[4].name == "fn.count_to.ensures.1.exact", "loop ensure name");
+  const auto loop_preserve_smt = sigil::emit_smt_lib(loop_obligations[3]);
+  expect(loop_preserve_smt.find("i_loop_") != std::string::npos,
+         "loop preservation uses loop head symbol");
+  expect(loop_preserve_smt.find("i_assign_") != std::string::npos,
+         "loop preservation uses assigned symbol");
+  const auto loop_ensure_smt = sigil::emit_smt_lib(loop_obligations[4]);
+  expect(loop_ensure_smt.find("i_loop_exit_") != std::string::npos,
+         "loop ensure uses loop exit symbol");
+  expect(loop_ensure_smt.find("(not (< i_loop_exit_") != std::string::npos,
+         "loop ensure assumes exit condition");
   return 0;
 }
