@@ -1,0 +1,15 @@
+module division;
+
+fn quotient(x: i64, y: i64) -> i64
+requires divisor_nonzero: y != 0;
+ensures exact: result == x / y;
+{
+  return x / y;
+}
+
+fn guarded_quotient(flag: bool, x: i64, y: i64) -> i64
+requires divisor_safe_when_used: !flag || y != 0;
+{
+  let value: i64 = if flag { x / y } else { 0 };
+  return value;
+}

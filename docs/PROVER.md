@@ -45,6 +45,13 @@ states.
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 
+Division and modulo are guarded by safety obligations. Every `/` or `%`
+expression creates a `divisor_nonzero` obligation under the active assumptions
+at the point where the expression is evaluated. Conditional expressions are
+checked branch-sensitively: a divisor used only in the then branch is checked
+under the condition, and a divisor used only in the else branch is checked under
+the negated condition.
+
 Statement-level branches are represented with guarded facts at merge points. A
 fact learned in the then branch of `if c` is merged as `!c || fact`; a fact
 learned in the else branch is merged as `c || fact`. This keeps branch-local

@@ -91,6 +91,59 @@ ensures non_negative: result >= 0;
   expect(timeout_smt.find("(set-option :timeout 250)") != std::string::npos,
          "emits solver timeout");
 
+  const char* division_source = R"(
+module division;
+
+fn safe_div(x: i64, y: i64) -> i64
+requires nonzero: y != 0;
+ensures exact: result == x / y;
+{
+  return x / y;
+}
+
+fn unsafe_div(x: i64, y: i64) -> i64
+{
+  return x / y;
+}
+
+fn guarded_div(flag: bool, x: i64, y: i64) -> i64
+requires safe_when_used: !flag || y != 0;
+{
+  let q: i64 = if flag { x / y } else { 0 };
+  return q;
+}
+)";
+
+  const auto division_module = sigil::parse_source(division_source, "division.sigil");
+  const auto division_obligations = sigil::build_obligations(division_module);
+  expect(division_obligations.size() == 5, "division emits safety and ensure obligations");
+  expect(division_obligations[0].name == "fn.safe_div.safety.1.divisor_nonzero",
+         "safe return division safety name");
+  expect(division_obligations[1].name == "fn.safe_div.safety.2.divisor_nonzero",
+         "safe ensure division safety name");
+  expect(division_obligations[2].name == "fn.safe_div.ensures.1.exact",
+         "safe division ensure name");
+  expect(division_obligations[3].name == "fn.unsafe_div.safety.1.divisor_nonzero",
+         "unsafe division safety name");
+  expect(division_obligations[4].name == "fn.guarded_div.safety.1.divisor_nonzero",
+         "guarded branch division safety name");
+  expect(division_obligations[0].range.display() == "division.sigil:8:14",
+         "return division safety points to divisor");
+  const auto division_results = sigil::verify_obligations(division_obligations, false);
+  expect(division_results[0].status == sigil::VerificationStatus::Proven,
+         "precondition proves return divisor safety locally");
+  expect(division_results[1].status == sigil::VerificationStatus::Proven,
+         "precondition proves ensure divisor safety locally");
+  expect(division_results[2].status == sigil::VerificationStatus::Proven,
+         "return equality proves exact ensure locally");
+  expect(division_results[3].status == sigil::VerificationStatus::Unknown,
+         "unsafe divisor needs solver counterexample");
+  const auto guarded_smt = sigil::emit_smt_lib(division_obligations[4]);
+  expect(guarded_smt.find("(assert (or (not flag) (distinct y 0)))") != std::string::npos,
+         "guarded safety keeps precondition");
+  expect(guarded_smt.find("(assert flag)") != std::string::npos,
+         "guarded safety assumes selected branch");
+
   const char* branch_source = R"(
 module branches;
 

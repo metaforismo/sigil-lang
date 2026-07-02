@@ -136,6 +136,11 @@ Conditional expressions require a `bool` condition, and both branches must have
 the same non-void type. They are expressions, not statement blocks: each branch
 contains one expression.
 
+Every division or modulo expression creates a compile-time proof obligation
+that the divisor is nonzero. The obligation is checked in the expression's
+active control-flow context, so a divisor used only inside one conditional
+branch can rely on that branch condition.
+
 These expressions are also the proof language. There is no separate annotation
 language.
 

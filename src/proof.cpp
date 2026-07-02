@@ -348,6 +348,59 @@ NamedPredicate make_branch_condition(const Expr& condition, bool then_branch) {
   return NamedPredicate{"if_else", negated, condition->location, condition->range};
 }
 
+bool needs_nonzero_divisor(BinaryOp op) {
+  return op == BinaryOp::Divide || op == BinaryOp::Modulo;
+}
+
+ProofObligation make_safety_obligation(const FunctionDecl& fn, int safety_index,
+                                       const Expr& divisor, const ProofContext& context) {
+  ProofObligation obligation;
+  obligation.name =
+      "fn." + fn.name + ".safety." + std::to_string(safety_index) + ".divisor_nonzero";
+  obligation.location = divisor ? divisor->location : SourceLocation{};
+  obligation.range = divisor && divisor->range.start.line != 0
+                         ? divisor->range
+                         : SourceRange{obligation.location, obligation.location};
+  obligation.assumptions = context.active;
+  auto zero = make_integer(0, obligation.range);
+  auto goal = make_binary(BinaryOp::NotEqual, divisor, zero, obligation.range);
+  obligation.goal = NamedPredicate{"divisor_nonzero", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
+void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& fn,
+                                          const ProofContext& context, int& safety_index,
+                                          std::vector<ProofObligation>& obligations) {
+  if (!expr) {
+    return;
+  }
+
+  if (expr->kind == ExprNode::Kind::If) {
+    append_expression_safety_obligations(expr->condition, fn, context, safety_index, obligations);
+
+    const auto condition = rewrite_expr(expr->condition, context.bindings);
+    auto then_context = context;
+    then_context.active.push_back(make_branch_condition(condition, true));
+    append_expression_safety_obligations(expr->lhs, fn, then_context, safety_index, obligations);
+
+    auto else_context = context;
+    else_context.active.push_back(make_branch_condition(condition, false));
+    append_expression_safety_obligations(expr->rhs, fn, else_context, safety_index, obligations);
+    return;
+  }
+
+  append_expression_safety_obligations(expr->condition, fn, context, safety_index, obligations);
+  append_expression_safety_obligations(expr->lhs, fn, context, safety_index, obligations);
+  append_expression_safety_obligations(expr->rhs, fn, context, safety_index, obligations);
+
+  if (expr->kind == ExprNode::Kind::Binary && needs_nonzero_divisor(expr->binary_op)) {
+    ++safety_index;
+    obligations.push_back(make_safety_obligation(
+        fn, safety_index, rewrite_expr(expr->rhs, context.bindings), context));
+  }
+}
+
 NamedPredicate make_guarded_fact(const Expr& condition, const NamedPredicate& fact,
                                  bool then_branch) {
   Expr guard_condition = condition;
@@ -361,7 +414,8 @@ NamedPredicate make_guarded_fact(const Expr& condition, const NamedPredicate& fa
 
 void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
                         ProofContext& context, int& assert_index, int& return_index,
-                        int& loop_index, std::vector<ProofObligation>& obligations);
+                        int& loop_index, int& safety_index,
+                        std::vector<ProofObligation>& obligations);
 
 void preserve_branch_facts(const Expr& condition, const ProofContext& branch,
                            std::size_t fact_start, bool then_branch, ProofContext& target) {
@@ -504,8 +558,9 @@ ProofObligation make_loop_obligation(const FunctionDecl& fn, const Statement& st
 }
 
 void process_if_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
-                          int& assert_index, int& return_index, int& loop_index,
+                          int& assert_index, int& return_index, int& loop_index, int& safety_index,
                           std::vector<ProofObligation>& obligations) {
+  append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
   const auto condition = rewrite_expr(statement.expr, context.bindings);
   const auto return_start = context.returns.size();
   const auto parent_scope_depth = context.scope_depth;
@@ -515,14 +570,14 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
   then_context.active.push_back(make_branch_condition(condition, true));
   const auto then_fact_start = then_context.active.size();
   process_statements(statement.then_branch, fn, then_context, assert_index, return_index,
-                     loop_index, obligations);
+                     loop_index, safety_index, obligations);
 
   auto else_context = context;
   else_context.scope_depth = context.scope_depth + 1;
   else_context.active.push_back(make_branch_condition(condition, false));
   const auto else_fact_start = else_context.active.size();
   process_statements(statement.else_branch, fn, else_context, assert_index, return_index,
-                     loop_index, obligations);
+                     loop_index, safety_index, obligations);
 
   std::vector<ProofContext::ReturnPath> merged_returns = context.returns;
   append_new_returns(then_context, return_start, merged_returns);
@@ -556,12 +611,15 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
 
 void process_while_statement(const Statement& statement, const FunctionDecl& fn,
                              ProofContext& context, int& assert_index, int& return_index,
-                             int& loop_index, std::vector<ProofObligation>& obligations) {
+                             int& loop_index, int& safety_index,
+                             std::vector<ProofObligation>& obligations) {
   ++loop_index;
   const auto current_loop = loop_index;
 
+  append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
   int invariant_index = 0;
   for (const auto& invariant : statement.loop_invariants) {
+    append_expression_safety_obligations(invariant.expr, fn, context, safety_index, obligations);
     ++invariant_index;
     obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
                                                "initial", invariant, context));
@@ -576,6 +634,7 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   for (const auto& invariant : statement.loop_invariants) {
     head_context.active.push_back(rewrite_predicate(invariant, head_context.bindings));
   }
+  append_expression_safety_obligations(statement.expr, fn, head_context, safety_index, obligations);
   head_context.active.push_back(
       NamedPredicate{"while_condition", rewrite_expr(statement.expr, head_context.bindings),
                      statement.location, statement.expr ? statement.expr->range : statement.range});
@@ -583,11 +642,13 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   auto body_context = head_context;
   body_context.scope_depth = context.scope_depth + 1;
   process_statements(statement.then_branch, fn, body_context, assert_index, return_index,
-                     loop_index, obligations);
+                     loop_index, safety_index, obligations);
 
   if (!body_context.terminated) {
     invariant_index = 0;
     for (const auto& invariant : statement.loop_invariants) {
+      append_expression_safety_obligations(invariant.expr, fn, body_context, safety_index,
+                                           obligations);
       ++invariant_index;
       obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
                                                  "preserved", invariant, body_context));
@@ -607,9 +668,10 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
 }
 
 void process_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
-                       int& assert_index, int& return_index, int& loop_index,
+                       int& assert_index, int& return_index, int& loop_index, int& safety_index,
                        std::vector<ProofObligation>& obligations) {
   if (statement.kind == StatementKind::Let) {
+    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     const auto symbol = context.scope_depth == 0
                             ? statement.name
                             : scoped_symbol(statement.name, statement.location, "local");
@@ -621,6 +683,7 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     context.active.push_back(
         NamedPredicate{"let_" + statement.name, equality, statement.location, statement.range});
   } else if (statement.kind == StatementKind::Assign) {
+    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     const auto current = context.bindings.at(statement.name);
     const auto value = rewrite_expr(statement.expr, context.bindings);
     const auto symbol = scoped_symbol(statement.name, statement.location, "assign");
@@ -632,15 +695,17 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
         NamedPredicate{"assign_" + statement.name, equality, statement.location, statement.range});
   } else if (statement.kind == StatementKind::If) {
     process_if_statement(statement, fn, context, assert_index, return_index, loop_index,
-                         obligations);
+                         safety_index, obligations);
   } else if (statement.kind == StatementKind::While) {
     process_while_statement(statement, fn, context, assert_index, return_index, loop_index,
-                            obligations);
+                            safety_index, obligations);
   } else if (statement.kind == StatementKind::Assume) {
+    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     context.active.push_back(NamedPredicate{statement.name,
                                             rewrite_expr(statement.expr, context.bindings),
                                             statement.location, statement.range});
   } else if (statement.kind == StatementKind::Assert) {
+    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     ++assert_index;
     ProofObligation obligation;
     obligation.name =
@@ -656,6 +721,7 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
                                             rewrite_expr(statement.expr, context.bindings),
                                             statement.location, statement.range});
   } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
+    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     ++return_index;
     const auto return_name = "return_" + std::to_string(return_index);
     auto equality = make_binary(BinaryOp::Equal,
@@ -672,12 +738,14 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
 
 void process_statements(const std::vector<Statement>& statements, const FunctionDecl& fn,
                         ProofContext& context, int& assert_index, int& return_index,
-                        int& loop_index, std::vector<ProofObligation>& obligations) {
+                        int& loop_index, int& safety_index,
+                        std::vector<ProofObligation>& obligations) {
   for (const auto& statement : statements) {
     if (context.terminated) {
       break;
     }
-    process_statement(statement, fn, context, assert_index, return_index, loop_index, obligations);
+    process_statement(statement, fn, context, assert_index, return_index, loop_index, safety_index,
+                      obligations);
   }
 }
 
@@ -697,8 +765,14 @@ void append_ensure_obligation(const FunctionDecl& fn, const NamedPredicate& ensu
                               const SymbolTable& symbols,
                               const std::unordered_map<std::string, std::string>& bindings,
                               const ProofContext::ReturnPath* return_path,
-                              std::size_t return_path_count,
+                              std::size_t return_path_count, int& safety_index,
                               std::vector<ProofObligation>& obligations) {
+  ProofContext ensure_context;
+  ensure_context.symbols = symbols;
+  ensure_context.bindings = bindings;
+  ensure_context.active = assumptions;
+  append_expression_safety_obligations(ensure.expr, fn, ensure_context, safety_index, obligations);
+
   ProofObligation obligation;
   obligation.name =
       ensure_obligation_name(fn, ensure_index, ensure, return_path, return_path_count);
@@ -725,13 +799,17 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       context.bindings["result"] = "result";
     }
 
+    int safety_index = 0;
     for (const auto& precondition : fn.preconditions) {
+      append_expression_safety_obligations(precondition.expr, fn, context, safety_index,
+                                           obligations);
       context.active.push_back(rewrite_predicate(precondition, context.bindings));
     }
     int assert_index = 0;
     int return_index = 0;
     int loop_index = 0;
-    process_statements(fn.body, fn, context, assert_index, return_index, loop_index, obligations);
+    process_statements(fn.body, fn, context, assert_index, return_index, loop_index, safety_index,
+                       obligations);
 
     if (fn.return_type.kind != TypeKind::Void && !context.returns.empty()) {
       for (const auto& return_path : context.returns) {
@@ -740,7 +818,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
           ++ensure_index;
           append_ensure_obligation(fn, ensure, ensure_index, return_path.assumptions,
                                    return_path.symbols, return_path.bindings, &return_path,
-                                   context.returns.size(), obligations);
+                                   context.returns.size(), safety_index, obligations);
         }
       }
     } else {
@@ -748,7 +826,7 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
       for (const auto& ensure : fn.ensures) {
         ++ensure_index;
         append_ensure_obligation(fn, ensure, ensure_index, context.active, context.symbols,
-                                 context.bindings, nullptr, 0, obligations);
+                                 context.bindings, nullptr, 0, safety_index, obligations);
       }
     }
   }

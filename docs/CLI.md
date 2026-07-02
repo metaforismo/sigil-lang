@@ -13,6 +13,10 @@ the local checker cannot prove. Each proof result includes the source range of
 the `assert` or `ensures` clause that produced it. Single-line ranges are
 printed as `file:line:start-end`.
 
+The proof set also includes safety obligations such as
+`fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
+obligations point at the divisor expression that must be proven nonzero.
+
 Options:
 
 - `--dump-smt`: print each emitted SMT-LIB query to stdout.
