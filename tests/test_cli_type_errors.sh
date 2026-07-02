@@ -208,3 +208,31 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "while bodies cannot contain return statements yet" >/dev/null
 printf '%s\n' "$output" | grep "return-inside-while.sigil:9:5-13" >/dev/null
+
+source_file="$outdir/duplicate-invariant-proof-label.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn duplicate_invariant_proof_label(n: i64) -> i64
+{
+  let i: i64 = 0;
+  assert bound: i >= 0;
+  while i < n
+  invariant bound: i >= 0;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "duplicate proof label 'bound'" >/dev/null
+printf '%s\n' "$output" | grep "duplicate-invariant-proof-label.sigil:8:3-26" >/dev/null

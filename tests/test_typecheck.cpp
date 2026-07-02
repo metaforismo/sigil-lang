@@ -436,6 +436,22 @@ fn duplicate_loop_invariant(x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn duplicate_invariant_proof_label(n: i64) -> i64
+{
+  let i: i64 = 0;
+  assert bound: i >= 0;
+  while i < n
+  invariant bound: i >= 0;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)",
+                    "duplicate proof label 'bound'");
+
+  expect_diagnostic(R"(
+module bad;
 fn return_inside_while(n: i64) -> i64
 {
   let i: i64 = 0;

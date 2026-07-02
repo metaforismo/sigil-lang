@@ -226,14 +226,19 @@ void validate_statement_block(const std::vector<Statement>& statements, const Fu
   }
 }
 
+void validate_proof_label(const std::string& name, const SourceRange& range,
+                          std::unordered_set<std::string>& proof_labels) {
+  if (!proof_labels.insert(name).second) {
+    throw Diagnostic(range, "duplicate proof label '" + name + "'");
+  }
+}
+
 void validate_statement_label(const Statement& statement,
                               std::unordered_set<std::string>& proof_labels) {
   if (!statement.has_explicit_label) {
     return;
   }
-  if (!proof_labels.insert(statement.name).second) {
-    throw Diagnostic(statement.range, "duplicate proof label '" + statement.name + "'");
-  }
+  validate_proof_label(statement.name, statement.range, proof_labels);
 }
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
@@ -278,6 +283,7 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       if (!invariant_names.insert(invariant.name).second) {
         throw Diagnostic(invariant.range, "duplicate loop invariant '" + invariant.name + "'");
       }
+      validate_proof_label(invariant.name, invariant.range, proof_labels);
       validate_predicate(invariant, locals, "loop invariant");
     }
     reject_loop_body_returns(statement.then_branch);
