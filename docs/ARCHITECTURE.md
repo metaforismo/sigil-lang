@@ -38,6 +38,7 @@ system:
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
   escape their loop body;
+- explicit `assume` and `assert` labels must be unique within a function;
 - `result` is only available in postconditions for non-void functions and cannot
   be reused as a parameter or local binding;
 - returns must match the declared function return type;

@@ -161,7 +161,8 @@ void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symb
 }
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
-                        std::unordered_set<std::string>& assignable_locals);
+                        std::unordered_set<std::string>& assignable_locals,
+                        std::unordered_set<std::string>& proof_labels);
 
 bool block_returns(const std::vector<Statement>& statements);
 
@@ -185,20 +186,31 @@ bool block_returns(const std::vector<Statement>& statements) {
 }
 
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
-                              SymbolTable locals,
-                              std::unordered_set<std::string> assignable_locals) {
+                              SymbolTable locals, std::unordered_set<std::string> assignable_locals,
+                              std::unordered_set<std::string>& proof_labels) {
   bool terminated = false;
   for (const auto& statement : statements) {
     if (terminated) {
       throw Diagnostic(statement.range, "unreachable statement after guaranteed return");
     }
-    validate_statement(statement, decl, locals, assignable_locals);
+    validate_statement(statement, decl, locals, assignable_locals, proof_labels);
     terminated = statement_returns(statement);
   }
 }
 
+void validate_statement_label(const Statement& statement,
+                              std::unordered_set<std::string>& proof_labels) {
+  if (!statement.has_explicit_label) {
+    return;
+  }
+  if (!proof_labels.insert(statement.name).second) {
+    throw Diagnostic(statement.range, "duplicate proof label '" + statement.name + "'");
+  }
+}
+
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
-                        std::unordered_set<std::string>& assignable_locals) {
+                        std::unordered_set<std::string>& assignable_locals,
+                        std::unordered_set<std::string>& proof_labels) {
   if (statement.kind == StatementKind::Let) {
     require_unreserved_value_name(statement.name, statement.range,
                                   "local '" + decl.name + "." + statement.name + "'");
@@ -229,8 +241,8 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     }
   } else if (statement.kind == StatementKind::If) {
     require_type(statement.expr, locals, TypeKind::Bool, "if statement condition");
-    validate_statement_block(statement.then_branch, decl, locals, assignable_locals);
-    validate_statement_block(statement.else_branch, decl, locals, assignable_locals);
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels);
+    validate_statement_block(statement.else_branch, decl, locals, assignable_locals, proof_labels);
   } else if (statement.kind == StatementKind::While) {
     require_type(statement.expr, locals, TypeKind::Bool, "while condition");
     std::unordered_set<std::string> invariant_names;
@@ -240,10 +252,12 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       }
       validate_predicate(invariant, locals, "loop invariant");
     }
-    validate_statement_block(statement.then_branch, decl, locals, assignable_locals);
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels);
   } else if (statement.kind == StatementKind::Assume) {
+    validate_statement_label(statement, proof_labels);
     require_type(statement.expr, locals, TypeKind::Bool, "assume statement");
   } else if (statement.kind == StatementKind::Assert) {
+    validate_statement_label(statement, proof_labels);
     require_type(statement.expr, locals, TypeKind::Bool, "assert statement");
   } else if (statement.kind == StatementKind::Return) {
     if (decl.return_type.kind == TypeKind::Void) {
@@ -311,7 +325,8 @@ void validate_function(const FunctionDecl& decl) {
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
-  validate_statement_block(decl.body, decl, locals, assignable_locals);
+  std::unordered_set<std::string> proof_labels;
+  validate_statement_block(decl.body, decl, locals, assignable_locals, proof_labels);
   if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
     throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
   }

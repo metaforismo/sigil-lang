@@ -91,3 +91,26 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "non-void functions must return a value" >/dev/null
 printf '%s\n' "$output" | grep "nonvoid-empty-return.sigil:5:3-9" >/dev/null
+
+source_file="$outdir/duplicate-proof-label.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn duplicate_proof_label(x: i64) -> i64
+{
+  assert repeated: x == x;
+  assume repeated: true;
+  return x;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "duplicate proof label 'repeated'" >/dev/null
+printf '%s\n' "$output" | grep "duplicate-proof-label.sigil:6:3-24" >/dev/null

@@ -220,6 +220,7 @@ Statement Parser::parse_statement() {
     statement.location = keyword.location;
     statement.range = keyword.range;
     if (check(TokenKind::Identifier) && tokens_[current_ + 1].kind == TokenKind::Colon) {
+      statement.has_explicit_label = true;
       statement.name = advance().text;
       consume(TokenKind::Colon, "expected ':' after statement name");
     } else {

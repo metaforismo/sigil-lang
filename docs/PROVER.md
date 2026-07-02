@@ -32,6 +32,10 @@ Each obligation keeps the source range of the `assert` or `ensures` clause that
 created it. The CLI prints that range with every proof result, which makes
 refuted and unknown obligations traceable back to source.
 
+Explicit `assume name:` and `assert name:` labels are validated as unique within
+each function before proof planning. That keeps user-facing obligation names and
+saved SMT artifact names readable as the body grows.
+
 Local `let` bindings are lowered as equality assumptions. This gives the solver
 a simple, checkable representation of straight-line data flow without adding a
 separate proof language.

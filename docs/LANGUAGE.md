@@ -93,6 +93,9 @@ remain tied to the earlier version.
 
 `assume` extends the local proof context. `assert` creates a proof obligation
 from the active context and then becomes available to later obligations.
+Explicit `assume name:` and `assert name:` labels must be unique within a
+function, because they become user-facing proof labels. Unlabeled statements use
+compiler defaults and may repeat.
 `return expr;` can use parameters and local bindings. `return;` is valid only in
 `void` functions. Non-void functions must return a value on every syntactic
 control-flow path. For `if` statements, that means both branches must return

@@ -138,6 +138,7 @@ enum class StatementKind {
 struct Statement {
   StatementKind kind = StatementKind::Assume;
   std::string name;
+  bool has_explicit_label = false;
   Type type;
   Expr expr;
   std::vector<NamedPredicate> loop_invariants;

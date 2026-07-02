@@ -111,6 +111,7 @@ fn observe(flag: bool) -> void
   expect(module.functions[0].body[1].kind == sigil::StatementKind::Assign,
          "assignment statement kind");
   expect(module.functions[0].body[1].name == "y", "assignment target name");
+  expect(module.functions[0].body[2].has_explicit_label, "assert label is explicit");
   expect(sigil::display_expr(module.functions[0].body[0].expr) ==
              "(if (x >= 0) { (x + 1) } else { 1 })",
          "display if expression");
@@ -139,5 +140,6 @@ fn observe(flag: bool) -> void
   expect(!module.functions[3].body[0].then_branch[0].expr, "void return has no expression");
   expect(module.functions[3].body[0].then_branch[0].range.display() == "inline.sigil:45:5-11",
          "void return range");
+  expect(module.functions[3].body[0].else_branch[0].has_explicit_label, "assume label is explicit");
   return 0;
 }

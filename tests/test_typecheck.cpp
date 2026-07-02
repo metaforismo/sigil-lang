@@ -105,6 +105,14 @@ ensures still_non_negative: x >= 0;
     assume keep_going: true;
   }
 }
+
+fn implicit_labels_can_repeat(x: i64) -> i64
+{
+  assert x == x;
+  assume true;
+  assert x >= x;
+  return x;
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -299,6 +307,31 @@ fn duplicate_local(x: i64) -> i64
 }
 )",
                     "duplicate local 'x'");
+
+  expect_diagnostic(R"(
+module bad;
+fn duplicate_proof_label(x: i64) -> i64
+{
+  assert repeated: x == x;
+  assume repeated: true;
+  return x;
+}
+)",
+                    "duplicate proof label 'repeated'");
+
+  expect_diagnostic(R"(
+module bad;
+fn duplicate_branch_proof_label(flag: bool, x: i64) -> i64
+{
+  if flag {
+    assert repeated: x == x;
+  } else {
+    assert repeated: x >= x;
+  }
+  return x;
+}
+)",
+                    "duplicate proof label 'repeated'");
 
   expect_diagnostic(R"(
 module bad;
