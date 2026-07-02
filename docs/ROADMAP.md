@@ -43,6 +43,7 @@ tests, and docs are in the repo.
 - [x] Check `i64` argument ranges for native `sigil run` invocations.
 - [x] Emit native lowering diagnostics with source ranges.
 - [x] Report successful native invocation source ranges.
+- [x] List available functions for unknown `sigil run` targets.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [x] Add debug metadata for mapping native code back to Sigil source.

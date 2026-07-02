@@ -62,3 +62,5 @@ run_and_expect all8 false true true true true false true true true
 run_and_expect observe void true 7
 run_and_expect observe void false 7
 run_and_expect_failure add_one "argument 1 must be an i64" 9223372036854775808
+run_and_expect_failure missing "unknown function: missing"
+run_and_expect_failure missing "available functions: add_one, choose, abs_value"

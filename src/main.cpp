@@ -89,6 +89,21 @@ const sigil::FunctionDecl* find_function(const sigil::Module& module,
   return nullptr;
 }
 
+std::string available_function_names(const sigil::Module& module) {
+  if (module.functions.empty()) {
+    return "(none)";
+  }
+
+  std::ostringstream out;
+  for (std::size_t index = 0; index < module.functions.size(); ++index) {
+    if (index != 0) {
+      out << ", ";
+    }
+    out << module.functions[index].name;
+  }
+  return out.str();
+}
+
 sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::Type& type,
                                             std::size_t index) {
   if (type.kind == sigil::TypeKind::I64) {
@@ -315,7 +330,8 @@ int run_command(const std::vector<std::string>& args) {
 
   const auto* fn = find_function(module, function_name);
   if (!fn) {
-    throw std::runtime_error("unknown function: " + function_name);
+    throw std::runtime_error("unknown function: " + function_name +
+                             "; available functions: " + available_function_names(module));
   }
   if (args.size() - 2 != fn->params.size()) {
     throw std::runtime_error("function '" + function_name + "' expects " +
