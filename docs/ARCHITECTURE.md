@@ -38,7 +38,8 @@ system:
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
   escape their loop body;
-- `result` is only available in postconditions for non-void functions;
+- `result` is only available in postconditions for non-void functions and cannot
+  be reused as a parameter or local binding;
 - returns must match the declared function return type;
 - non-void functions must return a value on every syntactic control-flow path;
 - statements after a guaranteed return path are rejected as unreachable;

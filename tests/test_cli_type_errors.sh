@@ -49,3 +49,24 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "unreachable statement after guaranteed return" >/dev/null
 printf '%s\n' "$output" | grep "unreachable-after-return.sigil:6:3-21" >/dev/null
+
+source_file="$outdir/reserved-result-parameter.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn reserved_result_parameter(result: i64) -> i64
+{
+  return result;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "parameter 'reserved_result_parameter.result' cannot use reserved name 'result'" >/dev/null
+printf '%s\n' "$output" | grep "reserved-result-parameter.sigil:3:30-35" >/dev/null

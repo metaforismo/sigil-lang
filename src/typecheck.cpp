@@ -13,6 +13,10 @@ bool same_type(const Type& lhs, const Type& rhs) {
   return lhs.kind == rhs.kind;
 }
 
+bool is_reserved_value_name(const std::string& name) {
+  return name == "result";
+}
+
 void require_known_type(const Type& type, const SourceRange& range, const std::string& owner) {
   if (type.kind == TypeKind::Unknown) {
     throw Diagnostic(range, owner + " uses unsupported type '" + type.display() + "'");
@@ -32,6 +36,13 @@ void insert_symbol(SymbolTable& symbols, const std::string& name, const Type& ty
     throw Diagnostic(range, "duplicate " + owner + " '" + name + "'");
   }
   symbols[name] = type;
+}
+
+void require_unreserved_value_name(const std::string& name, const SourceRange& range,
+                                   const std::string& owner) {
+  if (is_reserved_value_name(name)) {
+    throw Diagnostic(range, owner + " cannot use reserved name '" + name + "'");
+  }
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols);
@@ -189,6 +200,8 @@ void validate_statement_block(const std::vector<Statement>& statements, const Fu
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals) {
   if (statement.kind == StatementKind::Let) {
+    require_unreserved_value_name(statement.name, statement.range,
+                                  "local '" + decl.name + "." + statement.name + "'");
     require_value_type(statement.type, statement.range,
                        "local '" + decl.name + "." + statement.name + "'");
     const auto actual = infer_expr(statement.expr, locals);
@@ -264,6 +277,8 @@ void validate_struct(const StructDecl& decl) {
 void validate_function(const FunctionDecl& decl) {
   SymbolTable params;
   for (const auto& param : decl.params) {
+    require_unreserved_value_name(param.name, param.range,
+                                  "parameter '" + decl.name + "." + param.name + "'");
     require_value_type(param.type, param.range, "parameter '" + decl.name + "." + param.name + "'");
     insert_symbol(params, param.name, param.type, param.range, "parameter");
   }

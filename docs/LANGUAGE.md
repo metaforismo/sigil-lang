@@ -56,7 +56,8 @@ ensures preserved: result >= 0;
 returned value.
 
 Contract predicates must be boolean. `result` is available only in
-postconditions for non-void functions.
+postconditions for non-void functions. It is a compiler-generated contract
+symbol, so user parameters and local bindings cannot be named `result`.
 
 ## Statements
 

@@ -263,6 +263,26 @@ fn duplicate_local(x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn reserved_result_parameter(result: i64) -> i64
+{
+  return result;
+}
+)",
+                    "parameter 'reserved_result_parameter.result' cannot use reserved name "
+                    "'result'");
+
+  expect_diagnostic(R"(
+module bad;
+fn reserved_result_local(x: i64) -> i64
+{
+  let result: i64 = x;
+  return result;
+}
+)",
+                    "local 'reserved_result_local.result' cannot use reserved name 'result'");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_while_condition(x: i64) -> i64
 {
   let i: i64 = 0;

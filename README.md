@@ -32,8 +32,8 @@ production verifier yet.
 - `while` loops with user-written invariants, initialization and preservation
   proof obligations, and loop-exit facts.
 - Static validation for predicate types, identifier scope, duplicate symbols,
-  return types, non-void return coverage, and unreachable statements after
-  guaranteed returns.
+  reserved contract names, return types, non-void return coverage, and
+  unreachable statements after guaranteed returns.
 - Verification-condition generation for function assertions and return-path
   postconditions.
 - Branch- and short-circuit-aware arithmetic safety obligations for division and
@@ -135,10 +135,10 @@ Run a native-lowered scalar function through the JIT ABI:
 ```
 
 `sigil check` also runs static validation before building proof obligations:
-contract expressions must be boolean, identifiers must be declared, return
-expressions must match the function return type, unreachable statements after
-guaranteed returns are rejected, and unsupported value types are rejected before
-SMT is emitted.
+contract expressions must be boolean, identifiers must be declared, `result`
+cannot be reused as a parameter or local binding, return expressions must match
+the function return type, unreachable statements after guaranteed returns are
+rejected, and unsupported value types are rejected before SMT is emitted.
 
 Full command details are in [docs/CLI.md](docs/CLI.md).
 
@@ -150,7 +150,7 @@ Sigil intentionally keeps the proof surface close to the program surface:
 - `requires` and `ensures` attach contracts to a function.
 - `assume` introduces a fact into the current proof context.
 - `assert` creates a proof obligation.
-- `result` names the returned value in postconditions.
+- `result` names the returned value in postconditions and is reserved there.
 
 More detail is in [docs/LANGUAGE.md](docs/LANGUAGE.md).
 
