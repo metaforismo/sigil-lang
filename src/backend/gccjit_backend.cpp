@@ -895,70 +895,27 @@ Return invoke_raw(void* code, const std::vector<GccJitScalarValue>& arguments) {
   return invoke_raw_impl<Return, Args...>(code, arguments, std::index_sequence_for<Args...>{});
 }
 
-template <typename Return>
+constexpr std::size_t kMaxAbiParameters = 4;
+
+template <typename Return, typename... Args>
 Return invoke_with_signature(void* code, const FunctionDecl& fn,
                              const std::vector<GccJitScalarValue>& arguments) {
-  if (fn.params.empty()) {
-    return invoke_raw<Return>(code, arguments);
+  if (sizeof...(Args) == fn.params.size()) {
+    return invoke_raw<Return, Args...>(code, arguments);
   }
 
-  if (fn.params.size() == 1) {
-    if (fn.params[0].type.kind == TypeKind::I64) {
-      return invoke_raw<Return, std::int64_t>(code, arguments);
+  if constexpr (sizeof...(Args) >= kMaxAbiParameters) {
+    throw LoweringError("ABI invocation currently supports up to four scalar parameters");
+  } else {
+    const auto next_type = fn.params[sizeof...(Args)].type.kind;
+    if (next_type == TypeKind::I64) {
+      return invoke_with_signature<Return, Args..., std::int64_t>(code, fn, arguments);
     }
-    if (fn.params[0].type.kind == TypeKind::Bool) {
-      return invoke_raw<Return, bool>(code, arguments);
+    if (next_type == TypeKind::Bool) {
+      return invoke_with_signature<Return, Args..., bool>(code, fn, arguments);
     }
+    throw LoweringError("ABI invocation only supports i64 and bool parameters");
   }
-
-  if (fn.params.size() == 2) {
-    const auto lhs = fn.params[0].type.kind;
-    const auto rhs = fn.params[1].type.kind;
-    if (lhs == TypeKind::I64 && rhs == TypeKind::I64) {
-      return invoke_raw<Return, std::int64_t, std::int64_t>(code, arguments);
-    }
-    if (lhs == TypeKind::I64 && rhs == TypeKind::Bool) {
-      return invoke_raw<Return, std::int64_t, bool>(code, arguments);
-    }
-    if (lhs == TypeKind::Bool && rhs == TypeKind::I64) {
-      return invoke_raw<Return, bool, std::int64_t>(code, arguments);
-    }
-    if (lhs == TypeKind::Bool && rhs == TypeKind::Bool) {
-      return invoke_raw<Return, bool, bool>(code, arguments);
-    }
-  }
-
-  if (fn.params.size() == 3) {
-    const auto first = fn.params[0].type.kind;
-    const auto second = fn.params[1].type.kind;
-    const auto third = fn.params[2].type.kind;
-    if (first == TypeKind::I64 && second == TypeKind::I64 && third == TypeKind::I64) {
-      return invoke_raw<Return, std::int64_t, std::int64_t, std::int64_t>(code, arguments);
-    }
-    if (first == TypeKind::I64 && second == TypeKind::I64 && third == TypeKind::Bool) {
-      return invoke_raw<Return, std::int64_t, std::int64_t, bool>(code, arguments);
-    }
-    if (first == TypeKind::I64 && second == TypeKind::Bool && third == TypeKind::I64) {
-      return invoke_raw<Return, std::int64_t, bool, std::int64_t>(code, arguments);
-    }
-    if (first == TypeKind::I64 && second == TypeKind::Bool && third == TypeKind::Bool) {
-      return invoke_raw<Return, std::int64_t, bool, bool>(code, arguments);
-    }
-    if (first == TypeKind::Bool && second == TypeKind::I64 && third == TypeKind::I64) {
-      return invoke_raw<Return, bool, std::int64_t, std::int64_t>(code, arguments);
-    }
-    if (first == TypeKind::Bool && second == TypeKind::I64 && third == TypeKind::Bool) {
-      return invoke_raw<Return, bool, std::int64_t, bool>(code, arguments);
-    }
-    if (first == TypeKind::Bool && second == TypeKind::Bool && third == TypeKind::I64) {
-      return invoke_raw<Return, bool, bool, std::int64_t>(code, arguments);
-    }
-    if (first == TypeKind::Bool && second == TypeKind::Bool && third == TypeKind::Bool) {
-      return invoke_raw<Return, bool, bool, bool>(code, arguments);
-    }
-  }
-
-  throw LoweringError("ABI invocation currently supports up to three scalar parameters");
 }
 
 GccJitScalarValue invoke_code(void* code, const FunctionDecl& fn,

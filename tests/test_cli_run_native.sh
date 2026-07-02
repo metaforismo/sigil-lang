@@ -40,4 +40,7 @@ run_and_expect sum3 6 1 2 3
 run_and_expect choose3 10 true false 10
 run_and_expect choose3 11 false true 10
 run_and_expect choose3 0 false false 10
+run_and_expect sum4 10 1 2 3 4
+run_and_expect all4 true true true true true
+run_and_expect all4 false true true false true
 run_and_expect_failure add_one "argument 1 must be an i64" 9223372036854775808

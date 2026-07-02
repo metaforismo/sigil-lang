@@ -55,3 +55,18 @@ ensures preserved: result >= 0;
     }
   }
 }
+
+fn sum4(a: i64, b: i64, c: i64, d: i64) -> i64
+ensures exact: result == a + b + c + d;
+{
+  let total: i64 = a + b;
+  total = total + c;
+  total = total + d;
+  return total;
+}
+
+fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
+ensures exact: result == (a && b && c && d);
+{
+  return a && b && c && d;
+}

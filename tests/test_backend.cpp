@@ -62,13 +62,26 @@ fn choose3(first: bool, second: bool, x: i64) -> i64
     }
   }
 }
+
+fn sum4(a: i64, b: i64, c: i64, d: i64) -> i64
+{
+  let total: i64 = a + b;
+  total = total + c;
+  total = total + d;
+  return total;
+}
+
+fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
+{
+  return a && b && c && d;
+}
 )";
 
   const auto module = sigil::parse_source(source, "backend.sigil");
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
-  expect(artifacts.size() == 5, "native artifact count");
+  expect(artifacts.size() == 7, "native artifact count");
   expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
@@ -85,6 +98,9 @@ fn choose3(first: bool, second: bool, x: i64) -> i64
   expect(artifacts[3].text.find("signature sum3(a: i64, b: i64, c: i64) -> i64") !=
              std::string::npos,
          "native artifact three-parameter signature");
+  expect(artifacts[5].text.find("signature sum4(a: i64, b: i64, c: i64, d: i64) -> i64") !=
+             std::string::npos,
+         "native artifact four-parameter signature");
 
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
@@ -92,7 +108,7 @@ fn choose3(first: bool, second: bool, x: i64) -> i64
   expect(result.debug_info_enabled, "gccjit debug info enabled");
   expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
          "native artifact records enabled debug info");
-  expect(result.functions.size() == 5, "five function reports");
+  expect(result.functions.size() == 7, "seven function reports");
   expect(result.functions[0].name == "add_one", "first function name");
   expect(result.functions[0].lowered, "add_one lowered");
   expect(result.functions[1].name == "choose", "second function name");
@@ -103,6 +119,10 @@ fn choose3(first: bool, second: bool, x: i64) -> i64
   expect(result.functions[3].lowered, "sum3 lowered");
   expect(result.functions[4].name == "choose3", "fifth function name");
   expect(result.functions[4].lowered, "choose3 lowered");
+  expect(result.functions[5].name == "sum4", "sixth function name");
+  expect(result.functions[5].lowered, "sum4 lowered");
+  expect(result.functions[6].name == "all4", "seventh function name");
+  expect(result.functions[6].lowered, "all4 lowered");
 
   const auto add_one =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
@@ -150,6 +170,28 @@ fn choose3(first: bool, second: bool, x: i64) -> i64
       {sigil::gccjit_bool(false), sigil::gccjit_bool(true), sigil::gccjit_i64(10)});
   expect(choose3_second.invoked, "choose3 second invoked");
   expect(choose3_second.value.integer == 11, "choose3 second ABI result");
+
+  const auto sum4 = sigil::invoke_function_with_gccjit(
+      module, "sum4",
+      {sigil::gccjit_i64(1), sigil::gccjit_i64(2), sigil::gccjit_i64(3), sigil::gccjit_i64(4)});
+  expect(sum4.invoked, "sum4 invoked");
+  expect(sum4.value.kind == sigil::TypeKind::I64, "sum4 result kind");
+  expect(sum4.value.integer == 10, "sum4 ABI result");
+
+  const auto all4_true =
+      sigil::invoke_function_with_gccjit(module, "all4",
+                                         {sigil::gccjit_bool(true), sigil::gccjit_bool(true),
+                                          sigil::gccjit_bool(true), sigil::gccjit_bool(true)});
+  expect(all4_true.invoked, "all4 true invoked");
+  expect(all4_true.value.kind == sigil::TypeKind::Bool, "all4 result kind");
+  expect(all4_true.value.boolean, "all4 true ABI result");
+
+  const auto all4_false =
+      sigil::invoke_function_with_gccjit(module, "all4",
+                                         {sigil::gccjit_bool(true), sigil::gccjit_bool(true),
+                                          sigil::gccjit_bool(false), sigil::gccjit_bool(true)});
+  expect(all4_false.invoked, "all4 false invoked");
+  expect(!all4_false.value.boolean, "all4 false ABI result");
 
   const auto wrong_argument =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_bool(true)});
