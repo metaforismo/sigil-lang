@@ -34,6 +34,7 @@ tests, and docs are in the repo.
 - [x] Add loops with user-written invariants.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
+- [x] Check `i64` argument ranges for native `sigil run` invocations.
 - [x] Emit native lowering diagnostics with source ranges.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.

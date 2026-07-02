@@ -3,6 +3,8 @@
 #include "sigil/proof.hpp"
 #include "sigil/typecheck.hpp"
 
+#include <charconv>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -10,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -89,14 +92,11 @@ const sigil::FunctionDecl* find_function(const sigil::Module& module,
 sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::Type& type,
                                             std::size_t index) {
   if (type.kind == sigil::TypeKind::I64) {
-    std::size_t consumed = 0;
-    long long parsed = 0;
-    try {
-      parsed = std::stoll(value, &consumed, 10);
-    } catch (const std::exception&) {
-      throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64");
-    }
-    if (consumed != value.size()) {
+    std::int64_t parsed = 0;
+    const auto* begin = value.data();
+    const auto* end = begin + value.size();
+    const auto [parsed_end, error] = std::from_chars(begin, end, parsed);
+    if (error != std::errc{} || parsed_end != end) {
       throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64");
     }
     return sigil::gccjit_i64(parsed);
