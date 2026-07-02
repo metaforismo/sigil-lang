@@ -23,7 +23,14 @@ GccJitScalarValue gccjit_bool(bool value) {
   return GccJitScalarValue{TypeKind::Bool, value ? 1 : 0, value};
 }
 
+GccJitScalarValue gccjit_void() {
+  return GccJitScalarValue{TypeKind::Void, 0, false};
+}
+
 std::string display_gccjit_value(const GccJitScalarValue& value) {
+  if (value.kind == TypeKind::Void) {
+    return "void";
+  }
   if (value.kind == TypeKind::Bool) {
     return value.boolean ? "true" : "false";
   }
@@ -866,6 +873,9 @@ std::string scalar_kind_name(TypeKind kind) {
   if (kind == TypeKind::I64) {
     return "i64";
   }
+  if (kind == TypeKind::Void) {
+    return "void";
+  }
   return "unsupported";
 }
 
@@ -945,7 +955,11 @@ GccJitScalarValue invoke_code(void* code, const FunctionDecl& fn,
   if (fn.return_type.kind == TypeKind::Bool) {
     return gccjit_bool(invoke_with_signature<bool>(code, fn, arguments));
   }
-  throw LoweringError("ABI invocation only supports i64 and bool return values");
+  if (fn.return_type.kind == TypeKind::Void) {
+    invoke_with_signature<void>(code, fn, arguments);
+    return gccjit_void();
+  }
+  throw LoweringError("ABI invocation only supports i64, bool, and void return values");
 }
 
 #endif

@@ -45,9 +45,8 @@ production verifier yet.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using `let`, assignment,
   conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
-  returns.
-- ABI smoke tests that invoke JIT-compiled scalar functions and check returned
-  `i64`/`bool` values.
+  `i64`/`bool`/`void` returns.
+- ABI smoke tests that invoke JIT-compiled scalar and `void` functions.
 - Native-lowering diagnostics that report source ranges for unsupported
   constructs.
 - Native IR artifacts that list signatures, contracts, body operations, and
@@ -130,7 +129,7 @@ Saved native artifacts include the debug-info mode and source ranges for the
 function, parameters, contracts, statements, and expression nodes that feed the
 native lowering.
 
-Run a native-lowered scalar function through the JIT ABI:
+Run a native-lowered function through the JIT ABI:
 
 ```sh
 ./build/sigil run examples/native.sigil add_one 41

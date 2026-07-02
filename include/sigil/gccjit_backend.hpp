@@ -52,6 +52,7 @@ struct GccJitScalarValue {
 
 GccJitScalarValue gccjit_i64(std::int64_t value);
 GccJitScalarValue gccjit_bool(bool value);
+GccJitScalarValue gccjit_void();
 std::string display_gccjit_value(const GccJitScalarValue& value);
 
 struct GccJitInvocationResult {

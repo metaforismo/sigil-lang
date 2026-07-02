@@ -114,8 +114,9 @@ assignment, expression and statement conditionals, `i64`/`bool`/`void` returns,
 comparisons, boolean operators, and `+`/`-`/`*` arithmetic.
 
 The ABI smoke path retrieves lowered functions from `gcc_jit_result_get_code`
-and invokes a small set of scalar signatures directly. This keeps native tests
-honest: the backend must produce callable code, not only a compilable IR graph.
+and invokes a small set of scalar and `void` signatures directly. This keeps
+native tests honest: the backend must produce callable code, not only a
+compilable IR graph.
 When `libgccjit` is enabled, Sigil also requests GCC debug information and
 attaches source locations to lowered functions, parameters, expressions,
 locals, assignments, branches, jumps, and returns.

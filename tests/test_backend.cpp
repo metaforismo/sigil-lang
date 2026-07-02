@@ -207,6 +207,16 @@ fn observe(flag: bool, x: i64) -> void
   expect(all4_false.invoked, "all4 false invoked");
   expect(!all4_false.value.boolean, "all4 false ABI result");
 
+  const auto observe_true = sigil::invoke_function_with_gccjit(
+      module, "observe", {sigil::gccjit_bool(true), sigil::gccjit_i64(7)});
+  expect(observe_true.invoked, "observe true invoked");
+  expect(observe_true.value.kind == sigil::TypeKind::Void, "observe true result kind");
+
+  const auto observe_false = sigil::invoke_function_with_gccjit(
+      module, "observe", {sigil::gccjit_bool(false), sigil::gccjit_i64(7)});
+  expect(observe_false.invoked, "observe false invoked");
+  expect(observe_false.value.kind == sigil::TypeKind::Void, "observe false result kind");
+
   const auto wrong_argument =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_bool(true)});
   expect(!wrong_argument.invoked, "wrong argument not invoked");

@@ -135,15 +135,14 @@ Example:
 sigil run examples/native.sigil add_one 41
 ```
 
-The command currently supports `i64` and `bool` return values and up to four
-scalar parameters. `void` functions can be lowered by `sigil compile`, but are
-not invoked by `sigil run` yet. That is enough to exercise the first ABI
-contract without pretending Sigil has a complete FFI or runtime yet.
+The command currently supports `i64`, `bool`, and `void` return values with up
+to four scalar parameters. That is enough to exercise the first ABI contract
+without pretending Sigil has a complete FFI or runtime yet.
 
 Exit codes:
 
 - `0`: the function was compiled, found in the JIT result, invoked, and returned
-  a scalar value.
+  a supported value.
 - `1`: command-line, parse, validation, argument-conversion, or file-read error.
 - `2`: `libgccjit` was available, but lowering, JIT compilation, symbol lookup,
   or invocation failed.
