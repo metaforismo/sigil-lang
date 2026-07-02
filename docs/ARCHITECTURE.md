@@ -41,6 +41,7 @@ system:
 - `result` is only available in postconditions for non-void functions;
 - returns must match the declared function return type;
 - non-void functions must return a value on every syntactic control-flow path;
+- statements after a guaranteed return path are rejected as unreachable;
 - unsupported user-defined value types are rejected until the type checker and
   backend know how to represent them.
 

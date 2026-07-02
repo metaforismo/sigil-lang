@@ -215,6 +215,44 @@ fn partial_return(flag: bool, x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn unreachable_after_return(x: i64) -> i64
+{
+  return x;
+  assert never: true;
+}
+)",
+                    "unreachable statement after guaranteed return");
+
+  expect_diagnostic(R"(
+module bad;
+fn unreachable_after_if(flag: bool, x: i64) -> i64
+{
+  if flag {
+    return x;
+  } else {
+    return 0;
+  }
+  assume never: true;
+}
+)",
+                    "unreachable statement after guaranteed return");
+
+  expect_diagnostic(R"(
+module bad;
+fn unreachable_inside_branch(flag: bool, x: i64) -> i64
+{
+  if flag {
+    return x;
+    assert never: true;
+  } else {
+    return 0;
+  }
+}
+)",
+                    "unreachable statement after guaranteed return");
+
+  expect_diagnostic(R"(
+module bad;
 fn duplicate_local(x: i64) -> i64
 {
   let x: i64 = 1;

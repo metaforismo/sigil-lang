@@ -176,8 +176,13 @@ bool block_returns(const std::vector<Statement>& statements) {
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
                               SymbolTable locals,
                               std::unordered_set<std::string> assignable_locals) {
+  bool terminated = false;
   for (const auto& statement : statements) {
+    if (terminated) {
+      throw Diagnostic(statement.range, "unreachable statement after guaranteed return");
+    }
     validate_statement(statement, decl, locals, assignable_locals);
+    terminated = statement_returns(statement);
   }
 }
 
@@ -285,9 +290,7 @@ void validate_function(const FunctionDecl& decl) {
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
-  for (const auto& statement : decl.body) {
-    validate_statement(statement, decl, locals, assignable_locals);
-  }
+  validate_statement_block(decl.body, decl, locals, assignable_locals);
   if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
     throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
   }

@@ -32,7 +32,8 @@ production verifier yet.
 - `while` loops with user-written invariants, initialization and preservation
   proof obligations, and loop-exit facts.
 - Static validation for predicate types, identifier scope, duplicate symbols,
-  return types, and non-void return coverage.
+  return types, non-void return coverage, and unreachable statements after
+  guaranteed returns.
 - Verification-condition generation for function assertions and postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
@@ -132,8 +133,9 @@ Run a native-lowered scalar function through the JIT ABI:
 
 `sigil check` also runs static validation before building proof obligations:
 contract expressions must be boolean, identifiers must be declared, return
-expressions must match the function return type, and unsupported value types are
-rejected before SMT is emitted.
+expressions must match the function return type, unreachable statements after
+guaranteed returns are rejected, and unsupported value types are rejected before
+SMT is emitted.
 
 Full command details are in [docs/CLI.md](docs/CLI.md).
 

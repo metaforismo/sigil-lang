@@ -22,6 +22,7 @@ tests, and docs are in the repo.
 - [x] Add statement-level `if` and join proof contexts at merge points.
 - [x] Add assignment with explicit mutation rules.
 - [x] Validate non-void return coverage across scalar control flow.
+- [x] Reject unreachable statements after guaranteed returns.
 - [x] Add loops with user-written invariants.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.

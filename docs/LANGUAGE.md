@@ -94,7 +94,9 @@ remain tied to the earlier version.
 from the active context and then becomes available to later obligations.
 `return` can use parameters and local bindings. Non-void functions must return a
 value on every syntactic control-flow path. For `if` statements, that means both
-branches must return unless a later statement returns after the branch.
+branches must return unless a later statement returns after the branch. Once a
+statement guarantees a return, later statements in the same block are rejected as
+unreachable.
 
 `if condition { ... } else { ... }` creates two statement branches. The
 condition must be `bool`. The then branch is checked under `condition`, and the
