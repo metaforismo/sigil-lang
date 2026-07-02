@@ -36,6 +36,7 @@ tests, and docs are in the repo.
 - [x] Reject early returns inside loops until control-flow proofs support them.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
+- [x] Invoke native `libgccjit` functions with up to three scalar parameters.
 - [x] Check `i64` argument ranges for native `sigil run` invocations.
 - [x] Emit native lowering diagnostics with source ranges.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.

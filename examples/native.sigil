@@ -32,3 +32,26 @@ ensures same_truth: result == (x != 0);
 {
   return x != 0;
 }
+
+fn sum3(a: i64, b: i64, c: i64) -> i64
+ensures exact: result == a + b + c;
+{
+  let total: i64 = a + b;
+  total = total + c;
+  return total;
+}
+
+fn choose3(first: bool, second: bool, x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= 0;
+{
+  if first {
+    return x;
+  } else {
+    if second {
+      return x + 1;
+    } else {
+      return 0;
+    }
+  }
+}
