@@ -170,6 +170,7 @@ of the literal token.
 
 The native GCC JIT backend lowers the scalar subset that has a clear source to
 native mapping today. It supports `+`, `-`, `*`, comparisons, equality, boolean
-operators, conditionals, locals, assignment, and valued returns. Void functions,
-loops, division, and modulo remain proof-language constructs until their exact
-runtime semantics are pinned down for native lowering.
+operators, conditionals, locals, assignment, valued returns, and `void`
+functions with explicit `return;` or fallthrough. Loops, division, and modulo
+remain proof-language constructs until their exact runtime semantics are pinned
+down for native lowering.

@@ -97,13 +97,14 @@ using:
 - unary `!` and `-`;
 - arithmetic `+`, `-`, and `*`;
 - comparisons, equality, `&&`, and `||`;
+- `void` functions with explicit `return;` or fallthrough;
 - proof-only `assume` and `assert` statements, which are erased before native
   lowering.
 
-Void functions and functions containing `while` loops are checked by
-`sigil check`, but are skipped by native lowering for now. Division and modulo
-are intentionally skipped until Sigil pins down the exact source semantics and
-proves they match the native lowering.
+Functions containing `while` loops are checked by `sigil check`, but are
+skipped by native lowering for now. Division and modulo are intentionally
+skipped until Sigil pins down the exact source semantics and proves they match
+the native lowering.
 
 Exit codes:
 
@@ -135,8 +136,9 @@ sigil run examples/native.sigil add_one 41
 ```
 
 The command currently supports `i64` and `bool` return values and up to four
-scalar parameters. That is enough to exercise the first ABI contract without
-pretending Sigil has a complete FFI or runtime yet.
+scalar parameters. `void` functions can be lowered by `sigil compile`, but are
+not invoked by `sigil run` yet. That is enough to exercise the first ABI
+contract without pretending Sigil has a complete FFI or runtime yet.
 
 Exit codes:
 

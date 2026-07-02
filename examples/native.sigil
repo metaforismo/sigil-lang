@@ -70,3 +70,14 @@ ensures exact: result == (a && b && c && d);
 {
   return a && b && c && d;
 }
+
+fn observe(flag: bool, x: i64) -> void
+requires non_negative: x >= 0;
+ensures preserved: x >= 0;
+{
+  if flag {
+    return;
+  } else {
+    assume keep_going: true;
+  }
+}

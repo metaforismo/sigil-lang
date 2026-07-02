@@ -38,6 +38,7 @@ tests, and docs are in the repo.
 - [x] Add ABI tests for JIT-compiled functions.
 - [x] Invoke native `libgccjit` functions with up to three scalar parameters.
 - [x] Replace native ABI case tables with bounded recursive dispatch up to four parameters.
+- [x] Lower `void` functions through `libgccjit`.
 - [x] Check `i64` argument ranges for native `sigil run` invocations.
 - [x] Emit native lowering diagnostics with source ranges.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.

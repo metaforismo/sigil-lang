@@ -75,13 +75,22 @@ fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
 {
   return a && b && c && d;
 }
+
+fn observe(flag: bool, x: i64) -> void
+{
+  if flag {
+    return;
+  } else {
+    assume keep_going: true;
+  }
+}
 )";
 
   const auto module = sigil::parse_source(source, "backend.sigil");
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
-  expect(artifacts.size() == 7, "native artifact count");
+  expect(artifacts.size() == 8, "native artifact count");
   expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
@@ -101,6 +110,9 @@ fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
   expect(artifacts[5].text.find("signature sum4(a: i64, b: i64, c: i64, d: i64) -> i64") !=
              std::string::npos,
          "native artifact four-parameter signature");
+  expect(artifacts[7].text.find("signature observe(flag: bool, x: i64) -> void") !=
+             std::string::npos,
+         "native artifact void signature");
 
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
@@ -108,7 +120,7 @@ fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
   expect(result.debug_info_enabled, "gccjit debug info enabled");
   expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
          "native artifact records enabled debug info");
-  expect(result.functions.size() == 7, "seven function reports");
+  expect(result.functions.size() == 8, "eight function reports");
   expect(result.functions[0].name == "add_one", "first function name");
   expect(result.functions[0].lowered, "add_one lowered");
   expect(result.functions[1].name == "choose", "second function name");
@@ -123,6 +135,8 @@ fn all4(a: bool, b: bool, c: bool, d: bool) -> bool
   expect(result.functions[5].lowered, "sum4 lowered");
   expect(result.functions[6].name == "all4", "seventh function name");
   expect(result.functions[6].lowered, "all4 lowered");
+  expect(result.functions[7].name == "observe", "eighth function name");
+  expect(result.functions[7].lowered, "observe lowered");
 
   const auto add_one =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});

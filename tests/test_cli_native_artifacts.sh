@@ -24,3 +24,10 @@ grep "requires" "$artifact" >/dev/null
 grep "ensures" "$artifact" >/dev/null
 grep "assign y" "$artifact" >/dev/null
 grep "return @" "$artifact" >/dev/null
+
+void_artifact="$outdir/fn.observe.native-ir.txt"
+test -f "$void_artifact"
+grep "status lowered" "$void_artifact" >/dev/null
+grep "signature observe(flag: bool, x: i64) -> void" "$void_artifact" >/dev/null
+grep "return @" "$void_artifact" >/dev/null
+grep "value (none)" "$void_artifact" >/dev/null

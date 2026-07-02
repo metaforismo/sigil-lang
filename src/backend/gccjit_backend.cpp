@@ -313,6 +313,10 @@ bool is_native_scalar(const Type& type) {
   return type.kind == TypeKind::I64 || type.kind == TypeKind::Bool;
 }
 
+bool is_native_return_type(const Type& type) {
+  return is_native_scalar(type) || type.kind == TypeKind::Void;
+}
+
 LoweringDiagnostic make_lowering_diagnostic(std::string detail, SourceRange range) {
   return LoweringDiagnostic{std::move(detail), std::move(range)};
 }
@@ -377,8 +381,9 @@ bool statement_is_lowerable(const Statement& statement, LoweringDiagnostic& diag
   case StatementKind::Assign:
   case StatementKind::Assume:
   case StatementKind::Assert:
-  case StatementKind::Return:
     return expression_is_lowerable(statement.expr, diagnostic);
+  case StatementKind::Return:
+    return !statement.expr || expression_is_lowerable(statement.expr, diagnostic);
   case StatementKind::If:
     return expression_is_lowerable(statement.expr, diagnostic) &&
            statements_are_lowerable(statement.then_branch, diagnostic) &&
@@ -417,7 +422,7 @@ bool block_always_returns(const std::vector<Statement>& statements) {
 }
 
 bool function_is_lowerable(const FunctionDecl& fn, LoweringDiagnostic& diagnostic) {
-  if (!is_native_scalar(fn.return_type)) {
+  if (!is_native_return_type(fn.return_type)) {
     diagnostic = make_lowering_diagnostic(
         unsupported_type_detail("function '" + fn.name + "' return", fn.return_type), fn.range);
     return false;
@@ -432,7 +437,7 @@ bool function_is_lowerable(const FunctionDecl& fn, LoweringDiagnostic& diagnosti
   if (!statements_are_lowerable(fn.body, diagnostic)) {
     return false;
   }
-  if (!block_always_returns(fn.body)) {
+  if (fn.return_type.kind != TypeKind::Void && !block_always_returns(fn.body)) {
     diagnostic =
         make_lowering_diagnostic("function does not return on every lowered path", fn.range);
     return false;
@@ -477,8 +482,9 @@ struct BlockState {
 class FunctionLowerer {
 public:
   FunctionLowerer(gcc_jit_context* context, gcc_jit_type* i64_type, gcc_jit_type* bool_type,
-                  const FunctionDecl& fn)
-      : context_(context), i64_type_(i64_type), bool_type_(bool_type), fn_(fn) {}
+                  gcc_jit_type* void_type, const FunctionDecl& fn)
+      : context_(context), i64_type_(i64_type), bool_type_(bool_type), void_type_(void_type),
+        fn_(fn) {}
 
   void lower() {
     std::vector<gcc_jit_param*> params;
@@ -501,7 +507,11 @@ public:
     BlockState state{gcc_jit_function_new_block(function_, "entry"), false};
     lower_statements(fn_.body, variables, state);
     if (!state.terminated) {
-      throw LoweringError("function '" + fn_.name + "' did not terminate during lowering");
+      if (fn_.return_type.kind == TypeKind::Void) {
+        gcc_jit_block_end_with_void_return(state.block, location(fn_.range));
+      } else {
+        throw LoweringError("function '" + fn_.name + "' did not terminate during lowering");
+      }
     }
   }
 
@@ -522,6 +532,9 @@ private:
     }
     if (type.kind == TypeKind::Bool) {
       return bool_type_;
+    }
+    if (type.kind == TypeKind::Void) {
+      return void_type_;
     }
     throw LoweringError("unsupported native type '" + type.display() + "'");
   }
@@ -727,8 +740,12 @@ private:
     case StatementKind::Assert:
       return;
     case StatementKind::Return: {
-      auto* value = lower_expr(statement.expr, variables, state);
-      gcc_jit_block_end_with_return(state.block, location(statement.range), value);
+      if (statement.expr) {
+        auto* value = lower_expr(statement.expr, variables, state);
+        gcc_jit_block_end_with_return(state.block, location(statement.range), value);
+      } else {
+        gcc_jit_block_end_with_void_return(state.block, location(statement.range));
+      }
       state.terminated = true;
       return;
     }
@@ -768,6 +785,7 @@ private:
   gcc_jit_context* context_ = nullptr;
   gcc_jit_type* i64_type_ = nullptr;
   gcc_jit_type* bool_type_ = nullptr;
+  gcc_jit_type* void_type_ = nullptr;
   const FunctionDecl& fn_;
   gcc_jit_function* function_ = nullptr;
   std::size_t local_counter_ = 0;
@@ -794,6 +812,7 @@ GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Mo
   result.debug_info_enabled = kEnableGccJitDebugInfo;
   auto* i64_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_INT64_T);
   auto* bool_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_BOOL);
+  auto* void_type = gcc_jit_context_get_type(context, GCC_JIT_TYPE_VOID);
 
   for (const auto& fn : module.functions) {
     LoweringDiagnostic diagnostic;
@@ -804,7 +823,7 @@ GccJitCompileResult lower_module_into_context(gcc_jit_context* context, const Mo
     }
 
     try {
-      FunctionLowerer lowerer(context, i64_type, bool_type, fn);
+      FunctionLowerer lowerer(context, i64_type, bool_type, void_type, fn);
       lowerer.lower();
       lowered_names.push_back(fn.name);
       result.functions.push_back(GccJitFunctionReport{fn.name, true, "lowered", fn.range});

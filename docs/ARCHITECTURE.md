@@ -110,8 +110,8 @@ Expression-level conditionals are represented directly as SMT `ite` terms.
 CMake detects `libgccjit` and compiles the native backend when available. The
 backend lowers a native-supported subset of pure scalar functions into an
 in-memory GCC JIT result. It supports `i64` and `bool` parameters, locals,
-assignment, expression and statement conditionals, returns, comparisons, boolean
-operators, and `+`/`-`/`*` arithmetic.
+assignment, expression and statement conditionals, `i64`/`bool`/`void` returns,
+comparisons, boolean operators, and `+`/`-`/`*` arithmetic.
 
 The ABI smoke path retrieves lowered functions from `gcc_jit_result_get_code`
 and invokes a small set of scalar signatures directly. This keeps native tests
@@ -135,10 +135,10 @@ backend grows.
 
 Contracts, loop invariants, `assume`, and `assert` remain proof-layer
 constructs. The native backend erases proof-only constructs after static
-validation and proof generation, and currently skips void functions and
-functions containing loops. Division and modulo are deliberately not lowered yet,
-because Sigil still needs an explicit source-level semantics that is known to
-match the native backend for negative operands and zero divisors.
+validation and proof generation, and currently skips functions containing loops.
+Division and modulo are deliberately not lowered yet, because Sigil still needs
+an explicit source-level semantics that is known to match the native backend for
+negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.
