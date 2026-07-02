@@ -27,6 +27,8 @@ statements.
 Before proof obligations are emitted, Sigil validates the current scalar type
 system:
 
+- top-level struct and function declarations must have unique names and cannot
+  reuse built-in type names;
 - struct invariant expressions must be `bool`;
 - function preconditions and postconditions must be `bool`;
 - identifiers must be declared in the active scope;

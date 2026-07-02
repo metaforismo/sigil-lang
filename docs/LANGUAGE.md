@@ -12,6 +12,10 @@ module cache;
 
 Every file starts with one module declaration.
 
+Top-level struct and function names share one declaration namespace. Built-in
+type names (`i64`, `bool`, and `void`) are reserved and cannot be reused as
+top-level declarations.
+
 ## Types
 
 The initial scalar types are:

@@ -114,3 +114,28 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "duplicate proof label 'repeated'" >/dev/null
 printf '%s\n' "$output" | grep "duplicate-proof-label.sigil:6:3-24" >/dev/null
+
+source_file="$outdir/duplicate-top-level.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+struct Thing {
+  value: i64;
+}
+
+fn Thing(x: i64) -> i64
+{
+  return x;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "duplicate top-level declaration 'Thing'" >/dev/null
+printf '%s\n' "$output" | grep "duplicate-top-level.sigil:7:1-10:1" >/dev/null

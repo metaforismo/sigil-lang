@@ -33,8 +33,9 @@ production verifier yet.
   proof obligations, and loop-exit facts.
 - Void functions with explicit `return;` and path-aware postcondition checks.
 - Static validation for predicate types, identifier scope, duplicate symbols,
-  reserved contract names, explicit proof-label uniqueness, return types,
-  non-void return coverage, and unreachable statements after guaranteed returns.
+  reserved declaration and contract names, explicit proof-label uniqueness,
+  return types, non-void return coverage, and unreachable statements after
+  guaranteed returns.
 - Verification-condition generation for function assertions and return-path
   postconditions.
 - Branch- and short-circuit-aware arithmetic safety obligations for division and

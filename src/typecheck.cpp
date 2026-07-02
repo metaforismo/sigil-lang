@@ -17,6 +17,10 @@ bool is_reserved_value_name(const std::string& name) {
   return name == "result";
 }
 
+bool is_builtin_type_name(const std::string& name) {
+  return name == "i64" || name == "bool" || name == "void";
+}
+
 void require_known_type(const Type& type, const SourceRange& range, const std::string& owner) {
   if (type.kind == TypeKind::Unknown) {
     throw Diagnostic(range, owner + " uses unsupported type '" + type.display() + "'");
@@ -42,6 +46,13 @@ void require_unreserved_value_name(const std::string& name, const SourceRange& r
                                    const std::string& owner) {
   if (is_reserved_value_name(name)) {
     throw Diagnostic(range, owner + " cannot use reserved name '" + name + "'");
+  }
+}
+
+void require_unreserved_declaration_name(const std::string& name, const SourceRange& range,
+                                         const std::string& owner) {
+  if (is_builtin_type_name(name)) {
+    throw Diagnostic(range, owner + " cannot use reserved type name '" + name + "'");
   }
 }
 
@@ -335,18 +346,27 @@ void validate_function(const FunctionDecl& decl) {
 } // namespace
 
 void validate_module(const Module& module) {
+  std::unordered_set<std::string> declaration_names;
   std::unordered_set<std::string> struct_names;
   for (const auto& decl : module.structs) {
+    require_unreserved_declaration_name(decl.name, decl.range, "struct '" + decl.name + "'");
     if (!struct_names.insert(decl.name).second) {
       throw Diagnostic(decl.range, "duplicate struct '" + decl.name + "'");
+    }
+    if (!declaration_names.insert(decl.name).second) {
+      throw Diagnostic(decl.range, "duplicate top-level declaration '" + decl.name + "'");
     }
     validate_struct(decl);
   }
 
   std::unordered_set<std::string> function_names;
   for (const auto& decl : module.functions) {
+    require_unreserved_declaration_name(decl.name, decl.range, "function '" + decl.name + "'");
     if (!function_names.insert(decl.name).second) {
       throw Diagnostic(decl.range, "duplicate function '" + decl.name + "'");
+    }
+    if (!declaration_names.insert(decl.name).second) {
+      throw Diagnostic(decl.range, "duplicate top-level declaration '" + decl.name + "'");
     }
     validate_function(decl);
   }

@@ -24,6 +24,7 @@ tests, and docs are in the repo.
 - [x] Validate non-void return coverage across scalar control flow.
 - [x] Reject unreachable statements after guaranteed returns.
 - [x] Verify postconditions against each completed return path.
+- [x] Reserve built-in type names in the top-level declaration namespace.
 - [x] Reserve `result` for compiler-generated postcondition values.
 - [x] Reject duplicate explicit proof labels in function bodies.
 - [x] Support `return;` and path-aware postconditions for `void` functions.

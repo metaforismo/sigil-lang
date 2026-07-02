@@ -433,6 +433,36 @@ struct Bad {
 )",
                     "comparison operator requires i64 operands");
 
+  expect_diagnostic(R"(
+module bad;
+struct i64 {
+  value: i64;
+}
+)",
+                    "struct 'i64' cannot use reserved type name 'i64'");
+
+  expect_diagnostic(R"(
+module bad;
+fn bool(x: i64) -> i64
+{
+  return x;
+}
+)",
+                    "function 'bool' cannot use reserved type name 'bool'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Thing {
+  value: i64;
+}
+
+fn Thing(x: i64) -> i64
+{
+  return x;
+}
+)",
+                    "duplicate top-level declaration 'Thing'");
+
   expect(true, "typecheck tests completed");
   return 0;
 }
