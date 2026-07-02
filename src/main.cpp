@@ -104,6 +104,19 @@ std::string available_function_names(const sigil::Module& module) {
   return out.str();
 }
 
+std::string function_signature(const sigil::FunctionDecl& fn) {
+  std::ostringstream out;
+  out << fn.name << "(";
+  for (std::size_t index = 0; index < fn.params.size(); ++index) {
+    if (index != 0) {
+      out << ", ";
+    }
+    out << fn.params[index].name << ": " << fn.params[index].type.display();
+  }
+  out << ") -> " << fn.return_type.display();
+  return out.str();
+}
+
 sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::Type& type,
                                             std::size_t index) {
   if (type.kind == sigil::TypeKind::I64) {
@@ -336,7 +349,8 @@ int run_command(const std::vector<std::string>& args) {
   if (args.size() - 2 != fn->params.size()) {
     throw std::runtime_error("function '" + function_name + "' expects " +
                              std::to_string(fn->params.size()) + " argument(s), got " +
-                             std::to_string(args.size() - 2));
+                             std::to_string(args.size() - 2) +
+                             "; signature: " + function_signature(*fn));
   }
 
   std::vector<sigil::GccJitScalarValue> values;

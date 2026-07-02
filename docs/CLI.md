@@ -128,6 +128,8 @@ integer strings in the `int64_t` range, and `bool` parameters accept `true`,
 Successful invocations include an `at:` source range for the invoked function.
 If the requested function is not present, the error lists the module's available
 function names in source order.
+If the requested function has the wrong number of arguments, the error includes
+the source-level function signature.
 If lowering or invocation fails after parsing, the output includes an `at:`
 source range when Sigil can identify a relevant parameter, statement, or
 expression.
