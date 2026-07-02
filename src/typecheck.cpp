@@ -247,7 +247,13 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     require_type(statement.expr, locals, TypeKind::Bool, "assert statement");
   } else if (statement.kind == StatementKind::Return) {
     if (decl.return_type.kind == TypeKind::Void) {
-      throw Diagnostic(statement.range, "void functions cannot return a value yet");
+      if (statement.expr) {
+        throw Diagnostic(statement.range, "void functions cannot return a value");
+      }
+      return;
+    }
+    if (!statement.expr) {
+      throw Diagnostic(statement.range, "non-void functions must return a value");
     }
     const auto actual = infer_expr(statement.expr, locals);
     if (!same_type(actual, decl.return_type)) {

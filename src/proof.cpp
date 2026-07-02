@@ -732,16 +732,20 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     context.active.push_back(NamedPredicate{statement.name,
                                             rewrite_expr(statement.expr, context.bindings),
                                             statement.location, statement.range});
-  } else if (statement.kind == StatementKind::Return && fn.return_type.kind != TypeKind::Void) {
-    append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
+  } else if (statement.kind == StatementKind::Return) {
+    if (statement.expr) {
+      append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
+    }
     ++return_index;
     const auto return_name = "return_" + std::to_string(return_index);
-    auto equality = make_binary(BinaryOp::Equal,
-                                make_identifier(context.bindings.at("result"), statement.location),
-                                rewrite_expr(statement.expr, context.bindings), statement.location);
     auto assumptions = context.active;
-    assumptions.push_back(
-        NamedPredicate{return_name, equality, statement.location, statement.range});
+    if (fn.return_type.kind != TypeKind::Void && statement.expr) {
+      auto equality = make_binary(
+          BinaryOp::Equal, make_identifier(context.bindings.at("result"), statement.location),
+          rewrite_expr(statement.expr, context.bindings), statement.location);
+      assumptions.push_back(
+          NamedPredicate{return_name, equality, statement.location, statement.range});
+    }
     context.returns.push_back(ProofContext::ReturnPath{return_index, context.symbols,
                                                        context.bindings, std::move(assumptions)});
     context.terminated = true;
@@ -764,8 +768,15 @@ void process_statements(const std::vector<Statement>& statements, const Function
 std::string ensure_obligation_name(const FunctionDecl& fn, int ensure_index,
                                    const NamedPredicate& ensure,
                                    const ProofContext::ReturnPath* return_path,
-                                   std::size_t return_path_count) {
-  if (return_path == nullptr || return_path_count <= 1) {
+                                   std::size_t path_count, bool fallthrough_path) {
+  if (path_count <= 1) {
+    return "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+  }
+  if (fallthrough_path) {
+    return "fn." + fn.name + ".fallthrough.ensures." + std::to_string(ensure_index) + "." +
+           ensure.name;
+  }
+  if (return_path == nullptr) {
     return "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
   }
   return "fn." + fn.name + ".return." + std::to_string(return_path->index) + ".ensures." +
@@ -776,8 +787,8 @@ void append_ensure_obligation(const FunctionDecl& fn, const NamedPredicate& ensu
                               int ensure_index, const std::vector<NamedPredicate>& assumptions,
                               const SymbolTable& symbols,
                               const std::unordered_map<std::string, std::string>& bindings,
-                              const ProofContext::ReturnPath* return_path,
-                              std::size_t return_path_count, int& safety_index,
+                              const ProofContext::ReturnPath* return_path, std::size_t path_count,
+                              bool fallthrough_path, int& safety_index,
                               std::vector<ProofObligation>& obligations) {
   ProofContext ensure_context;
   ensure_context.symbols = symbols;
@@ -787,7 +798,7 @@ void append_ensure_obligation(const FunctionDecl& fn, const NamedPredicate& ensu
 
   ProofObligation obligation;
   obligation.name =
-      ensure_obligation_name(fn, ensure_index, ensure, return_path, return_path_count);
+      ensure_obligation_name(fn, ensure_index, ensure, return_path, path_count, fallthrough_path);
   obligation.location = ensure.location;
   obligation.range = ensure.range;
   obligation.assumptions = assumptions;
@@ -823,22 +834,27 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     process_statements(fn.body, fn, context, assert_index, return_index, loop_index, safety_index,
                        obligations);
 
-    if (fn.return_type.kind != TypeKind::Void && !context.returns.empty()) {
+    const bool has_void_fallthrough = fn.return_type.kind == TypeKind::Void && !context.terminated;
+    const auto path_count = context.returns.size() + (has_void_fallthrough ? 1U : 0U);
+
+    if (!context.returns.empty()) {
       for (const auto& return_path : context.returns) {
         int ensure_index = 0;
         for (const auto& ensure : fn.ensures) {
           ++ensure_index;
           append_ensure_obligation(fn, ensure, ensure_index, return_path.assumptions,
                                    return_path.symbols, return_path.bindings, &return_path,
-                                   context.returns.size(), safety_index, obligations);
+                                   path_count, false, safety_index, obligations);
         }
       }
-    } else {
+    }
+    if (context.returns.empty() || has_void_fallthrough) {
       int ensure_index = 0;
       for (const auto& ensure : fn.ensures) {
         ++ensure_index;
         append_ensure_obligation(fn, ensure, ensure_index, context.active, context.symbols,
-                                 context.bindings, nullptr, 0, safety_index, obligations);
+                                 context.bindings, nullptr, path_count, has_void_fallthrough,
+                                 safety_index, obligations);
       }
     }
   }

@@ -85,6 +85,15 @@ fn count_to(n: i64) -> i64
   }
   return i;
 }
+
+fn observe(flag: bool) -> void
+{
+  if flag {
+    return;
+  } else {
+    assume idle: true;
+  }
+}
 )";
 
   const auto module = sigil::parse_source(source, "inline.sigil");
@@ -92,7 +101,7 @@ fn count_to(n: i64) -> i64
   expect(module.structs.size() == 1, "struct count");
   expect(module.structs[0].fields.size() == 2, "field count");
   expect(module.structs[0].invariants.size() == 1, "invariant count");
-  expect(module.functions.size() == 3, "function count");
+  expect(module.functions.size() == 4, "function count");
   expect(module.functions[0].preconditions.size() == 1, "requires count");
   expect(module.functions[0].ensures.size() == 1, "ensures count");
   expect(module.functions[0].body.size() == 5, "body count");
@@ -125,5 +134,10 @@ fn count_to(n: i64) -> i64
   expect(module.functions[2].body[1].loop_invariants[0].name == "lower", "loop invariant name");
   expect(sigil::display_expr(module.functions[2].body[1].expr) == "(i < n)", "while condition");
   expect(module.functions[2].body[1].then_branch.size() == 1, "while body count");
+  expect(module.functions[3].return_type.kind == sigil::TypeKind::Void, "void return type");
+  expect(module.functions[3].body[0].kind == sigil::StatementKind::If, "void if statement");
+  expect(!module.functions[3].body[0].then_branch[0].expr, "void return has no expression");
+  expect(module.functions[3].body[0].then_branch[0].range.display() == "inline.sigil:45:5-11",
+         "void return range");
   return 0;
 }

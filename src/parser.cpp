@@ -237,7 +237,9 @@ Statement Parser::parse_statement() {
     statement.location = start.location;
     statement.range = start.range;
     statement.name = "return";
-    statement.expr = parse_expr();
+    if (!check(TokenKind::Semicolon)) {
+      statement.expr = parse_expr();
+    }
     const auto end = consume(TokenKind::Semicolon, "expected ';' after return statement");
     statement.range = span(start.range, end.range);
     return statement;

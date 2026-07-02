@@ -25,6 +25,7 @@ tests, and docs are in the repo.
 - [x] Reject unreachable statements after guaranteed returns.
 - [x] Verify postconditions against each completed return path.
 - [x] Reserve `result` for compiler-generated postcondition values.
+- [x] Support `return;` and path-aware postconditions for `void` functions.
 - [x] Generate nonzero-divisor safety obligations for `/` and `%`.
 - [x] Honor `if`, `&&`, and `||` guards in expression safety obligations.
 - [x] Add loops with user-written invariants.

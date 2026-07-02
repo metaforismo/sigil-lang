@@ -41,6 +41,7 @@ system:
 - `result` is only available in postconditions for non-void functions and cannot
   be reused as a parameter or local binding;
 - returns must match the declared function return type;
+- empty `return;` statements are only valid in `void` functions;
 - non-void functions must return a value on every syntactic control-flow path;
 - statements after a guaranteed return path are rejected as unreachable;
 - unsupported user-defined value types are rejected until the type checker and
@@ -67,8 +68,10 @@ The planner walks each function and builds proof obligations:
   the merge point;
 - `return expr` records a completed return path with its active assumptions and
   `result == expr`;
+- `return;` records a completed void return path without a result binding;
 - `ensures` clauses create postcondition obligations for every completed return
-  path.
+  path, plus the fallthrough path of a `void` function when it can reach the end
+  without an explicit return.
 
 Every proof obligation carries the source range of the assertion or
 postcondition that produced it. Diagnostics and result reporting keep start
@@ -123,10 +126,10 @@ backend grows.
 
 Contracts, loop invariants, `assume`, and `assert` remain proof-layer
 constructs. The native backend erases proof-only constructs after static
-validation and proof generation, and currently skips functions containing loops.
-Division and modulo are deliberately not lowered yet, because Sigil still needs
-an explicit source-level semantics that is known to match the native backend for
-negative operands and zero divisors.
+validation and proof generation, and currently skips void functions and
+functions containing loops. Division and modulo are deliberately not lowered yet,
+because Sigil still needs an explicit source-level semantics that is known to
+match the native backend for negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.

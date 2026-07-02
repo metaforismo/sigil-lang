@@ -1,0 +1,19 @@
+module voids;
+
+fn mark_non_negative(x: i64) -> void
+requires non_negative: x >= 0;
+ensures preserved: x >= 0;
+{
+  return;
+}
+
+fn maybe_return(flag: bool, x: i64) -> void
+requires non_negative: x >= 0;
+ensures preserved: x >= 0;
+{
+  if flag {
+    return;
+  } else {
+    assume keep_going: true;
+  }
+}

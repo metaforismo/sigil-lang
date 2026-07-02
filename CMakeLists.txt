@@ -261,6 +261,12 @@ if(SIGIL_Z3_EXECUTABLE)
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(
+    NAME sigil_z3_void_returns
+    COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/voids.sigil" --strict)
+  set_tests_properties(sigil_z3_void_returns PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
     NAME sigil_z3_division_safety
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/division.sigil" --strict)
   set_tests_properties(sigil_z3_division_safety PROPERTIES

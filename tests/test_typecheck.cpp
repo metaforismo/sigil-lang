@@ -94,6 +94,17 @@ ensures bounded: result <= n;
   }
   return i;
 }
+
+fn observe(flag: bool, x: i64) -> void
+requires non_negative: x >= 0;
+ensures still_non_negative: x >= 0;
+{
+  if flag {
+    return;
+  } else {
+    assume keep_going: true;
+  }
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -116,6 +127,24 @@ fn mismatched(flag: bool) -> i64
 }
 )",
                     "return type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn nonvoid_empty_return(x: i64) -> i64
+{
+  return;
+}
+)",
+                    "non-void functions must return a value");
+
+  expect_diagnostic(R"(
+module bad;
+fn void_value_return(x: i64) -> void
+{
+  return x;
+}
+)",
+                    "void functions cannot return a value");
 
   expect_diagnostic(R"(
 module bad;
@@ -219,6 +248,16 @@ fn unreachable_after_return(x: i64) -> i64
 {
   return x;
   assert never: true;
+}
+)",
+                    "unreachable statement after guaranteed return");
+
+  expect_diagnostic(R"(
+module bad;
+fn unreachable_after_void_return() -> void
+{
+  return;
+  assume never: true;
 }
 )",
                     "unreachable statement after guaranteed return");

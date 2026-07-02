@@ -110,7 +110,11 @@ void emit_native_statement(std::ostringstream& out, const Statement& statement,
     return;
   case StatementKind::Return:
     out << indent << "return @" << statement.range.display() << "\n";
-    emit_native_expr_line(out, indent + "  ", "value", statement.expr);
+    if (statement.expr) {
+      emit_native_expr_line(out, indent + "  ", "value", statement.expr);
+    } else {
+      out << indent << "  value (none)\n";
+    }
     return;
   }
 }

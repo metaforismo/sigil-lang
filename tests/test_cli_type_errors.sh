@@ -70,3 +70,24 @@ echo "$output"
 test "$status" -eq 1
 printf '%s\n' "$output" | grep "parameter 'reserved_result_parameter.result' cannot use reserved name 'result'" >/dev/null
 printf '%s\n' "$output" | grep "reserved-result-parameter.sigil:3:30-35" >/dev/null
+
+source_file="$outdir/nonvoid-empty-return.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn nonvoid_empty_return(x: i64) -> i64
+{
+  return;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "non-void functions must return a value" >/dev/null
+printf '%s\n' "$output" | grep "nonvoid-empty-return.sigil:5:3-9" >/dev/null

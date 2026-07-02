@@ -100,10 +100,10 @@ using:
 - proof-only `assume` and `assert` statements, which are erased before native
   lowering.
 
-Functions containing `while` loops are checked by `sigil check`, but are skipped
-by native lowering for now. Division and modulo are intentionally skipped until
-Sigil pins down the exact source semantics and proves they match the native
-lowering.
+Void functions and functions containing `while` loops are checked by
+`sigil check`, but are skipped by native lowering for now. Division and modulo
+are intentionally skipped until Sigil pins down the exact source semantics and
+proves they match the native lowering.
 
 Exit codes:
 

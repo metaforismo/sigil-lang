@@ -238,6 +238,59 @@ ensures zero: result == 0;
   expect(early_after_smt.find("(assert (= result 0))") != std::string::npos,
          "continuing return path binds later return value");
 
+  const char* void_source = R"(
+module voids;
+
+fn void_return(x: i64) -> void
+requires non_negative: x >= 0;
+ensures preserved: x >= 0;
+{
+  return;
+}
+
+fn void_branch(flag: bool) -> void
+ensures tautology: flag || !flag;
+{
+  if flag {
+    return;
+  } else {
+    return;
+  }
+}
+
+fn void_fallthrough(flag: bool) -> void
+ensures tautology: flag || !flag;
+{
+  if flag {
+    return;
+  } else {
+    assume else_path: !flag;
+  }
+}
+)";
+
+  const auto void_module = sigil::parse_source(void_source, "voids.sigil");
+  const auto void_obligations = sigil::build_obligations(void_module);
+  expect(void_obligations.size() == 5, "void ensures include explicit and fallthrough paths");
+  expect(void_obligations[0].name == "fn.void_return.ensures.1.preserved",
+         "single void return keeps stable ensure name");
+  expect(void_obligations[1].name == "fn.void_branch.return.1.ensures.1.tautology",
+         "void then return ensure names return path");
+  expect(void_obligations[2].name == "fn.void_branch.return.2.ensures.1.tautology",
+         "void else return ensure names return path");
+  expect(void_obligations[3].name == "fn.void_fallthrough.return.1.ensures.1.tautology",
+         "void mixed explicit return names return path");
+  expect(void_obligations[4].name == "fn.void_fallthrough.fallthrough.ensures.1.tautology",
+         "void mixed fallthrough names fallthrough path");
+  const auto void_return_smt = sigil::emit_smt_lib(void_obligations[0]);
+  expect(void_return_smt.find("result") == std::string::npos, "void return has no result symbol");
+  const auto void_explicit_smt = sigil::emit_smt_lib(void_obligations[3]);
+  expect(void_explicit_smt.find("(assert flag)") != std::string::npos,
+         "void explicit return keeps branch condition");
+  const auto void_fallthrough_smt = sigil::emit_smt_lib(void_obligations[4]);
+  expect(void_fallthrough_smt.find("(assert (not flag))") != std::string::npos,
+         "void fallthrough keeps branch condition");
+
   const char* assignment_source = R"(
 module assignment;
 

@@ -31,6 +31,7 @@ production verifier yet.
   guarded facts at merge points.
 - `while` loops with user-written invariants, initialization and preservation
   proof obligations, and loop-exit facts.
+- Void functions with explicit `return;` and path-aware postcondition checks.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   reserved contract names, return types, non-void return coverage, and
   unreachable statements after guaranteed returns.
@@ -137,8 +138,9 @@ Run a native-lowered scalar function through the JIT ABI:
 `sigil check` also runs static validation before building proof obligations:
 contract expressions must be boolean, identifiers must be declared, `result`
 cannot be reused as a parameter or local binding, return expressions must match
-the function return type, unreachable statements after guaranteed returns are
-rejected, and unsupported value types are rejected before SMT is emitted.
+the function return type, non-void functions cannot use empty returns,
+unreachable statements after guaranteed returns are rejected, and unsupported
+value types are rejected before SMT is emitted.
 
 Full command details are in [docs/CLI.md](docs/CLI.md).
 
