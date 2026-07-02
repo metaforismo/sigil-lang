@@ -71,6 +71,27 @@ test "$status" -eq 1
 printf '%s\n' "$output" | grep "parameter 'reserved_result_parameter.result' cannot use reserved name 'result'" >/dev/null
 printf '%s\n' "$output" | grep "reserved-result-parameter.sigil:3:30-35" >/dev/null
 
+source_file="$outdir/reserved-type-parameter.sigil"
+cat >"$source_file" <<'SIGIL'
+module bad;
+
+fn reserved_type_parameter(i64: i64) -> i64
+{
+  return i64;
+}
+SIGIL
+
+set +e
+output="$("$sigil" check "$source_file" --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "parameter 'reserved_type_parameter.i64' cannot use reserved type name 'i64'" >/dev/null
+printf '%s\n' "$output" | grep "reserved-type-parameter.sigil:3:28-30" >/dev/null
+
 source_file="$outdir/nonvoid-empty-return.sigil"
 cat >"$source_file" <<'SIGIL'
 module bad;

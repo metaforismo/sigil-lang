@@ -16,6 +16,10 @@ Top-level struct and function names share one declaration namespace. Built-in
 type names (`i64`, `bool`, and `void`) are reserved and cannot be reused as
 top-level declarations.
 
+Value names are also reserved where they would become source-level proof
+symbols. Parameters, local bindings, and struct fields cannot be named
+`result`, `i64`, `bool`, or `void`.
+
 ## Types
 
 The initial scalar types are:
@@ -44,6 +48,9 @@ validates that they are boolean predicates over declared fields, then registers
 them. It does not yet prove preservation across constructors or mutating
 functions. That preservation check is a core roadmap item.
 
+Field names share the same value-name restrictions as function parameters and
+local bindings, because fields become direct symbols while checking invariants.
+
 ## Function Contracts
 
 ```sigil
@@ -61,7 +68,8 @@ returned value.
 
 Contract predicates must be boolean. `result` is available only in
 postconditions for non-void functions. It is a compiler-generated contract
-symbol, so user parameters and local bindings cannot be named `result`.
+symbol, so user parameters, local bindings, and struct fields cannot be named
+`result`.
 
 ## Statements
 
@@ -87,7 +95,7 @@ return next;
 `let` introduces a typed local binding. The binding expression can use
 parameters and earlier locals, and the binding becomes a proof fact of the form
 `name == expr` for later assertions and returns. Local bindings cannot shadow
-parameters or earlier locals.
+parameters or earlier locals, and cannot reuse built-in type names.
 
 `name = expr;` assigns a new value to a previously declared local binding.
 Parameters are immutable, undeclared names cannot be assigned, and the assigned

@@ -31,6 +31,8 @@ system:
 
 - top-level struct and function declarations must have unique names and cannot
   reuse built-in type names;
+- parameter, local, and field names cannot reuse built-in type names or the
+  compiler-generated `result` symbol;
 - struct invariant expressions must be `bool`;
 - function preconditions and postconditions must be `bool`;
 - identifiers must be declared in the active scope;
@@ -44,7 +46,7 @@ system:
   escape their loop body;
 - explicit `assume` and `assert` labels must be unique within a function;
 - `result` is only available in postconditions for non-void functions and cannot
-  be reused as a parameter or local binding;
+  be reused as a parameter, local binding, or field;
 - returns must match the declared function return type;
 - empty `return;` statements are only valid in `void` functions;
 - non-void functions must return a value on every syntactic control-flow path;

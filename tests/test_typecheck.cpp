@@ -355,6 +355,41 @@ fn reserved_result_local(x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn reserved_type_parameter(i64: i64) -> i64
+{
+  return i64;
+}
+)",
+                    "parameter 'reserved_type_parameter.i64' cannot use reserved type name 'i64'");
+
+  expect_diagnostic(R"(
+module bad;
+fn reserved_type_local(x: i64) -> i64
+{
+  let bool: i64 = x;
+  return bool;
+}
+)",
+                    "local 'reserved_type_local.bool' cannot use reserved type name 'bool'");
+
+  expect_diagnostic(R"(
+module bad;
+struct ReservedResult {
+  result: i64;
+}
+)",
+                    "field 'ReservedResult.result' cannot use reserved name 'result'");
+
+  expect_diagnostic(R"(
+module bad;
+struct ReservedType {
+  void: i64;
+}
+)",
+                    "field 'ReservedType.void' cannot use reserved type name 'void'");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_while_condition(x: i64) -> i64
 {
   let i: i64 = 0;

@@ -47,6 +47,9 @@ void require_unreserved_value_name(const std::string& name, const SourceRange& r
   if (is_reserved_value_name(name)) {
     throw Diagnostic(range, owner + " cannot use reserved name '" + name + "'");
   }
+  if (is_builtin_type_name(name)) {
+    throw Diagnostic(range, owner + " cannot use reserved type name '" + name + "'");
+  }
 }
 
 void require_unreserved_declaration_name(const std::string& name, const SourceRange& range,
@@ -292,6 +295,8 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
 void validate_struct(const StructDecl& decl) {
   SymbolTable fields;
   for (const auto& field : decl.fields) {
+    require_unreserved_value_name(field.name, field.range,
+                                  "field '" + decl.name + "." + field.name + "'");
     require_value_type(field.type, field.range, "field '" + decl.name + "." + field.name + "'");
     insert_symbol(fields, field.name, field.type, field.range, "field");
   }
