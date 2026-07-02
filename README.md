@@ -34,7 +34,8 @@ production verifier yet.
 - Static validation for predicate types, identifier scope, duplicate symbols,
   return types, non-void return coverage, and unreachable statements after
   guaranteed returns.
-- Verification-condition generation for function assertions and postconditions.
+- Verification-condition generation for function assertions and return-path
+  postconditions.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
 - CMake detection for `libgccjit`; builds without it and reports backend status.

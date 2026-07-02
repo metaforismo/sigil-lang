@@ -61,8 +61,10 @@ The planner walks each function and builds proof obligations:
 - `while` statements create initialization and preservation obligations for
   each user-written invariant, then expose invariant and exit-condition facts at
   the merge point;
-- `return expr` records `result == expr`;
-- `ensures` clauses create postcondition obligations.
+- `return expr` records a completed return path with its active assumptions and
+  `result == expr`;
+- `ensures` clauses create postcondition obligations for every completed return
+  path.
 
 Every proof obligation carries the source range of the assertion or
 postcondition that produced it. Diagnostics and result reporting keep start

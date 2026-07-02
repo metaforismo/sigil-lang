@@ -51,6 +51,14 @@ learned in the else branch is merged as `c || fact`. This keeps branch-local
 reasoning useful for later obligations without treating one branch's facts as
 globally true.
 
+Returns are path-aware. When the planner reaches `return expr`, it records the
+current assumptions plus `result == expr` as one completed return path and stops
+processing that path. Function `ensures` clauses are checked against every
+completed return path, so an early return in one branch cannot be overwritten by
+a later return that is reachable only from another branch. Functions with a
+single return path keep the stable `fn.name.ensures.N.label` artifact name;
+functions with multiple return paths use `fn.name.return.K.ensures.N.label`.
+
 Loops are represented through user-written invariants. For each `while`, Sigil
 emits an initialization obligation for every invariant and a preservation
 obligation that assumes the invariant and loop condition, symbolically checks

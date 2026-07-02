@@ -23,6 +23,7 @@ tests, and docs are in the repo.
 - [x] Add assignment with explicit mutation rules.
 - [x] Validate non-void return coverage across scalar control flow.
 - [x] Reject unreachable statements after guaranteed returns.
+- [x] Verify postconditions against each completed return path.
 - [x] Add loops with user-written invariants.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.

@@ -108,16 +108,58 @@ ensures non_negative: result >= 0;
 
   const auto branch_module = sigil::parse_source(branch_source, "branches.sigil");
   const auto branch_obligations = sigil::build_obligations(branch_module);
-  expect(branch_obligations.size() == 2, "branch assert plus ensure obligations");
+  expect(branch_obligations.size() == 3, "branch assert plus return-path ensure obligations");
   expect(branch_obligations[0].name == "fn.branch_abs.assert.1.then_guard", "branch assert name");
   const auto branch_results = sigil::verify_obligations(branch_obligations, false);
   expect(branch_results[0].status == sigil::VerificationStatus::Proven,
          "then branch assertion proven by branch condition");
   const auto branch_smt = sigil::emit_smt_lib(branch_obligations[1]);
-  expect(branch_smt.find("(assert (or (not (>= x 0)) (= result x)))") != std::string::npos,
-         "emits guarded then return fact");
-  expect(branch_smt.find("(assert (or (>= x 0) (= result (- x))))") != std::string::npos,
-         "emits guarded else return fact");
+  expect(branch_obligations[1].name == "fn.branch_abs.return.1.ensures.1.non_negative",
+         "then return ensure name");
+  expect(branch_smt.find("(assert (>= x 0))") != std::string::npos,
+         "then return path assumes branch condition");
+  expect(branch_smt.find("(assert (= result x))") != std::string::npos,
+         "then return path binds result");
+  const auto branch_else_smt = sigil::emit_smt_lib(branch_obligations[2]);
+  expect(branch_obligations[2].name == "fn.branch_abs.return.2.ensures.1.non_negative",
+         "else return ensure name");
+  expect(branch_else_smt.find("(assert (not (>= x 0)))") != std::string::npos,
+         "else return path assumes negated branch condition");
+  expect(branch_else_smt.find("(assert (= result (- x)))") != std::string::npos,
+         "else return path binds result");
+
+  const char* early_return_source = R"(
+module early;
+
+fn early_then(flag: bool) -> i64
+ensures zero: result == 0;
+{
+  if flag {
+    return 1;
+  } else {
+    assume keep_going: true;
+  }
+  return 0;
+}
+)";
+
+  const auto early_return_module = sigil::parse_source(early_return_source, "early.sigil");
+  const auto early_return_obligations = sigil::build_obligations(early_return_module);
+  expect(early_return_obligations.size() == 2, "early return creates two return-path ensures");
+  expect(early_return_obligations[0].name == "fn.early_then.return.1.ensures.1.zero",
+         "early return path ensure name");
+  const auto early_then_smt = sigil::emit_smt_lib(early_return_obligations[0]);
+  expect(early_then_smt.find("(assert flag)") != std::string::npos,
+         "early return path keeps then guard");
+  expect(early_then_smt.find("(assert (= result 1))") != std::string::npos,
+         "early return path keeps original return value");
+  expect(early_then_smt.find("(assert (= result 0))") == std::string::npos,
+         "early return path is not overwritten by later return");
+  const auto early_after_smt = sigil::emit_smt_lib(early_return_obligations[1]);
+  expect(early_after_smt.find("(assert (not flag))") != std::string::npos,
+         "continuing return path keeps else guard");
+  expect(early_after_smt.find("(assert (= result 0))") != std::string::npos,
+         "continuing return path binds later return value");
 
   const char* assignment_source = R"(
 module assignment;
@@ -154,6 +196,8 @@ ensures preserved: result >= 0;
   expect(assignment_smt.find("(assert (= y_assign_") != std::string::npos,
          "assignment emits version equality");
   const auto branch_assignment_smt = sigil::emit_smt_lib(assignment_obligations[1]);
+  expect(assignment_obligations[1].name == "fn.branch_mutation.ensures.1.preserved",
+         "single return path keeps stable ensure name");
   expect(branch_assignment_smt.find("y_join_") != std::string::npos,
          "branch assignment creates join symbol");
   expect(branch_assignment_smt.find("(ite flag") != std::string::npos,

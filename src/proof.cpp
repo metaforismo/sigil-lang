@@ -279,6 +279,14 @@ struct ProofContext {
   SymbolTable symbols;
   std::unordered_map<std::string, std::string> bindings;
   std::vector<NamedPredicate> active;
+  struct ReturnPath {
+    int index = 0;
+    SymbolTable symbols;
+    std::unordered_map<std::string, std::string> bindings;
+    std::vector<NamedPredicate> assumptions;
+  };
+  std::vector<ReturnPath> returns;
+  bool terminated = false;
   int scope_depth = 0;
 };
 
@@ -361,6 +369,13 @@ void preserve_branch_facts(const Expr& condition, const ProofContext& branch,
     auto guarded = make_guarded_fact(condition, branch.active[index], then_branch);
     copy_symbols_for_expr(guarded.expr, branch, target);
     target.active.push_back(std::move(guarded));
+  }
+}
+
+void append_new_returns(const ProofContext& from, std::size_t start,
+                        std::vector<ProofContext::ReturnPath>& target) {
+  for (auto index = start; index < from.returns.size(); ++index) {
+    target.push_back(from.returns[index]);
   }
 }
 
@@ -492,6 +507,8 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
                           int& assert_index, int& return_index, int& loop_index,
                           std::vector<ProofObligation>& obligations) {
   const auto condition = rewrite_expr(statement.expr, context.bindings);
+  const auto return_start = context.returns.size();
+  const auto parent_scope_depth = context.scope_depth;
 
   auto then_context = context;
   then_context.scope_depth = context.scope_depth + 1;
@@ -507,9 +524,34 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
   process_statements(statement.else_branch, fn, else_context, assert_index, return_index,
                      loop_index, obligations);
 
-  preserve_branch_facts(condition, then_context, then_fact_start, true, context);
-  preserve_branch_facts(condition, else_context, else_fact_start, false, context);
-  merge_branch_bindings(statement, condition, then_context, else_context, context);
+  std::vector<ProofContext::ReturnPath> merged_returns = context.returns;
+  append_new_returns(then_context, return_start, merged_returns);
+  append_new_returns(else_context, return_start, merged_returns);
+
+  if (!then_context.terminated && !else_context.terminated) {
+    preserve_branch_facts(condition, then_context, then_fact_start, true, context);
+    preserve_branch_facts(condition, else_context, else_fact_start, false, context);
+    merge_branch_bindings(statement, condition, then_context, else_context, context);
+    context.returns = std::move(merged_returns);
+    return;
+  }
+
+  if (!then_context.terminated) {
+    context = std::move(then_context);
+    context.scope_depth = parent_scope_depth;
+    context.returns = std::move(merged_returns);
+    return;
+  }
+
+  if (!else_context.terminated) {
+    context = std::move(else_context);
+    context.scope_depth = parent_scope_depth;
+    context.returns = std::move(merged_returns);
+    return;
+  }
+
+  context.returns = std::move(merged_returns);
+  context.terminated = true;
 }
 
 void process_while_statement(const Statement& statement, const FunctionDecl& fn,
@@ -526,6 +568,7 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   }
 
   const auto assigned_names = assigned_outer_names(statement, context);
+  const auto return_start = context.returns.size();
 
   ProofContext head_context = context;
   head_context.active = filter_stale_mutable_facts(context, assigned_names);
@@ -542,14 +585,17 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   process_statements(statement.then_branch, fn, body_context, assert_index, return_index,
                      loop_index, obligations);
 
-  invariant_index = 0;
-  for (const auto& invariant : statement.loop_invariants) {
-    ++invariant_index;
-    obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
-                                               "preserved", invariant, body_context));
+  if (!body_context.terminated) {
+    invariant_index = 0;
+    for (const auto& invariant : statement.loop_invariants) {
+      ++invariant_index;
+      obligations.push_back(make_loop_obligation(fn, statement, current_loop, invariant_index,
+                                                 "preserved", invariant, body_context));
+    }
   }
 
   context.active = filter_stale_mutable_facts(context, assigned_names);
+  append_new_returns(body_context, return_start, context.returns);
   rebind_loop_state(statement, context, assigned_names, "loop_exit");
   for (const auto& invariant : statement.loop_invariants) {
     context.active.push_back(rewrite_predicate(invariant, context.bindings));
@@ -615,8 +661,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     auto equality = make_binary(BinaryOp::Equal,
                                 make_identifier(context.bindings.at("result"), statement.location),
                                 rewrite_expr(statement.expr, context.bindings), statement.location);
-    context.active.push_back(
+    auto assumptions = context.active;
+    assumptions.push_back(
         NamedPredicate{return_name, equality, statement.location, statement.range});
+    context.returns.push_back(ProofContext::ReturnPath{return_index, context.symbols,
+                                                       context.bindings, std::move(assumptions)});
+    context.terminated = true;
   }
 }
 
@@ -624,8 +674,40 @@ void process_statements(const std::vector<Statement>& statements, const Function
                         ProofContext& context, int& assert_index, int& return_index,
                         int& loop_index, std::vector<ProofObligation>& obligations) {
   for (const auto& statement : statements) {
+    if (context.terminated) {
+      break;
+    }
     process_statement(statement, fn, context, assert_index, return_index, loop_index, obligations);
   }
+}
+
+std::string ensure_obligation_name(const FunctionDecl& fn, int ensure_index,
+                                   const NamedPredicate& ensure,
+                                   const ProofContext::ReturnPath* return_path,
+                                   std::size_t return_path_count) {
+  if (return_path == nullptr || return_path_count <= 1) {
+    return "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+  }
+  return "fn." + fn.name + ".return." + std::to_string(return_path->index) + ".ensures." +
+         std::to_string(ensure_index) + "." + ensure.name;
+}
+
+void append_ensure_obligation(const FunctionDecl& fn, const NamedPredicate& ensure,
+                              int ensure_index, const std::vector<NamedPredicate>& assumptions,
+                              const SymbolTable& symbols,
+                              const std::unordered_map<std::string, std::string>& bindings,
+                              const ProofContext::ReturnPath* return_path,
+                              std::size_t return_path_count,
+                              std::vector<ProofObligation>& obligations) {
+  ProofObligation obligation;
+  obligation.name =
+      ensure_obligation_name(fn, ensure_index, ensure, return_path, return_path_count);
+  obligation.location = ensure.location;
+  obligation.range = ensure.range;
+  obligation.assumptions = assumptions;
+  obligation.goal = rewrite_predicate(ensure, bindings);
+  obligation.symbols = symbols;
+  obligations.push_back(std::move(obligation));
 }
 
 } // namespace
@@ -651,18 +733,23 @@ std::vector<ProofObligation> build_obligations(const Module& module) {
     int loop_index = 0;
     process_statements(fn.body, fn, context, assert_index, return_index, loop_index, obligations);
 
-    int ensure_index = 0;
-    for (const auto& ensure : fn.ensures) {
-      ++ensure_index;
-      ProofObligation obligation;
-      obligation.name =
-          "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
-      obligation.location = ensure.location;
-      obligation.range = ensure.range;
-      obligation.assumptions = context.active;
-      obligation.goal = rewrite_predicate(ensure, context.bindings);
-      obligation.symbols = context.symbols;
-      obligations.push_back(std::move(obligation));
+    if (fn.return_type.kind != TypeKind::Void && !context.returns.empty()) {
+      for (const auto& return_path : context.returns) {
+        int ensure_index = 0;
+        for (const auto& ensure : fn.ensures) {
+          ++ensure_index;
+          append_ensure_obligation(fn, ensure, ensure_index, return_path.assumptions,
+                                   return_path.symbols, return_path.bindings, &return_path,
+                                   context.returns.size(), obligations);
+        }
+      }
+    } else {
+      int ensure_index = 0;
+      for (const auto& ensure : fn.ensures) {
+        ++ensure_index;
+        append_ensure_obligation(fn, ensure, ensure_index, context.active, context.symbols,
+                                 context.bindings, nullptr, 0, obligations);
+      }
     }
   }
   return obligations;
