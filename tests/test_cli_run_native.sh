@@ -15,6 +15,19 @@ run_and_expect() {
   printf '%s\n' "$output" | grep "result: $expected" >/dev/null
 }
 
+run_and_expect_range() {
+  function_name="$1"
+  expected="$2"
+  expected_range="$3"
+  shift 3
+
+  output="$("$sigil" run "$example" "$function_name" "$@")"
+  echo "$output"
+  printf '%s\n' "$output" | grep "status: invoked" >/dev/null
+  printf '%s\n' "$output" | grep "at: $expected_range" >/dev/null
+  printf '%s\n' "$output" | grep "result: $expected" >/dev/null
+}
+
 run_and_expect_failure() {
   function_name="$1"
   expected="$2"
@@ -30,7 +43,7 @@ run_and_expect_failure() {
   printf '%s\n' "$output" | grep "$expected" >/dev/null
 }
 
-run_and_expect add_one 42 41
+run_and_expect_range add_one 42 "$example:3:1-" 41
 run_and_expect choose 9 true 9
 run_and_expect choose 0 false 9
 run_and_expect abs_value 7 -7

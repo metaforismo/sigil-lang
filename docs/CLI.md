@@ -125,9 +125,10 @@ function from the JIT result, and invokes it through the native ABI. Arguments
 are parsed from the function signature: `i64` parameters accept signed decimal
 integer strings in the `int64_t` range, and `bool` parameters accept `true`,
 `false`, `1`, or `0`.
+Successful invocations include an `at:` source range for the invoked function.
 If lowering or invocation fails after parsing, the output includes an `at:`
-source range when Sigil can identify a relevant function, parameter, statement,
-or expression.
+source range when Sigil can identify a relevant parameter, statement, or
+expression.
 
 Example:
 

@@ -172,6 +172,8 @@ fn observe(flag: bool, x: i64) -> void
   expect(add_one.invoked, "add_one invoked");
   expect(add_one.value.kind == sigil::TypeKind::I64, "add_one result kind");
   expect(add_one.value.integer == 42, "add_one ABI result");
+  expect(add_one.range.display().find("backend.sigil:4:1-") == 0,
+         "add_one invocation range points to function");
 
   const auto choose_true = sigil::invoke_function_with_gccjit(
       module, "choose", {sigil::gccjit_bool(true), sigil::gccjit_i64(9)});

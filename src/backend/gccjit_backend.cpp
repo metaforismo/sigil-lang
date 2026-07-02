@@ -1106,6 +1106,7 @@ invoke_function_with_gccjit(const Module& module, const std::string& function_na
     invocation.value = invoke_code(code, *fn, arguments);
     invocation.invoked = true;
     invocation.detail = "invoked " + function_name;
+    invocation.range = fn->range;
   } catch (const std::exception& error) {
     invocation.detail = error.what();
     invocation.range = fn->range;
