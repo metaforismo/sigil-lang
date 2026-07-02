@@ -117,15 +117,19 @@ std::string function_signature(const sigil::FunctionDecl& fn) {
   return out.str();
 }
 
-sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::Type& type,
+sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigil::ParamDecl& param,
                                             std::size_t index) {
+  const auto& type = param.type;
+  const auto parameter_context = " for parameter '" + param.name + "'";
+
   if (type.kind == sigil::TypeKind::I64) {
     std::int64_t parsed = 0;
     const auto* begin = value.data();
     const auto* end = begin + value.size();
     const auto [parsed_end, error] = std::from_chars(begin, end, parsed);
     if (error != std::errc{} || parsed_end != end) {
-      throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64");
+      throw std::runtime_error("argument " + std::to_string(index + 1) + " must be an i64" +
+                               parameter_context);
     }
     return sigil::gccjit_i64(parsed);
   }
@@ -137,12 +141,12 @@ sigil::GccJitScalarValue parse_run_argument(const std::string& value, const sigi
     if (value == "false" || value == "0") {
       return sigil::gccjit_bool(false);
     }
-    throw std::runtime_error("argument " + std::to_string(index + 1) +
-                             " must be a bool: true, false, 1, or 0");
+    throw std::runtime_error("argument " + std::to_string(index + 1) + " must be a bool" +
+                             parameter_context + ": true, false, 1, or 0");
   }
 
   throw std::runtime_error("argument " + std::to_string(index + 1) + " has unsupported type '" +
-                           type.display() + "'");
+                           type.display() + "'" + parameter_context);
 }
 
 std::vector<std::string>
@@ -356,7 +360,7 @@ int run_command(const std::vector<std::string>& args) {
   std::vector<sigil::GccJitScalarValue> values;
   values.reserve(fn->params.size());
   for (std::size_t index = 0; index < fn->params.size(); ++index) {
-    values.push_back(parse_run_argument(args[index + 2], fn->params[index].type, index));
+    values.push_back(parse_run_argument(args[index + 2], fn->params[index], index));
   }
 
   const auto result = sigil::invoke_function_with_gccjit(module, function_name, values);

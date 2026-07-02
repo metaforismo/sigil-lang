@@ -124,7 +124,8 @@ Parses and validates a module, lowers it with `libgccjit`, retrieves the named
 function from the JIT result, and invokes it through the native ABI. Arguments
 are parsed from the function signature: `i64` parameters accept signed decimal
 integer strings in the `int64_t` range, and `bool` parameters accept `true`,
-`false`, `1`, or `0`.
+`false`, `1`, or `0`. Argument-conversion errors include both the argument
+position and the source parameter name.
 Successful invocations include an `at:` source range for the invoked function.
 If the requested function is not present, the error lists the module's available
 function names in source order.

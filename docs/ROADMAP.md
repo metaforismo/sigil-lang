@@ -46,6 +46,7 @@ tests, and docs are in the repo.
 - [x] Report successful native invocation source ranges.
 - [x] List available functions for unknown `sigil run` targets.
 - [x] Show function signatures for native run arity errors.
+- [x] Name source parameters in native run conversion errors.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [x] Add debug metadata for mapping native code back to Sigil source.

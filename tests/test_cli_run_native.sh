@@ -64,5 +64,8 @@ run_and_expect observe void false 7
 run_and_expect_failure add_one "function 'add_one' expects 1 argument(s), got 0"
 run_and_expect_failure add_one "signature: add_one(x: i64) -> i64"
 run_and_expect_failure add_one "argument 1 must be an i64" 9223372036854775808
+run_and_expect_failure add_one "parameter 'x'" 9223372036854775808
+run_and_expect_failure choose "must be a bool" maybe 9
+run_and_expect_failure choose "parameter 'flag'" maybe 9
 run_and_expect_failure missing "unknown function: missing"
 run_and_expect_failure missing "available functions: add_one, choose, abs_value"
