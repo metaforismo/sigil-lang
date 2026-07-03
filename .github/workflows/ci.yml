@@ -43,7 +43,8 @@ jobs:
 
       - name: Install Z3
         run: |
-          sudo apt-get update
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f \( -name '*azure-cli*' -o -name '*microsoft*' \) -delete
+          sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y z3
 
       - name: Configure
@@ -90,7 +91,8 @@ jobs:
 
       - name: Install libgccjit
         run: |
-          sudo apt-get update
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f \( -name '*azure-cli*' -o -name '*microsoft*' \) -delete
+          sudo apt-get update -o Acquire::Retries=3
           package="$(apt-cache search '^libgccjit-[0-9]+-dev$' | awk '{print $1}' | sort -V | tail -n1)"
           test -n "$package"
           sudo apt-get install -y "$package"
