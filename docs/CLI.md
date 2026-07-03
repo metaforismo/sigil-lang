@@ -3,7 +3,8 @@
 ## `sigil check`
 
 ```sh
-sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]
+sigil check <file.sigil> [--dump-smt] [--save-smt <dir>]
+                  [--save-proof-hints <dir>] [--show-model]
                   [--solver-timeout-ms <ms>] [--strict] [--no-z3]
 ```
 
@@ -24,6 +25,11 @@ Options:
 
 - `--dump-smt`: print each emitted SMT-LIB query to stdout.
 - `--save-smt <dir>`: write every emitted SMT-LIB query to `<dir>`.
+- `--save-proof-hints <dir>`: write one deterministic proof-search handoff
+  artifact for each obligation that is not proven. Each hint contains the
+  source goal, active assumptions, visible symbols, optional SMT path, embedded
+  SMT-LIB, and an explicit agent contract that proposals must be rechecked by
+  Sigil and Z3.
 - `--show-model`: when Z3 refutes an obligation, ask Z3 for a model, render the
   scalar values as a Sigil source-level `counterexample`, and keep the raw Z3
   model under the refuted result.

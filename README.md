@@ -50,6 +50,7 @@ production verifier yet.
   modulo divisors.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
+- Deterministic proof-search hint artifacts for obligations that are not proven.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using function calls, `let`,
   assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
@@ -112,6 +113,7 @@ Save SMT artifacts and show counterexample models:
 
 ```sh
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
+./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
 

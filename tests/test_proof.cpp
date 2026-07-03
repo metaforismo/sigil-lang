@@ -441,6 +441,32 @@ ensures exact: result == (x + 1) + 1;
   expect(wp_results[1].details == "proved by weakest-precondition substitution",
          "wp ensure uses local substitution proof rule");
 
+  const char* hint_source = R"(
+module hints;
+
+fn add_one(x: i64) -> i64
+ensures advanced: result > x;
+{
+  return x + 1;
+}
+)";
+
+  const auto hint_module = sigil::parse_source(hint_source, "hints.sigil");
+  const auto hint_obligations = sigil::build_obligations(hint_module);
+  const auto hint_results = sigil::verify_obligations(hint_obligations, false);
+  const auto hint_artifacts = sigil::build_proof_hint_artifacts(hint_obligations, hint_results);
+  expect(hint_artifacts.size() == 1, "proof hint artifact generated for unproven obligation");
+  expect(hint_artifacts[0].file_name == "fn.add_one.ensures.1.advanced.proof-hint.txt",
+         "proof hint file name is stable");
+  expect(hint_artifacts[0].text.find("sigil-proof-hint-v1") != std::string::npos,
+         "proof hint includes format marker");
+  expect(hint_artifacts[0].text.find("goal:\n  advanced: (result > x)") != std::string::npos,
+         "proof hint includes source goal");
+  expect(hint_artifacts[0].text.find("agent-contract:") != std::string::npos,
+         "proof hint includes agent contract");
+  expect(hint_artifacts[0].text.find("(check-sat)") != std::string::npos,
+         "proof hint embeds smt query");
+
   const char* loop_source = R"(
 module loops;
 

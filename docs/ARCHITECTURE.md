@@ -133,6 +133,12 @@ a counterexample. Anything else is unknown. The CLI can write each query to a
 stable `.smt2` artifact path so proof runs can be reproduced outside Sigil.
 Expression-level conditionals are represented directly as SMT `ite` terms.
 
+For obligations that remain unproven, the CLI can also write proof-search hint
+artifacts. These are deterministic handoff files containing the source goal,
+assumptions, symbols, optional SMT path, embedded SMT-LIB, and the rule that any
+agent proposal must be checked by Sigil and Z3 before it can influence
+compilation.
+
 ## GCC JIT Backend
 
 CMake detects `libgccjit` and compiles the native backend when available. The

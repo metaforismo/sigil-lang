@@ -1392,6 +1392,16 @@ std::string smt_file_name_for_obligation(const std::string& obligation_name) {
   return file_name;
 }
 
+std::string proof_hint_file_name_for_obligation(const std::string& obligation_name) {
+  auto file_name = smt_file_name_for_obligation(obligation_name);
+  constexpr std::string_view smt_suffix = ".smt2";
+  if (file_name.size() >= smt_suffix.size()) {
+    file_name.resize(file_name.size() - smt_suffix.size());
+  }
+  file_name += ".proof-hint.txt";
+  return file_name;
+}
+
 std::string render_source_counterexample(const ProofObligation& obligation,
                                          const std::string& z3_model) {
   const auto values = parse_model_values(z3_model);
@@ -1410,6 +1420,98 @@ std::string render_source_counterexample(const ProofObligation& obligation,
     out << name << ": " << type->second.display() << " = " << value->second << "\n";
   }
   return out.str();
+}
+
+namespace {
+
+void append_indented_block(std::ostringstream& out, const std::string& block,
+                           const std::string& indent) {
+  std::istringstream lines(block);
+  std::string line;
+  while (std::getline(lines, line)) {
+    out << indent << line << "\n";
+  }
+}
+
+std::string render_proof_hint_artifact(const ProofObligation& obligation,
+                                       const VerificationResult& result) {
+  std::ostringstream out;
+  out << "sigil-proof-hint-v1\n";
+  out << "obligation: " << obligation.name << "\n";
+  out << "status: " << status_name(result.status) << "\n";
+  out << "details: " << result.details << "\n";
+  out << "range: " << obligation.range.display() << "\n";
+  if (!result.smt_path.empty()) {
+    out << "smt-path: " << result.smt_path << "\n";
+  }
+  out << "\n";
+
+  out << "goal:\n";
+  out << "  " << obligation.goal.name << ": " << display_expr(obligation.goal.expr) << "\n";
+  out << "\n";
+
+  out << "assumptions:\n";
+  if (obligation.assumptions.empty()) {
+    out << "  (none)\n";
+  } else {
+    for (const auto& assumption : obligation.assumptions) {
+      out << "  - " << assumption.name << ": " << display_expr(assumption.expr) << "\n";
+    }
+  }
+  out << "\n";
+
+  out << "symbols:\n";
+  bool wrote_symbol = false;
+  for (const auto& name : source_symbol_order(obligation)) {
+    const auto found = obligation.symbols.find(name);
+    if (found == obligation.symbols.end()) {
+      continue;
+    }
+    wrote_symbol = true;
+    out << "  - " << name << ": " << found->second.display() << "\n";
+  }
+  if (!wrote_symbol) {
+    out << "  (none)\n";
+  }
+  out << "\n";
+
+  if (!result.counterexample.empty()) {
+    out << "counterexample:\n";
+    append_indented_block(out, result.counterexample, "  ");
+    out << "\n";
+  }
+
+  out << "agent-contract:\n";
+  out << "  - propose helper predicates in Sigil source syntax only\n";
+  out << "  - every proposal must be rechecked by Sigil and Z3 before it can affect compilation\n";
+  out << "  - do not treat this artifact as a proof certificate\n";
+  out << "\n";
+
+  out << "smt-lib:\n";
+  append_indented_block(out, result.smt_lib, "  ");
+  return out.str();
+}
+
+} // namespace
+
+std::vector<ProofHintArtifact>
+build_proof_hint_artifacts(const std::vector<ProofObligation>& obligations,
+                           const std::vector<VerificationResult>& results) {
+  if (obligations.size() != results.size()) {
+    throw std::invalid_argument("proof hint artifacts require matching obligations and results");
+  }
+
+  std::vector<ProofHintArtifact> artifacts;
+  for (std::size_t index = 0; index < obligations.size(); ++index) {
+    const auto& result = results[index];
+    if (result.status == VerificationStatus::Proven) {
+      continue;
+    }
+    artifacts.push_back(
+        ProofHintArtifact{proof_hint_file_name_for_obligation(obligations[index].name),
+                          render_proof_hint_artifact(obligations[index], result)});
+  }
+  return artifacts;
 }
 
 std::string write_smt_artifact(const ProofObligation& obligation, const std::string& smt,
