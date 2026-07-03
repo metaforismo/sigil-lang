@@ -61,6 +61,7 @@ struct ExprNode {
     Integer,
     Boolean,
     Identifier,
+    Call,
     Unary,
     Binary,
     If,
@@ -77,6 +78,7 @@ struct ExprNode {
   Expr condition;
   Expr lhs;
   Expr rhs;
+  std::vector<Expr> arguments;
 };
 
 Expr make_integer(std::int64_t value, SourceRange range);
@@ -85,6 +87,7 @@ Expr make_boolean(bool value, SourceRange range);
 Expr make_boolean(bool value, SourceLocation location = {});
 Expr make_identifier(std::string name, SourceRange range);
 Expr make_identifier(std::string name, SourceLocation location = {});
+Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange range);
 Expr make_unary(UnaryOp op, Expr operand, SourceRange range);
 Expr make_unary(UnaryOp op, Expr operand, SourceLocation location = {});
 Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceRange range);

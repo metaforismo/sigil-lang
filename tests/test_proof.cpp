@@ -70,6 +70,44 @@ ensures preserved: result >= 0;
          "result keeps source column");
   expect(results[0].range.display() == obligations[0].range.display(), "result keeps source range");
 
+  const char* call_source = R"(
+module calls;
+
+fn add_one(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  return x + 1;
+}
+
+fn use_add_one(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  let y: i64 = add_one(x);
+  assert call_advanced: y > x;
+  return y;
+}
+)";
+
+  const auto call_module = sigil::parse_source(call_source, "calls.sigil");
+  const auto call_obligations = sigil::build_obligations(call_module);
+  expect(call_obligations.size() == 4, "callee ensure plus call requires, assert, caller ensure");
+  expect(call_obligations[1].name == "fn.use_add_one.call.1.requires.1.non_negative",
+         "call precondition obligation name");
+  expect(call_obligations[1].range.display() == "calls.sigil:15:16-25",
+         "call precondition points to call site");
+  expect(call_obligations[2].name == "fn.use_add_one.assert.1.call_advanced",
+         "caller assertion name");
+  const auto call_requires_results = sigil::verify_obligations(call_obligations, false);
+  expect(call_requires_results[1].status == sigil::VerificationStatus::Proven,
+         "caller precondition proves callee precondition syntactically");
+  const auto call_assert_smt = sigil::emit_smt_lib(call_obligations[2]);
+  expect(call_assert_smt.find("(assert (> add_one_call_1_") != std::string::npos,
+         "assertion SMT assumes callee postcondition on call result");
+  expect(call_assert_smt.find("(assert (= y add_one_call_1_") != std::string::npos,
+         "assertion SMT binds let local to call result");
+
   const char* conditional_source = R"(
 module conditional;
 

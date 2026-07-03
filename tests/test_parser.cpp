@@ -57,6 +57,20 @@ int main() {
   expect(max_literal_module.functions[0].body[0].expr->integer_value == 9223372036854775807LL,
          "max i64 literal parses exactly");
 
+  const auto call_module = sigil::parse_source(
+      R"(module calls;
+fn call_examples(x: i64, y: i64) -> i64
+{
+  let next: i64 = add_one(x);
+  return sum2(next, y);
+}
+)",
+      "calls.sigil");
+  expect(sigil::display_expr(call_module.functions[0].body[0].expr) == "add_one(x)",
+         "display single-argument call");
+  expect(sigil::display_expr(call_module.functions[0].body[1].expr) == "sum2(next, y)",
+         "display multi-argument call");
+
   const char* source = R"(
 module cache;
 

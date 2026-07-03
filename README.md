@@ -23,6 +23,8 @@ production verifier yet.
   postconditions, assumptions, assertions, and returns.
 - Typed local `let` bindings that become proof facts for later assertions and
   returns.
+- Function call expressions with static callee, arity, argument-type, and
+  acyclic-call-graph validation.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -38,14 +40,16 @@ production verifier yet.
   guaranteed returns.
 - Verification-condition generation for function assertions and return-path
   postconditions.
+- Modular call-site proof obligations: callers prove callee `requires`
+  predicates and then assume callee `ensures` predicates on the call result.
 - Branch- and short-circuit-aware arithmetic safety obligations for division and
   modulo divisors.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
-- Native lowering for pure `i64`/`bool` functions using `let`, assignment,
-  conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean operators, and
-  `i64`/`bool`/`void` returns.
+- Native lowering for pure `i64`/`bool` functions using function calls, `let`,
+  assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
+  operators, and `i64`/`bool`/`void` returns.
 - ABI smoke tests that invoke JIT-compiled scalar and `void` functions with up
   to eight scalar parameters.
 - Native-lowering diagnostics that report source ranges for unsupported
