@@ -63,6 +63,8 @@ production verifier yet.
   lowering status for comparison with SMT artifacts.
 - GCCJIT debug-info requests plus deterministic source-to-native debug location
   maps in saved native artifacts.
+- Binary-proof experiment fact artifacts that link to native IR and explicitly
+  record that crash-safety and cycle-bound claims are not proven yet.
 - Cross-platform backend capability tests for builds with and without
   `libgccjit`.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,
@@ -114,6 +116,7 @@ Save SMT artifacts and show counterexample models:
 ```sh
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
+./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
 

@@ -118,10 +118,25 @@ fn call_twice(x: i64) -> i64
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
+  const auto binary_artifacts = sigil::build_binary_proof_artifacts(module, result);
   expect(artifacts.size() == 12, "native artifact count");
+  expect(binary_artifacts.size() == 12, "binary proof artifact count");
   expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
+  expect(binary_artifacts[0].file_name == "fn.add_one.binary-facts.txt",
+         "binary proof artifact file name");
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
+  expect(binary_artifacts[0].text.find("sigil-binary-proof-facts v0") != std::string::npos,
+         "binary proof artifact marker");
+  expect(binary_artifacts[0].text.find("native-ir-file fn.add_one.native-ir.txt") !=
+             std::string::npos,
+         "binary proof artifact links native IR file");
+  expect(binary_artifacts[0].text.find("cycle-bound-proven no") != std::string::npos,
+         "binary proof artifact does not claim cycle proof");
+  expect(binary_artifacts[0].text.find("crash-safety-proven no") != std::string::npos,
+         "binary proof artifact does not claim crash proof");
+  expect(binary_artifacts[0].text.find("experiment-contract") != std::string::npos,
+         "binary proof artifact includes experiment contract");
   expect(artifacts[0].text.find("assign y") != std::string::npos, "native artifact assignment");
   expect(artifacts[0].text.find("debug-locations") != std::string::npos,
          "native artifact debug location section");
@@ -158,6 +173,10 @@ fn call_twice(x: i64) -> i64
   expect(result.available, "gccjit compile result is available");
   expect(result.compiled, "gccjit compile result compiled");
   expect(result.debug_info_enabled, "gccjit debug info enabled");
+  expect(binary_artifacts[0].text.find("native-status lowered") != std::string::npos,
+         "binary proof artifact lowered status");
+  expect(binary_artifacts[0].text.find("candidate yes") != std::string::npos,
+         "binary proof artifact candidate when lowered");
   expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
          "native artifact records enabled debug info");
   expect(result.functions.size() == 12, "twelve function reports");
@@ -313,6 +332,10 @@ fn call_twice(x: i64) -> i64
   expect(!result.available, "gccjit compile result unavailable without backend");
   expect(!result.compiled, "gccjit compile result not compiled without backend");
   expect(!result.debug_info_enabled, "gccjit debug info disabled without backend");
+  expect(binary_artifacts[0].text.find("native-status skipped") != std::string::npos,
+         "binary proof artifact skipped without backend");
+  expect(binary_artifacts[0].text.find("candidate no") != std::string::npos,
+         "binary proof artifact not candidate without backend");
   expect(artifacts[0].text.find("debug-info disabled") != std::string::npos,
          "native artifact records disabled debug info");
   const auto invocation =
@@ -344,9 +367,19 @@ fn quotient(x: i64, y: i64) -> i64
          "division skip points to expression range");
   const auto unsupported_artifacts =
       sigil::build_native_ir_artifacts(unsupported_module, unsupported_result);
+  const auto unsupported_binary_artifacts =
+      sigil::build_binary_proof_artifacts(unsupported_module, unsupported_result);
   expect(unsupported_artifacts.size() == 1, "unsupported native artifact count");
+  expect(unsupported_binary_artifacts.size() == 1, "unsupported binary proof artifact count");
   expect(unsupported_artifacts[0].text.find("status skipped") != std::string::npos,
          "unsupported native artifact status");
+  expect(unsupported_binary_artifacts[0].text.find("native-status skipped") != std::string::npos,
+         "unsupported binary proof artifact status");
+  expect(unsupported_binary_artifacts[0].text.find("candidate no") != std::string::npos,
+         "unsupported binary proof artifact not a candidate");
+  expect(unsupported_binary_artifacts[0].text.find("blocking-range unsupported.sigil:6:10-14") !=
+             std::string::npos,
+         "unsupported binary proof artifact blocking range");
   expect(unsupported_artifacts[0].text.find("diagnostic unsupported.sigil:6:10-14") !=
              std::string::npos,
          "unsupported native artifact diagnostic range");

@@ -34,6 +34,7 @@ void print_help() {
             << "                          [--save-proof-hints <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
             << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
+            << "                            [--dump-binary-facts] [--save-binary-facts <dir>]\n"
             << "  sigil run <file.sigil> <function> [args...]\n"
             << "  sigil backend\n";
 }
@@ -161,6 +162,24 @@ write_native_artifacts(const std::vector<sigil::GccJitNativeArtifact>& artifacts
     std::ofstream file(path);
     if (!file) {
       throw std::runtime_error("could not write native IR artifact: " + path.string());
+    }
+    file << artifact.text;
+    paths.push_back(path.string());
+  }
+  return paths;
+}
+
+std::vector<std::string>
+write_binary_proof_artifacts(const std::vector<sigil::GccJitBinaryProofArtifact>& artifacts,
+                             const std::string& output_dir) {
+  std::filesystem::create_directories(output_dir);
+  std::vector<std::string> paths;
+  paths.reserve(artifacts.size());
+  for (const auto& artifact : artifacts) {
+    const auto path = std::filesystem::path(output_dir) / artifact.file_name;
+    std::ofstream file(path);
+    if (!file) {
+      throw std::runtime_error("could not write binary proof artifact: " + path.string());
     }
     file << artifact.text;
     paths.push_back(path.string());
@@ -300,6 +319,8 @@ int backend_command(const std::vector<std::string>& args) {
   std::cout << "  abi-invocation: " << availability(capabilities.abi_invocation) << "\n";
   std::cout << "  debug-info: " << (capabilities.debug_info ? "enabled" : "disabled") << "\n";
   std::cout << "  native-ir-artifacts: " << availability(capabilities.native_ir_artifacts) << "\n";
+  std::cout << "  binary-proof-artifacts: " << availability(capabilities.binary_proof_artifacts)
+            << "\n";
   return capabilities.context_available ? 0 : 3;
 }
 
@@ -311,7 +332,9 @@ int compile_command(const std::vector<std::string>& args) {
 
   std::string path;
   bool dump_native_ir = false;
+  bool dump_binary_facts = false;
   std::string native_ir_output_dir;
+  std::string binary_facts_output_dir;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const auto& arg = args[index];
     if (arg == "--dump-native-ir") {
@@ -321,6 +344,13 @@ int compile_command(const std::vector<std::string>& args) {
         throw std::runtime_error("--save-native-ir requires an output directory");
       }
       native_ir_output_dir = args[++index];
+    } else if (arg == "--dump-binary-facts") {
+      dump_binary_facts = true;
+    } else if (arg == "--save-binary-facts") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-binary-facts requires an output directory");
+      }
+      binary_facts_output_dir = args[++index];
     } else if (path.empty()) {
       path = arg;
     } else {
@@ -337,9 +367,14 @@ int compile_command(const std::vector<std::string>& args) {
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
+  const auto binary_artifacts = sigil::build_binary_proof_artifacts(module, result);
   std::vector<std::string> artifact_paths;
   if (!native_ir_output_dir.empty()) {
     artifact_paths = write_native_artifacts(artifacts, native_ir_output_dir);
+  }
+  std::vector<std::string> binary_artifact_paths;
+  if (!binary_facts_output_dir.empty()) {
+    binary_artifact_paths = write_binary_proof_artifacts(binary_artifacts, binary_facts_output_dir);
   }
 
   std::cout << "module " << module.name << "\n";
@@ -357,8 +392,16 @@ int compile_command(const std::vector<std::string>& args) {
   for (const auto& artifact_path : artifact_paths) {
     std::cout << "  native-ir: " << artifact_path << "\n";
   }
+  for (const auto& artifact_path : binary_artifact_paths) {
+    std::cout << "  binary-facts: " << artifact_path << "\n";
+  }
   if (dump_native_ir) {
     for (const auto& artifact : artifacts) {
+      std::cout << "--- " << artifact.file_name << "\n" << artifact.text;
+    }
+  }
+  if (dump_binary_facts) {
+    for (const auto& artifact : binary_artifacts) {
       std::cout << "--- " << artifact.file_name << "\n" << artifact.text;
     }
   }
