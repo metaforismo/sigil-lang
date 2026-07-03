@@ -186,7 +186,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are:
 
 - type checking beyond the current scalar proof-expression validator;
-- weakest-precondition generation for real control flow;
+- weakest-precondition generation beyond the current straight-line assignment
+  rewrite;
 - preservation checks for struct invariants across constructors and mutators;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
 - binary-level proof experiments for bounded runtime and crash-safety claims.

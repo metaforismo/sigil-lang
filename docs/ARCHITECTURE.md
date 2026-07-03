@@ -103,8 +103,11 @@ Every proof obligation carries the source range of the assertion or
 postcondition that produced it. Diagnostics and result reporting keep start
 locations for quick sorting, but print full ranges when available.
 
-This is not a full weakest-precondition engine yet. It is the first verifiable
-spine for contracts written in the language itself.
+The local prover can now run a small weakest-precondition-style rewrite for
+straight-line equality assumptions created by `let` and assignment. That proves
+simple mutation chains without invoking Z3. This is still not a full
+weakest-precondition engine for arbitrary control flow; it is the first
+verifiable spine for contracts written in the language itself.
 
 ## Solver Boundary
 
