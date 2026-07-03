@@ -185,7 +185,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are:
 
-- type checking beyond the current scalar proof-expression validator;
+- aggregate ownership, layout, copy, and function-boundary semantics;
 - weakest-precondition generation beyond the current straight-line assignment
   rewrite;
 - preservation checks for struct invariants across constructors and mutators;

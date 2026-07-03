@@ -40,15 +40,23 @@ system:
 - function contract labels must be unique across `requires`, `ensures`, and
   explicit body proof labels;
 - identifiers must be declared in the active scope;
+- function parameters and return values are scalar-only until aggregate
+  function-boundary layout and proof semantics are explicit;
 - function calls must resolve to a module function, use the declared arity and
   argument types, return a value when used as an expression, and avoid direct or
   indirect recursion;
 - struct literals must initialize declared fields exactly once, and field access
   must target a field on a struct-typed expression;
 - local `let` bindings cannot shadow parameters or earlier locals;
+- struct-typed locals must be initialized directly from struct literals;
 - assignments can only target declared local bindings and must preserve the
-  local type;
+  local type; struct assignment is rejected until aggregate copy semantics are
+  defined;
 - conditional expression conditions must be `bool`, and branch types must match;
+- conditional expressions and equality comparisons cannot produce or compare
+  aggregate values until merge and structural equality semantics are defined;
+- recursive by-value struct fields are rejected until the language has explicit
+  reference or pointer types;
 - statement-level `if` conditions must be `bool`, and branch-local bindings do
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
@@ -63,8 +71,8 @@ system:
 - empty `return;` statements are only valid in `void` functions;
 - non-void functions must return a value on every syntactic control-flow path;
 - statements after a guaranteed return path are rejected as unreachable;
-- unsupported user-defined value types are rejected until the type checker and
-  backend know how to represent them.
+- unsupported user-defined value operations are rejected until the type checker,
+  prover, and backend know how to represent them.
 
 ## Verification Planner
 

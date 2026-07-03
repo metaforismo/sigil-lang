@@ -213,6 +213,127 @@ struct Pair {
   ok: bool;
 }
 
+struct Node {
+  next: Node;
+}
+)",
+                    "recursive struct value types are not supported yet");
+
+  expect_diagnostic(R"(
+module bad;
+struct A {
+  b: B;
+}
+
+struct B {
+  a: A;
+}
+)",
+                    "recursive struct value types are not supported yet");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn aggregate_parameter(pair: Pair) -> i64
+{
+  return pair.left;
+}
+)",
+                    "parameter 'aggregate_parameter.pair' cannot use aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn aggregate_return(x: i64) -> Pair
+{
+  return Pair { left: x, ok: true };
+}
+)",
+                    "function 'aggregate_return' return type cannot use aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn copy_pair(x: i64) -> i64
+{
+  let first: Pair = Pair { left: x, ok: true };
+  let second: Pair = first;
+  return second.left;
+}
+)",
+                    "struct local 'copy_pair.second' must be initialized with a struct literal");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn assign_pair(x: i64) -> i64
+{
+  let first: Pair = Pair { left: x, ok: true };
+  let second: Pair = Pair { left: 0, ok: false };
+  second = first;
+  return second.left;
+}
+)",
+                    "assignment target 'second' has aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn compare_pairs(x: i64) -> bool
+{
+  let first: Pair = Pair { left: x, ok: true };
+  let second: Pair = Pair { left: x, ok: true };
+  return first == second;
+}
+)",
+                    "equality does not support aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn choose_pair(flag: bool, x: i64) -> i64
+{
+  let pair: Pair = if flag {
+    Pair { left: x, ok: true }
+  } else {
+    Pair { left: 0, ok: false }
+  };
+  return pair.left;
+}
+)",
+                    "if expression cannot produce aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
 fn missing_field(x: i64) -> i64
 {
   let pair: Pair = Pair { left: x };

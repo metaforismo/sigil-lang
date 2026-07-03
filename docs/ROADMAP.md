@@ -44,6 +44,9 @@ tests, and docs are in the repo.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
+- [x] Reject aggregate operations whose copy, merge, equality, or function-boundary
+      semantics are not defined yet.
+- [x] Reject recursive by-value struct definitions until references exist.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Lower scalar function calls through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
@@ -65,7 +68,8 @@ tests, and docs are in the repo.
 
 ## Immediate Queue
 
-- [ ] Extend scalar validation into a complete language type checker.
+- [ ] Extend aggregate typing when ownership, layout, and function-boundary
+      semantics are defined.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 
@@ -76,6 +80,8 @@ tests, and docs are in the repo.
 - [x] Add loops with user-written invariants.
 - [x] Add simple user-defined struct values.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
+- [x] Reject aggregate operations whose semantics are not defined yet.
+- [x] Reject recursive by-value struct definitions until references exist.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.

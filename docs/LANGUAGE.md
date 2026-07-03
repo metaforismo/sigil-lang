@@ -31,6 +31,11 @@ The initial scalar types are:
 Unknown type names are preserved by the parser so future user-defined types can
 be added without redesigning the AST.
 
+Struct types are supported for fields and local values constructed directly
+from struct literals. Function parameters and return values are scalar-only for
+now, because aggregate function-boundary layout and proof semantics are not
+defined yet.
+
 ## Structs And Invariants
 
 ```sigil
@@ -66,6 +71,15 @@ fields as ordinary SMT symbols such as `pair.left`, emits invariant obligations
 for the constructed value, then assumes the instantiated invariants for later
 proof steps. Native lowering deliberately skips functions that manipulate struct
 values until the ABI and memory layout rules are explicit.
+
+Struct locals must be initialized directly from struct literals. Struct
+assignment, struct equality, and struct-valued conditional expressions are
+rejected until Sigil has explicit aggregate copy, structural equality, and
+merge semantics.
+
+Struct fields are by value. Recursive struct definitions such as
+`Node { next: Node }` are rejected until the language has references or pointer
+types.
 
 ## Function Contracts
 
