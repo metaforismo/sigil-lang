@@ -7,7 +7,10 @@ Sigil's proof system has three layers.
 The compiler first runs cheap deterministic checks. Today that includes:
 
 - proving a goal if it is already an active assumption;
-- proving literal `true`.
+- proving literal `true`;
+- rewriting goals through straight-line equality assumptions produced by `let`
+  bindings and assignments, then proving reflexive equalities or rewritten
+  active assumptions.
 
 These checks are intentionally small and auditable.
 
@@ -46,6 +49,12 @@ uses of `y` refer to the fresh symbol, while assumptions about the old `y`
 continue to refer to the earlier symbol. This keeps mutation explicit in the
 SMT-LIB encoding instead of reusing one solver constant for multiple program
 states.
+
+Before asking Z3, the local prover performs a small weakest-precondition-style
+rewrite over those equality assumptions. If a straight-line mutation chain
+reduces an assertion or postcondition to `expr == expr`, Sigil can prove it
+locally and deterministically. Branches and loops are still handled by the proof
+obligation planner and SMT solver rather than by a full WP calculus.
 
 Function calls are planned modularly. At a call site, Sigil materializes the
 callee arguments in the caller's current symbolic context, emits one obligation

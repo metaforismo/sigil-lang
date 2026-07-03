@@ -414,6 +414,33 @@ ensures preserved: result >= 0;
   expect(branch_assignment_smt.find("(ite flag") != std::string::npos,
          "branch assignment join uses ite");
 
+  const char* wp_source = R"(
+module wp;
+
+fn two_steps(x: i64) -> i64
+ensures exact: result == (x + 1) + 1;
+{
+  let y: i64 = x;
+  y = y + 1;
+  y = y + 1;
+  assert exact_now: y == (x + 1) + 1;
+  return y;
+}
+)";
+
+  const auto wp_module = sigil::parse_source(wp_source, "wp.sigil");
+  const auto wp_obligations = sigil::build_obligations(wp_module);
+  expect(wp_obligations.size() == 2, "wp assert plus ensure obligations");
+  const auto wp_results = sigil::verify_obligations(wp_obligations, false);
+  expect(wp_results[0].status == sigil::VerificationStatus::Proven,
+         "wp proves straight-line assignment assertion locally");
+  expect(wp_results[1].status == sigil::VerificationStatus::Proven,
+         "wp proves straight-line assignment ensure locally");
+  expect(wp_results[0].details == "proved by weakest-precondition substitution",
+         "wp assertion uses local substitution proof rule");
+  expect(wp_results[1].details == "proved by weakest-precondition substitution",
+         "wp ensure uses local substitution proof rule");
+
   const char* loop_source = R"(
 module loops;
 

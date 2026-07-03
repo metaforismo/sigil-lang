@@ -261,6 +261,92 @@ VerificationResult verify_with_z3(const ProofObligation& obligation, const std::
   return make_result(obligation, VerificationStatus::Unknown, "z3 returned: " + run.output, smt);
 }
 
+using ExprSubstitutions = std::unordered_map<std::string, Expr>;
+
+Expr substitute_for_wp(const Expr& expr, const ExprSubstitutions& substitutions) {
+  if (!expr) {
+    return expr;
+  }
+
+  switch (expr->kind) {
+  case ExprNode::Kind::Integer:
+    return make_integer(expr->integer_value, expr->range);
+  case ExprNode::Kind::Boolean:
+    return make_boolean(expr->boolean_value, expr->range);
+  case ExprNode::Kind::Identifier: {
+    const auto found = substitutions.find(expr->name);
+    if (found != substitutions.end()) {
+      return found->second;
+    }
+    return make_identifier(expr->name, expr->range);
+  }
+  case ExprNode::Kind::Call: {
+    std::vector<Expr> arguments;
+    arguments.reserve(expr->arguments.size());
+    for (const auto& argument : expr->arguments) {
+      arguments.push_back(substitute_for_wp(argument, substitutions));
+    }
+    return make_call(expr->name, std::move(arguments), expr->range);
+  }
+  case ExprNode::Kind::StructLiteral: {
+    std::vector<FieldInitializer> fields;
+    fields.reserve(expr->field_initializers.size());
+    for (const auto& field : expr->field_initializers) {
+      fields.push_back(FieldInitializer{field.name, substitute_for_wp(field.expr, substitutions),
+                                        field.location, field.range});
+    }
+    return make_struct_literal(expr->name, std::move(fields), expr->range);
+  }
+  case ExprNode::Kind::FieldAccess:
+    return make_field_access(substitute_for_wp(expr->lhs, substitutions), expr->name, expr->range);
+  case ExprNode::Kind::Unary:
+    return make_unary(expr->unary_op, substitute_for_wp(expr->lhs, substitutions), expr->range);
+  case ExprNode::Kind::Binary:
+    return make_binary(expr->binary_op, substitute_for_wp(expr->lhs, substitutions),
+                       substitute_for_wp(expr->rhs, substitutions), expr->range);
+  case ExprNode::Kind::If:
+    return make_if(substitute_for_wp(expr->condition, substitutions),
+                   substitute_for_wp(expr->lhs, substitutions),
+                   substitute_for_wp(expr->rhs, substitutions), expr->range);
+  }
+
+  return expr;
+}
+
+ExprSubstitutions equality_substitutions(const std::vector<NamedPredicate>& assumptions) {
+  ExprSubstitutions substitutions;
+  for (const auto& assumption : assumptions) {
+    const auto& expr = assumption.expr;
+    if (!expr || expr->kind != ExprNode::Kind::Binary || expr->binary_op != BinaryOp::Equal ||
+        !expr->lhs || expr->lhs->kind != ExprNode::Kind::Identifier) {
+      continue;
+    }
+    substitutions[expr->lhs->name] = expr->rhs;
+  }
+  return substitutions;
+}
+
+Expr rewrite_with_equalities(const Expr& expr, const ExprSubstitutions& substitutions) {
+  auto current = expr;
+  for (int step = 0; step < 32; ++step) {
+    auto next = substitute_for_wp(current, substitutions);
+    if (display_expr(next) == display_expr(current)) {
+      return next;
+    }
+    current = std::move(next);
+  }
+  return current;
+}
+
+bool is_literal_true(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Boolean && expr->boolean_value;
+}
+
+bool is_reflexive_equality(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Binary && expr->binary_op == BinaryOp::Equal &&
+         display_expr(expr->lhs) == display_expr(expr->rhs);
+}
+
 VerificationResult verify_syntactically(const ProofObligation& obligation, const std::string& smt) {
   for (const auto& assumption : obligation.assumptions) {
     if (expressions_equal(assumption.expr, obligation.goal.expr)) {
@@ -268,9 +354,22 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
                          smt);
     }
   }
-  if (obligation.goal.expr && obligation.goal.expr->kind == ExprNode::Kind::Boolean &&
-      obligation.goal.expr->boolean_value) {
+  if (is_literal_true(obligation.goal.expr)) {
     return make_result(obligation, VerificationStatus::Proven, "goal is literal true", smt);
+  }
+
+  const auto substitutions = equality_substitutions(obligation.assumptions);
+  const auto rewritten_goal = rewrite_with_equalities(obligation.goal.expr, substitutions);
+  if (is_literal_true(rewritten_goal) || is_reflexive_equality(rewritten_goal)) {
+    return make_result(obligation, VerificationStatus::Proven,
+                       "proved by weakest-precondition substitution", smt);
+  }
+  for (const auto& assumption : obligation.assumptions) {
+    if (expressions_equal(rewrite_with_equalities(assumption.expr, substitutions),
+                          rewritten_goal)) {
+      return make_result(obligation, VerificationStatus::Proven,
+                         "rewritten goal is an active assumption", smt);
+    }
   }
   return make_result(obligation, VerificationStatus::Unknown, "no local proof rule matched", smt);
 }
@@ -293,7 +392,6 @@ struct ProofContext {
 
 using FunctionTable = std::unordered_map<std::string, const FunctionDecl*>;
 using StructTable = std::unordered_map<std::string, const StructDecl*>;
-using ExprSubstitutions = std::unordered_map<std::string, Expr>;
 
 std::string scoped_symbol(const std::string& name, const SourceLocation& location,
                           const std::string& purpose) {
