@@ -114,9 +114,12 @@ module structs;
 struct Pair {
   left: i64;
   ok: bool;
+
+  invariant left_non_negative_when_ok: !ok || left >= 0;
 }
 
 fn read_left(x: i64) -> i64
+requires non_negative: x >= 0;
 ensures exact: result == x;
 {
   let pair: Pair = Pair { left: x, ok: true };
@@ -127,16 +130,25 @@ ensures exact: result == x;
 
   const auto struct_module = sigil::parse_source(struct_source, "structs.sigil");
   const auto struct_obligations = sigil::build_obligations(struct_module);
-  expect(struct_obligations.size() == 2, "struct field assert plus ensure obligations");
-  expect(struct_obligations[0].name == "fn.read_left.assert.1.field_visible",
+  expect(struct_obligations.size() == 3, "struct invariant, field assert, and ensure obligations");
+  expect(struct_obligations[0].name ==
+             "fn.read_left.struct.pair.invariant.1.left_non_negative_when_ok",
+         "struct invariant obligation name");
+  expect(struct_obligations[1].name == "fn.read_left.assert.1.field_visible",
          "struct field assertion name");
-  const auto struct_smt = sigil::emit_smt_lib(struct_obligations[0]);
+  const auto struct_smt = sigil::emit_smt_lib(struct_obligations[1]);
   expect(struct_smt.find("(declare-const pair_left Int)") != std::string::npos,
          "struct field symbol is declared");
   expect(struct_smt.find("(assert (= pair_left x))") != std::string::npos,
          "struct literal binds scalar field");
+  const auto invariant_smt = sigil::emit_smt_lib(struct_obligations[0]);
+  expect(invariant_smt.find("(assert (not (or (not pair_ok) (>= pair_left 0))))") !=
+             std::string::npos,
+         "struct invariant goal uses materialized fields");
   const auto struct_results = sigil::verify_obligations(struct_obligations, false);
-  expect(struct_results[0].status == sigil::VerificationStatus::Proven,
+  expect(struct_results[0].status == sigil::VerificationStatus::Unknown,
+         "struct invariant needs SMT solver");
+  expect(struct_results[1].status == sigil::VerificationStatus::Proven,
          "field assertion proven syntactically");
 
   const char* conditional_source = R"(

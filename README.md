@@ -27,6 +27,8 @@ production verifier yet.
   acyclic-call-graph validation.
 - Simple struct value literals and field access expressions over declared
   struct fields.
+- Struct literal construction emits proof obligations for declared struct
+  invariants.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
