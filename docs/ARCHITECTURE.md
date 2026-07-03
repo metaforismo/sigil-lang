@@ -43,6 +43,8 @@ system:
 - function calls must resolve to a module function, use the declared arity and
   argument types, return a value when used as an expression, and avoid direct or
   indirect recursion;
+- struct literals must initialize declared fields exactly once, and field access
+  must target a field on a struct-typed expression;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - assignments can only target declared local bindings and must preserve the
   local type;
@@ -74,6 +76,8 @@ The planner walks each function and builds proof obligations:
 - function call expressions emit call-site obligations for callee `requires`
   predicates and add callee `ensures` predicates as assumptions over the fresh
   call-result symbol;
+- struct literal bindings materialize scalar field facts, and field accesses
+  resolve to those field symbols;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
@@ -149,9 +153,10 @@ backend grows.
 Contracts, loop invariants, `assume`, and `assert` remain proof-layer
 constructs. The native backend erases proof-only constructs after static
 validation and proof generation, and currently skips functions containing loops.
-Division and modulo are deliberately not lowered yet, because Sigil still needs
-an explicit source-level semantics that is known to match the native backend for
-negative operands and zero divisors.
+Struct values and field access are also skipped by native lowering until layout
+and ABI rules are explicit. Division and modulo are deliberately not lowered
+yet, because Sigil still needs an explicit source-level semantics that is known
+to match the native backend for negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.

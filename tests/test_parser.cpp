@@ -71,6 +71,26 @@ fn call_examples(x: i64, y: i64) -> i64
   expect(sigil::display_expr(call_module.functions[0].body[1].expr) == "sum2(next, y)",
          "display multi-argument call");
 
+  const auto struct_value_module = sigil::parse_source(
+      R"(module structs;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn read_left(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  return pair.left;
+}
+)",
+      "structs.sigil");
+  expect(sigil::display_expr(struct_value_module.functions[0].body[0].expr) ==
+             "Pair { left: x, ok: true }",
+         "display struct literal");
+  expect(sigil::display_expr(struct_value_module.functions[0].body[1].expr) == "pair.left",
+         "display field access");
+
   const char* source = R"(
 module cache;
 

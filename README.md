@@ -25,6 +25,8 @@ production verifier yet.
   returns.
 - Function call expressions with static callee, arity, argument-type, and
   acyclic-call-graph validation.
+- Simple struct value literals and field access expressions over declared
+  struct fields.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower

@@ -1,0 +1,17 @@
+module structs;
+
+struct Pair {
+  left: i64;
+  ok: bool;
+
+  invariant left_non_negative_when_ok: !ok || left >= 0;
+}
+
+fn read_left(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures exact: result == x;
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  assert field_visible: pair.left == x;
+  return pair.left;
+}

@@ -55,6 +55,11 @@ struct Counter {
   invariant non_negative: value >= 0;
 }
 
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
 fn id(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
@@ -143,6 +148,13 @@ fn add_later(x: i64, y: i64) -> i64
 {
   return x + y;
 }
+
+fn read_pair(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  assert field_visible: pair.left == x;
+  return pair.left;
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -193,6 +205,90 @@ fn bad_let(x: i64) -> i64
 }
 )",
                     "let type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn missing_field(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x };
+  return pair.left;
+}
+)",
+                    "missing initializer for field 'Pair.ok'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn duplicate_field(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, left: 1, ok: true };
+  return pair.left;
+}
+)",
+                    "duplicate initializer for field 'left'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn unknown_field(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, nope: true, ok: true };
+  return pair.left;
+}
+)",
+                    "struct 'Pair' has no field 'nope'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn wrong_field_type(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: true, ok: true };
+  return pair.left;
+}
+)",
+                    "field 'Pair.left' type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn missing_access(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  return pair.right;
+}
+)",
+                    "struct 'Pair' has no field 'right'");
+
+  expect_diagnostic(R"(
+module bad;
+fn field_on_scalar(x: i64) -> i64
+{
+  return x.left;
+}
+)",
+                    "field access requires a struct value, found i64");
 
   expect_diagnostic(R"(
 module bad;

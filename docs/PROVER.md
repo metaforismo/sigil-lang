@@ -55,6 +55,13 @@ parameters and `result` substituted by the actual arguments and result symbol.
 The type checker rejects recursive call graphs for now, so this modular model is
 acyclic.
 
+Struct values are materialized by field. A binding like
+`let pair: Pair = Pair { left: x, ok: true };` adds facts for `pair.left == x`
+and `pair.ok == true`; later `pair.left` expressions use the scalar field symbol
+directly. The planner does not yet prove struct invariant preservation at
+construction or mutation sites; that is tracked as the next struct-focused
+roadmap item.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 
