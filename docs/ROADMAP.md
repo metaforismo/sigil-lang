@@ -12,6 +12,7 @@ tests, and docs are in the repo.
 - [x] Detect `libgccjit` in CMake.
 - [x] Validate scalar proof expressions before SMT emission.
 - [x] Reject out-of-range `i64` integer literals during parsing.
+- [x] Report missing statement-block braces at EOF.
 - [x] Report Z3 refutations with optional counterexample models.
 - [x] Save emitted SMT-LIB queries as reproducible artifacts.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.

@@ -267,6 +267,9 @@ std::vector<Statement> Parser::parse_statement_block(const std::string& owner) {
   consume(TokenKind::LBrace, "expected '{' before " + owner);
   std::vector<Statement> statements;
   while (!check(TokenKind::RBrace)) {
+    if (is_at_end()) {
+      throw Diagnostic(peek().range, "expected '}' after " + owner);
+    }
     statements.push_back(parse_statement());
   }
   consume(TokenKind::RBrace, "expected '}' after " + owner);

@@ -39,6 +39,8 @@ void expect_parse_diagnostic(const char* source, const std::string& needle,
 int main() {
   expect_parse_diagnostic("module broken;\nfn nope() -> i64 {\n  return 1\n}\n",
                           "expected ';' after return statement", 4, 1);
+  expect_parse_diagnostic("module broken;\nfn nope() -> i64 {\n  return 1;\n",
+                          "expected '}' after function body", 4, 1);
   expect_parse_diagnostic("module broken;\nwat\n", "expected struct or function declaration", 2, 1,
                           "parse-error.sigil:2:1-3");
   expect_parse_diagnostic(
