@@ -78,6 +78,8 @@ The planner walks each function and builds proof obligations:
   call-result symbol;
 - struct literal bindings materialize scalar field facts, and field accesses
   resolve to those field symbols;
+- struct literal construction emits invariant obligations for every invariant
+  declared on the constructed type;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;

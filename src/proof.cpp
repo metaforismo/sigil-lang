@@ -603,6 +603,41 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   return result_expr;
 }
 
+ExprSubstitutions struct_field_substitutions(const StructDecl& decl, const std::string& symbol,
+                                             const SourceRange& range) {
+  ExprSubstitutions substitutions;
+  for (const auto& field : decl.fields) {
+    substitutions[field.name] = make_identifier(field_symbol(symbol, field.name), range);
+  }
+  return substitutions;
+}
+
+void append_struct_invariant_obligations(const Expr& expr, const std::string& target_symbol,
+                                         const StructDecl& decl, const FunctionDecl& fn,
+                                         ProofContext& context,
+                                         std::vector<ProofObligation>& obligations) {
+  const auto substitutions = struct_field_substitutions(decl, target_symbol, expr->range);
+  int invariant_index = 0;
+  for (const auto& invariant : decl.invariants) {
+    ++invariant_index;
+    auto goal =
+        substitute_predicate(invariant, substitutions, expr->location, expr->range, invariant.name);
+
+    ProofObligation obligation;
+    obligation.name = "fn." + fn.name + ".struct." + target_symbol + ".invariant." +
+                      std::to_string(invariant_index) + "." + invariant.name;
+    obligation.location = expr->location;
+    obligation.range = expr->range;
+    obligation.assumptions = context.active;
+    obligation.goal = goal;
+    obligation.symbols = context.symbols;
+    obligations.push_back(std::move(obligation));
+
+    goal.name = "struct_" + target_symbol + "_" + invariant.name;
+    context.active.push_back(std::move(goal));
+  }
+}
+
 void materialize_struct_binding(const Expr& expr, const std::string& target_symbol,
                                 const FunctionDecl& fn, ProofContext& context, int& call_index,
                                 const StructTable& structs, const FunctionTable& functions,
@@ -637,6 +672,8 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     context.active.push_back(
         NamedPredicate{"field_" + target_field, equality, initializer.location, initializer.range});
   }
+
+  append_struct_invariant_obligations(expr, target_symbol, decl, fn, context, obligations);
 }
 
 Expr materialize_struct_literal_expr(const Expr& expr, const FunctionDecl& fn,

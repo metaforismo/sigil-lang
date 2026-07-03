@@ -45,8 +45,9 @@ struct CacheLine {
 
 Struct invariants are parsed and attached to the type. The current checker
 validates that they are boolean predicates over declared fields, then registers
-them. It does not yet prove preservation across constructors or mutating
-functions. That preservation check is a core roadmap item.
+them. Struct literal construction emits one proof obligation per declared
+invariant. Preservation across future field mutation remains a roadmap item
+because the language does not yet expose field assignment.
 
 Field names share the same value-name restrictions as function parameters and
 local bindings, because fields become direct symbols while checking invariants.
@@ -61,9 +62,10 @@ return pair.left;
 The checker requires every field to be initialized exactly once, rejects unknown
 fields, checks each initializer against the declared field type, and checks
 field access against the base struct type. The proof planner materializes scalar
-fields as ordinary SMT symbols such as `pair.left`. Native lowering deliberately
-skips functions that manipulate struct values until the ABI and memory layout
-rules are explicit.
+fields as ordinary SMT symbols such as `pair.left`, emits invariant obligations
+for the constructed value, then assumes the instantiated invariants for later
+proof steps. Native lowering deliberately skips functions that manipulate struct
+values until the ABI and memory layout rules are explicit.
 
 ## Function Contracts
 

@@ -42,6 +42,7 @@ tests, and docs are in the repo.
 - [x] Add scalar function call expressions with static validation.
 - [x] Generate modular call-site proof obligations from callee contracts.
 - [x] Add simple struct values and field access.
+- [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Lower scalar function calls through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
@@ -85,7 +86,8 @@ tests, and docs are in the repo.
 
 ## Struct Invariant Preservation
 
-- [ ] Treat invariants as obligations on construction, mutation, and public exits.
+- [x] Treat invariants as obligations on struct literal construction.
+- [ ] Treat invariants as obligations on mutation and public exits.
 - [ ] Add ownership and aliasing rules for low-level memory.
 - [ ] Support user-defined lemmas for data-structure correctness.
 - [ ] Build examples for ring buffers, freelists, caches, and intrusive lists.

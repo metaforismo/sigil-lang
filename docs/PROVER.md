@@ -58,9 +58,10 @@ acyclic.
 Struct values are materialized by field. A binding like
 `let pair: Pair = Pair { left: x, ok: true };` adds facts for `pair.left == x`
 and `pair.ok == true`; later `pair.left` expressions use the scalar field symbol
-directly. The planner does not yet prove struct invariant preservation at
-construction or mutation sites; that is tracked as the next struct-focused
-roadmap item.
+directly. The planner emits one obligation for each invariant declared on the
+constructed struct and then assumes the instantiated invariant for later proof
+steps. Mutation-site preservation is not modeled yet because field assignment is
+not part of the language.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
