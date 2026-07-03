@@ -47,6 +47,14 @@ continue to refer to the earlier symbol. This keeps mutation explicit in the
 SMT-LIB encoding instead of reusing one solver constant for multiple program
 states.
 
+Function calls are planned modularly. At a call site, Sigil materializes the
+callee arguments in the caller's current symbolic context, emits one obligation
+for each callee `requires` predicate, introduces a fresh symbol for the call
+result, and adds each callee `ensures` predicate as an assumption with
+parameters and `result` substituted by the actual arguments and result symbol.
+The type checker rejects recursive call graphs for now, so this modular model is
+acyclic.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 

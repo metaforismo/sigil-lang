@@ -113,6 +113,36 @@ fn implicit_labels_can_repeat(x: i64) -> i64
   assert x >= x;
   return x;
 }
+
+fn add_one(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures positive: result > x;
+{
+  return x + 1;
+}
+
+fn is_nonzero(x: i64) -> bool
+{
+  return x != 0;
+}
+
+fn call_examples(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures preserved: result >= x;
+{
+  let next: i64 = add_one(x);
+  let flag: bool = is_nonzero(next);
+  if flag {
+    return next;
+  } else {
+    return add_later(next, 0);
+  }
+}
+
+fn add_later(x: i64, y: i64) -> i64
+{
+  return x + y;
+}
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
@@ -163,6 +193,80 @@ fn bad_let(x: i64) -> i64
 }
 )",
                     "let type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn caller(x: i64) -> i64
+{
+  return missing_call(x);
+}
+)",
+                    "unknown function 'missing_call'");
+
+  expect_diagnostic(R"(
+module bad;
+fn add_one(x: i64) -> i64
+{
+  return x + 1;
+}
+
+fn caller(x: i64) -> i64
+{
+  return add_one(x, 1);
+}
+)",
+                    "function 'add_one' expects 1 argument(s), got 2");
+
+  expect_diagnostic(R"(
+module bad;
+fn add_one(x: i64) -> i64
+{
+  return x + 1;
+}
+
+fn caller(flag: bool) -> i64
+{
+  return add_one(flag);
+}
+)",
+                    "argument 1 for function 'add_one' type mismatch");
+
+  expect_diagnostic(R"(
+module bad;
+fn observe(x: i64) -> void
+{
+  return;
+}
+
+fn caller(x: i64) -> i64
+{
+  return observe(x);
+}
+)",
+                    "function 'observe' returns void and cannot be used as a value");
+
+  expect_diagnostic(R"(
+module bad;
+fn recursive(x: i64) -> i64
+{
+  return recursive(x);
+}
+)",
+                    "recursive function calls are not supported yet");
+
+  expect_diagnostic(R"(
+module bad;
+fn first(x: i64) -> i64
+{
+  return second(x);
+}
+
+fn second(x: i64) -> i64
+{
+  return first(x);
+}
+)",
+                    "recursive function calls are not supported yet");
 
   expect_diagnostic(R"(
 module bad;

@@ -40,6 +40,9 @@ system:
 - function contract labels must be unique across `requires`, `ensures`, and
   explicit body proof labels;
 - identifiers must be declared in the active scope;
+- function calls must resolve to a module function, use the declared arity and
+  argument types, return a value when used as an expression, and avoid direct or
+  indirect recursion;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - assignments can only target declared local bindings and must preserve the
   local type;
@@ -68,6 +71,9 @@ The planner walks each function and builds proof obligations:
 - active `requires` predicates become assumptions;
 - `let name: type = expr` adds `name` to the symbol table and records
   `name == expr` as an assumption for later obligations;
+- function call expressions emit call-site obligations for callee `requires`
+  predicates and add callee `ensures` predicates as assumptions over the fresh
+  call-result symbol;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
@@ -115,8 +121,9 @@ Expression-level conditionals are represented directly as SMT `ite` terms.
 CMake detects `libgccjit` and compiles the native backend when available. The
 backend lowers a native-supported subset of pure scalar functions into an
 in-memory GCC JIT result. It supports `i64` and `bool` parameters, locals,
-assignment, expression and statement conditionals, `i64`/`bool`/`void` returns,
-comparisons, boolean operators, and `+`/`-`/`*` arithmetic.
+assignment, scalar function calls, expression and statement conditionals,
+`i64`/`bool`/`void` returns, comparisons, boolean operators, and `+`/`-`/`*`
+arithmetic.
 
 The ABI smoke path retrieves lowered functions from `gcc_jit_result_get_code`
 and invokes a small set of scalar and `void` signatures directly. This keeps

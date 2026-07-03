@@ -101,13 +101,24 @@ fn observe(flag: bool, x: i64) -> void
     assume keep_going: true;
   }
 }
+
+fn call_add_one(x: i64) -> i64
+{
+  return add_one(x);
+}
+
+fn call_twice(x: i64) -> i64
+{
+  let once: i64 = add_one(x);
+  return add_one(once);
+}
 )";
 
   const auto module = sigil::parse_source(source, "backend.sigil");
   sigil::validate_module(module);
   const auto result = sigil::compile_module_with_gccjit(module);
   const auto artifacts = sigil::build_native_ir_artifacts(module, result);
-  expect(artifacts.size() == 10, "native artifact count");
+  expect(artifacts.size() == 12, "native artifact count");
   expect(artifacts[0].file_name == "fn.add_one.native-ir.txt", "native artifact file name");
   expect(artifacts[0].text.find("signature add_one(x: i64) -> i64") != std::string::npos,
          "native artifact signature");
@@ -136,6 +147,12 @@ fn observe(flag: bool, x: i64) -> void
   expect(artifacts[9].text.find("signature observe(flag: bool, x: i64) -> void") !=
              std::string::npos,
          "native artifact void signature");
+  expect(artifacts[10].text.find("signature call_add_one(x: i64) -> i64") != std::string::npos,
+         "native artifact call signature");
+  expect(artifacts[10].text.find("value @backend.sigil:86:10-19: add_one(x)") != std::string::npos,
+         "native artifact call expression");
+  expect(artifacts[10].text.find("expr.return.value.arg0 backend.sigil:86:18") != std::string::npos,
+         "native artifact call argument debug location");
 
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
@@ -143,7 +160,7 @@ fn observe(flag: bool, x: i64) -> void
   expect(result.debug_info_enabled, "gccjit debug info enabled");
   expect(artifacts[0].text.find("debug-info enabled") != std::string::npos,
          "native artifact records enabled debug info");
-  expect(result.functions.size() == 10, "ten function reports");
+  expect(result.functions.size() == 12, "twelve function reports");
   expect(result.functions[0].name == "add_one", "first function name");
   expect(result.functions[0].lowered, "add_one lowered");
   expect(result.functions[1].name == "choose", "second function name");
@@ -164,6 +181,10 @@ fn observe(flag: bool, x: i64) -> void
   expect(result.functions[8].lowered, "all8 lowered");
   expect(result.functions[9].name == "observe", "tenth function name");
   expect(result.functions[9].lowered, "observe lowered");
+  expect(result.functions[10].name == "call_add_one", "eleventh function name");
+  expect(result.functions[10].lowered, "call_add_one lowered");
+  expect(result.functions[11].name == "call_twice", "twelfth function name");
+  expect(result.functions[11].lowered, "call_twice lowered");
 
   const auto add_one =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_i64(41)});
@@ -270,6 +291,18 @@ fn observe(flag: bool, x: i64) -> void
       module, "observe", {sigil::gccjit_bool(false), sigil::gccjit_i64(7)});
   expect(observe_false.invoked, "observe false invoked");
   expect(observe_false.value.kind == sigil::TypeKind::Void, "observe false result kind");
+
+  const auto call_add_one =
+      sigil::invoke_function_with_gccjit(module, "call_add_one", {sigil::gccjit_i64(41)});
+  expect(call_add_one.invoked, "call_add_one invoked");
+  expect(call_add_one.value.kind == sigil::TypeKind::I64, "call_add_one result kind");
+  expect(call_add_one.value.integer == 42, "call_add_one ABI result");
+
+  const auto call_twice =
+      sigil::invoke_function_with_gccjit(module, "call_twice", {sigil::gccjit_i64(40)});
+  expect(call_twice.invoked, "call_twice invoked");
+  expect(call_twice.value.kind == sigil::TypeKind::I64, "call_twice result kind");
+  expect(call_twice.value.integer == 42, "call_twice ABI result");
 
   const auto wrong_argument =
       sigil::invoke_function_with_gccjit(module, "add_one", {sigil::gccjit_bool(true)});

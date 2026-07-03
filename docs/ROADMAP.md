@@ -39,7 +39,10 @@ tests, and docs are in the repo.
 - [x] Honor `if`, `&&`, and `||` guards in expression safety obligations.
 - [x] Add loops with user-written invariants.
 - [x] Reject early returns inside loops until control-flow proofs support them.
+- [x] Add scalar function call expressions with static validation.
+- [x] Generate modular call-site proof obligations from callee contracts.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
+- [x] Lower scalar function calls through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
 - [x] Invoke native `libgccjit` functions with mixed scalar signatures.
 - [x] Replace native ABI case tables with bounded recursive dispatch up to eight parameters.
@@ -65,6 +68,7 @@ tests, and docs are in the repo.
 ## Core Language
 
 - [ ] Extend scalar validation into a complete language type checker.
+- [x] Add scalar function call expressions with static validation.
 - [x] Add loops with user-written invariants.
 - [ ] Add simple user-defined struct values.
 - [ ] Generate weakest-precondition obligations for control flow.
@@ -76,6 +80,7 @@ tests, and docs are in the repo.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [x] Add cross-platform backend capability tests.
+- [x] Lower scalar function calls through `libgccjit`.
 
 ## Struct Invariant Preservation
 

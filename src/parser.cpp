@@ -422,6 +422,16 @@ Expr Parser::parse_primary() {
   }
   if (match(TokenKind::Identifier)) {
     const auto token = previous();
+    if (match(TokenKind::LParen)) {
+      std::vector<Expr> arguments;
+      if (!check(TokenKind::RParen)) {
+        do {
+          arguments.push_back(parse_expr());
+        } while (match(TokenKind::Comma));
+      }
+      const auto end = consume(TokenKind::RParen, "expected ')' after call arguments");
+      return make_call(token.text, std::move(arguments), span(token.range, end.range));
+    }
     return make_identifier(token.text, token.range);
   }
   if (match(TokenKind::LParen)) {

@@ -135,6 +135,13 @@ Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local
 details.
 
+Function calls are expressions: `add_one(x)` or `sum(a, b)`. The static
+validator resolves the callee across the module, checks arity and argument
+types, rejects `void` calls in value position, and rejects direct or indirect
+recursive call graphs until the proof planner has a recursive-function model.
+Callers prove the callee's `requires` clauses at each call site and may use the
+callee's `ensures` clauses as facts about the call result.
+
 The current body language is deliberately tiny. References and memory operations
 will require proper control-flow and weakest-precondition generation.
 
@@ -150,6 +157,7 @@ Supported expression forms:
 - comparisons: `<`, `<=`, `>`, `>=`, `==`, `!=`
 - boolean connectives: `&&`, `||`
 - conditionals: `if condition { then_expr } else { else_expr }`
+- function calls: `callee(arg1, arg2)`
 - parentheses
 
 Conditional expressions require a `bool` condition, and both branches must have
@@ -172,7 +180,7 @@ of the literal token.
 
 The native GCC JIT backend lowers the scalar subset that has a clear source to
 native mapping today. It supports `+`, `-`, `*`, comparisons, equality, boolean
-operators, conditionals, locals, assignment, valued returns, and `void`
-functions with explicit `return;` or fallthrough. Loops, division, and modulo
-remain proof-language constructs until their exact runtime semantics are pinned
-down for native lowering.
+operators, conditionals, scalar function calls, locals, assignment, valued
+returns, and `void` functions with explicit `return;` or fallthrough. Loops,
+division, and modulo remain proof-language constructs until their exact runtime
+semantics are pinned down for native lowering.

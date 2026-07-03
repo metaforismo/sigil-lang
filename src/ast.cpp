@@ -139,6 +139,16 @@ Expr make_identifier(std::string name, SourceLocation location) {
   return make_identifier(std::move(name), SourceRange{location, location});
 }
 
+Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange range) {
+  auto expr = std::make_shared<ExprNode>();
+  expr->kind = ExprNode::Kind::Call;
+  expr->name = std::move(callee);
+  expr->arguments = std::move(arguments);
+  expr->location = range.start;
+  expr->range = std::move(range);
+  return expr;
+}
+
 Expr make_unary(UnaryOp op, Expr operand, SourceRange range) {
   auto expr = std::make_shared<ExprNode>();
   expr->kind = ExprNode::Kind::Unary;
@@ -260,6 +270,17 @@ std::string smt_binary(BinaryOp op) {
   return "?";
 }
 
+std::string display_arguments(const std::vector<Expr>& arguments) {
+  std::ostringstream out;
+  for (std::size_t index = 0; index < arguments.size(); ++index) {
+    if (index != 0) {
+      out << ", ";
+    }
+    out << display_expr(arguments[index]);
+  }
+  return out.str();
+}
+
 std::string sanitize_symbol(const std::string& name) {
   std::string symbol = name;
   std::replace(symbol.begin(), symbol.end(), '.', '_');
@@ -279,6 +300,8 @@ std::string display_expr(const Expr& expr) {
     return expr->boolean_value ? "true" : "false";
   case ExprNode::Kind::Identifier:
     return expr->name;
+  case ExprNode::Kind::Call:
+    return expr->name + "(" + display_arguments(expr->arguments) + ")";
   case ExprNode::Kind::Unary:
     return unary_display(expr->unary_op) + display_expr(expr->lhs);
   case ExprNode::Kind::Binary:
@@ -302,6 +325,8 @@ std::string emit_smt_expr(const Expr& expr) {
     return expr->boolean_value ? "true" : "false";
   case ExprNode::Kind::Identifier:
     return sanitize_symbol(expr->name);
+  case ExprNode::Kind::Call:
+    throw std::runtime_error("cannot emit unresolved call expression '" + expr->name + "'");
   case ExprNode::Kind::Unary:
     if (expr->unary_op == UnaryOp::Not) {
       return "(not " + emit_smt_expr(expr->lhs) + ")";
@@ -330,6 +355,9 @@ void collect_identifiers(const Expr& expr, std::vector<std::string>& names) {
   collect_identifiers(expr->condition, names);
   collect_identifiers(expr->lhs, names);
   collect_identifiers(expr->rhs, names);
+  for (const auto& argument : expr->arguments) {
+    collect_identifiers(argument, names);
+  }
 }
 
 } // namespace sigil
