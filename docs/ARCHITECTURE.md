@@ -35,8 +35,8 @@ system:
   compiler-generated `result` symbol;
 - struct invariant expressions must be `bool`;
 - function preconditions and postconditions must be `bool`;
-- function contract labels must be unique across `requires` and `ensures`
-  clauses;
+- function contract labels must be unique across `requires`, `ensures`, and
+  explicit body proof labels;
 - identifiers must be declared in the active scope;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - assignments can only target declared local bindings and must preserve the
@@ -49,7 +49,7 @@ system:
 - `while` bodies cannot contain `return` statements until the proof planner has
   a full control-flow model for early loop exits;
 - explicit `assume`, `assert`, and loop invariant labels must be unique within
-  a function;
+  a function and cannot reuse contract labels;
 - `result` is only available in postconditions for non-void functions and cannot
   be reused as a parameter, local binding, or field;
 - returns must match the declared function return type;

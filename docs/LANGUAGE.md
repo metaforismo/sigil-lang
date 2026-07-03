@@ -66,11 +66,11 @@ ensures preserved: result >= 0;
 `ensures` predicates become postcondition proof obligations. `result` names the
 returned value.
 
-Contract predicates must be boolean. Contract labels must be unique across a
-function's `requires` and `ensures` clauses. `result` is available only in
-postconditions for non-void functions. It is a compiler-generated contract
-symbol, so user parameters, local bindings, and struct fields cannot be named
-`result`.
+Contract predicates must be boolean. Contract labels share the function's
+proof-label namespace, so they must be unique across `requires`, `ensures`, and
+explicit body proof labels. `result` is available only in postconditions for
+non-void functions. It is a compiler-generated contract symbol, so user
+parameters, local bindings, and struct fields cannot be named `result`.
 
 ## Statements
 
@@ -107,8 +107,9 @@ remain tied to the earlier version.
 `assume` extends the local proof context. `assert` creates a proof obligation
 from the active context and then becomes available to later obligations.
 Explicit `assume name:`, `assert name:`, and loop `invariant name:` labels must
-be unique within a function, because they become user-facing proof labels.
-Unlabeled statements use compiler defaults and may repeat.
+be unique within a function and cannot reuse contract labels, because they
+become user-facing proof labels. Unlabeled statements use compiler defaults and
+may repeat.
 `return expr;` can use parameters and local bindings. `return;` is valid only in
 `void` functions. Non-void functions must return a value on every syntactic
 control-flow path. For `if` statements, that means both branches must return

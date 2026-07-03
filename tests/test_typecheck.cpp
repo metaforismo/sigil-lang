@@ -346,6 +346,17 @@ ensures stable: result >= 0;
 
   expect_diagnostic(R"(
 module bad;
+fn duplicate_contract_body_label(x: i64) -> i64
+ensures stable: result >= 0;
+{
+  assert stable: x >= 0;
+  return x;
+}
+)",
+                    "duplicate proof label 'stable'");
+
+  expect_diagnostic(R"(
+module bad;
 fn reserved_result_parameter(result: i64) -> i64
 {
   return result;

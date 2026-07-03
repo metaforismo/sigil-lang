@@ -368,7 +368,7 @@ void validate_function(const FunctionDecl& decl) {
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
-  std::unordered_set<std::string> proof_labels;
+  std::unordered_set<std::string> proof_labels = contract_labels;
   validate_statement_block(decl.body, decl, locals, assignable_locals, proof_labels);
   if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
     throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
