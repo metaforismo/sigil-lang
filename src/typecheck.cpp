@@ -33,6 +33,10 @@ bool is_known_type(const Type& type, const StructTable& structs) {
   return type.kind != TypeKind::Unknown || is_declared_struct_type(type, structs);
 }
 
+bool is_aggregate_type(const Type& type, const StructTable& structs) {
+  return is_declared_struct_type(type, structs);
+}
+
 void require_known_type(const Type& type, const StructTable& structs, const SourceRange& range,
                         const std::string& owner) {
   if (!is_known_type(type, structs)) {
@@ -45,6 +49,24 @@ void require_value_type(const Type& type, const StructTable& structs, const Sour
   require_known_type(type, structs, range, owner);
   if (type.kind == TypeKind::Void) {
     throw Diagnostic(range, owner + " cannot use void as a value type");
+  }
+}
+
+void require_scalar_value_type(const Type& type, const StructTable& structs,
+                               const SourceRange& range, const std::string& owner) {
+  require_value_type(type, structs, range, owner);
+  if (is_aggregate_type(type, structs)) {
+    throw Diagnostic(range, owner + " cannot use aggregate type '" + type.display() +
+                                "' until aggregate function boundaries are supported");
+  }
+}
+
+void require_function_return_type(const Type& type, const StructTable& structs,
+                                  const SourceRange& range, const std::string& owner) {
+  require_known_type(type, structs, range, owner);
+  if (is_aggregate_type(type, structs)) {
+    throw Diagnostic(range, owner + " cannot use aggregate type '" + type.display() +
+                                "' until aggregate returns are supported");
   }
 }
 
@@ -128,6 +150,10 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Struc
     }
     if (lhs.kind == TypeKind::Void) {
       throw Diagnostic(expr->range, "cannot compare void values");
+    }
+    if (is_aggregate_type(lhs, structs)) {
+      throw Diagnostic(expr->range, "equality does not support aggregate type '" + lhs.display() +
+                                        "' until structural equality semantics are defined");
     }
     return Type{TypeKind::Bool, "bool"};
   }
@@ -289,6 +315,11 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable&
     if (then_type.kind == TypeKind::Void) {
       throw Diagnostic(expr->range, "if expression cannot produce void");
     }
+    if (is_aggregate_type(then_type, structs)) {
+      throw Diagnostic(expr->range, "if expression cannot produce aggregate type '" +
+                                        then_type.display() +
+                                        "' until aggregate merge semantics are defined");
+    }
     return then_type;
   }
   }
@@ -387,6 +418,11 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       throw Diagnostic(statement.range, "let type mismatch: expected " + statement.type.display() +
                                             ", found " + actual.display());
     }
+    if (is_aggregate_type(statement.type, structs) &&
+        statement.expr->kind != ExprNode::Kind::StructLiteral) {
+      throw Diagnostic(statement.range, "struct local '" + decl.name + "." + statement.name +
+                                            "' must be initialized with a struct literal");
+    }
     insert_symbol(locals, statement.name, statement.type, statement.range, "local");
     assignable_locals.insert(statement.name);
   } else if (statement.kind == StatementKind::Assign) {
@@ -398,6 +434,11 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     if (assignable_locals.find(statement.name) == assignable_locals.end()) {
       throw Diagnostic(statement.range,
                        "assignment target '" + statement.name + "' is not a mutable local");
+    }
+    if (is_aggregate_type(found->second, structs)) {
+      throw Diagnostic(statement.range, "assignment target '" + statement.name +
+                                            "' has aggregate type '" + found->second.display() +
+                                            "'; struct assignment is not supported yet");
     }
     const auto actual = infer_expr(statement.expr, locals, structs, functions, decl);
     if (!same_type(actual, found->second)) {
@@ -475,18 +516,55 @@ void validate_struct(const StructDecl& decl, const StructTable& structs) {
   }
 }
 
+enum class StructVisitState {
+  Visiting,
+  Visited,
+};
+
+void visit_struct_fields(const StructDecl& decl, const StructTable& structs,
+                         std::unordered_map<std::string, StructVisitState>& states) {
+  states[decl.name] = StructVisitState::Visiting;
+
+  for (const auto& field : decl.fields) {
+    if (!is_declared_struct_type(field.type, structs)) {
+      continue;
+    }
+
+    const auto state = states.find(field.type.spelling);
+    if (state != states.end() && state->second == StructVisitState::Visiting) {
+      throw Diagnostic(field.range, "recursive struct value types are not supported yet: field '" +
+                                        decl.name + "." + field.name + "' contains '" +
+                                        field.type.display() + "' by value");
+    }
+    if (state == states.end()) {
+      visit_struct_fields(*structs.at(field.type.spelling), structs, states);
+    }
+  }
+
+  states[decl.name] = StructVisitState::Visited;
+}
+
+void reject_recursive_struct_values(const StructTable& structs) {
+  std::unordered_map<std::string, StructVisitState> states;
+  for (const auto& [name, decl] : structs) {
+    if (states.find(name) == states.end()) {
+      visit_struct_fields(*decl, structs, states);
+    }
+  }
+}
+
 void validate_function(const FunctionDecl& decl, const StructTable& structs,
                        const FunctionTable& functions) {
   SymbolTable params;
   for (const auto& param : decl.params) {
     require_unreserved_value_name(param.name, param.range,
                                   "parameter '" + decl.name + "." + param.name + "'");
-    require_value_type(param.type, structs, param.range,
-                       "parameter '" + decl.name + "." + param.name + "'");
+    require_scalar_value_type(param.type, structs, param.range,
+                              "parameter '" + decl.name + "." + param.name + "'");
     insert_symbol(params, param.name, param.type, param.range, "parameter");
   }
-  require_known_type(decl.return_type, structs, decl.range,
-                     "function '" + decl.name + "' return type");
+  require_function_return_type(decl.return_type, structs, decl.range,
+                               "function '" + decl.name + "' return type");
 
   std::unordered_set<std::string> precondition_names;
   std::unordered_set<std::string> postcondition_names;
@@ -641,6 +719,7 @@ void validate_module(const Module& module) {
   for (const auto& decl : module.structs) {
     validate_struct(decl, structs);
   }
+  reject_recursive_struct_values(structs);
 
   std::unordered_set<std::string> function_names;
   FunctionTable functions;
