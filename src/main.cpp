@@ -30,7 +30,8 @@ std::string read_file(const std::string& path) {
 void print_help() {
   std::cout << "sigil " << SIGIL_VERSION << "\n\n"
             << "Usage:\n"
-            << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>] [--show-model]\n"
+            << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>]\n"
+            << "                          [--save-proof-hints <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
             << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
             << "  sigil run <file.sigil> <function> [args...]\n"
@@ -167,6 +168,24 @@ write_native_artifacts(const std::vector<sigil::GccJitNativeArtifact>& artifacts
   return paths;
 }
 
+std::vector<std::string>
+write_proof_hint_artifacts(const std::vector<sigil::ProofHintArtifact>& artifacts,
+                           const std::string& output_dir) {
+  std::filesystem::create_directories(output_dir);
+  std::vector<std::string> paths;
+  paths.reserve(artifacts.size());
+  for (const auto& artifact : artifacts) {
+    const auto path = std::filesystem::path(output_dir) / artifact.file_name;
+    std::ofstream file(path);
+    if (!file) {
+      throw std::runtime_error("could not write proof hint artifact: " + path.string());
+    }
+    file << artifact.text;
+    paths.push_back(path.string());
+  }
+  return paths;
+}
+
 int check_command(const std::vector<std::string>& args) {
   if (args.empty()) {
     print_help();
@@ -176,6 +195,7 @@ int check_command(const std::vector<std::string>& args) {
   std::string path;
   bool dump_smt = false;
   bool strict = false;
+  std::string proof_hint_output_dir;
   sigil::ProofOptions proof_options;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const auto& arg = args[index];
@@ -186,6 +206,11 @@ int check_command(const std::vector<std::string>& args) {
         throw std::runtime_error("--save-smt requires an output directory");
       }
       proof_options.smt_output_dir = args[++index];
+    } else if (arg == "--save-proof-hints") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-proof-hints requires an output directory");
+      }
+      proof_hint_output_dir = args[++index];
     } else if (arg == "--show-model") {
       proof_options.include_models = true;
     } else if (arg == "--solver-timeout-ms") {
@@ -212,6 +237,11 @@ int check_command(const std::vector<std::string>& args) {
   sigil::validate_module(module);
   const auto obligations = sigil::build_obligations(module);
   const auto results = sigil::verify_obligations(obligations, proof_options);
+  std::vector<std::string> proof_hint_paths;
+  if (!proof_hint_output_dir.empty()) {
+    proof_hint_paths = write_proof_hint_artifacts(
+        sigil::build_proof_hint_artifacts(obligations, results), proof_hint_output_dir);
+  }
 
   std::size_t invariant_count = 0;
   for (const auto& decl : module.structs) {
@@ -245,6 +275,9 @@ int check_command(const std::vector<std::string>& args) {
     has_failure = has_failure || result.status == sigil::VerificationStatus::Refuted ||
                   result.status == sigil::VerificationStatus::Error;
     has_unknown = has_unknown || result.status == sigil::VerificationStatus::Unknown;
+  }
+  for (const auto& proof_hint_path : proof_hint_paths) {
+    std::cout << "  proof-hint: " << proof_hint_path << "\n";
   }
 
   if (has_failure || (strict && has_unknown)) {

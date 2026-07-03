@@ -15,6 +15,7 @@ tests, and docs are in the repo.
 - [x] Report missing struct and statement-block braces at EOF.
 - [x] Report Z3 refutations with optional counterexample models.
 - [x] Save emitted SMT-LIB queries as reproducible artifacts.
+- [x] Save deterministic proof-search hints for unproven obligations.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.
 - [x] Render Z3 counterexamples in Sigil source terms.
 - [x] Support typed local `let` bindings in proof obligations.
@@ -104,6 +105,7 @@ tests, and docs are in the repo.
 
 ## Agentic Prover
 
+- [x] Save deterministic proof-search hints for unproven obligations.
 - [ ] Let an LLM propose lemmas, splits, and candidate invariants.
 - [ ] Validate every proposal with Z3 or another deterministic checker.
 - [ ] Save proof traces as reproducible artifacts.

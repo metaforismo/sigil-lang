@@ -123,6 +123,13 @@ evidence. The model is counterexample evidence, not a proof artifact. The proof
 artifact is the SMT-LIB query that produced the result; use `--save-smt <dir>`
 to keep those queries on disk.
 
+Use `--save-proof-hints <dir>` to write deterministic handoff files for
+obligations that are not proven. A hint includes the source goal, assumptions,
+symbols, SMT-LIB query, and a small agent contract. These files are intended for
+future lemma search and LLM-assisted triage. They are not proof certificates:
+any proposed lemma must be represented back in Sigil or SMT and checked by the
+deterministic verifier.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.
