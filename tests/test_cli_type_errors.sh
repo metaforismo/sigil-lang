@@ -7,6 +7,16 @@ outdir="$2"
 rm -rf "$outdir"
 mkdir -p "$outdir"
 
+set +e
+output="$("$sigil" check --no-z3 2>&1)"
+status="$?"
+set -e
+
+echo "$output"
+
+test "$status" -eq 1
+printf '%s\n' "$output" | grep "check requires <file.sigil>" >/dev/null
+
 source_file="$outdir/missing-return.sigil"
 cat >"$source_file" <<'SIGIL'
 module bad;

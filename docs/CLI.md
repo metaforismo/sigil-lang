@@ -17,6 +17,8 @@ The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
 obligations point at the divisor expression that must be proven nonzero. Guards
 from `if`, `&&`, and `||` are reflected in the assumptions for the safety query.
+If options are provided without `<file.sigil>`, `check` reports the missing
+source path directly.
 
 Options:
 

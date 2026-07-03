@@ -203,6 +203,9 @@ int check_command(const std::vector<std::string>& args) {
       throw std::runtime_error("unknown argument: " + arg);
     }
   }
+  if (path.empty()) {
+    throw std::runtime_error("check requires <file.sigil>");
+  }
 
   const auto source = read_file(path);
   const auto module = sigil::parse_source(source, path);
