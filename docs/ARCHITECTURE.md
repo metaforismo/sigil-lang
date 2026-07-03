@@ -22,9 +22,9 @@ change while the language is still being designed. Parser output is a typed AST
 containing structs, fields, invariants, functions, contracts, and body
 statements. Numeric literal tokens are converted to exact `i64` AST values at
 parse time, and out-of-range literals are rejected with source ranges before
-type checking or proof generation. Unterminated statement blocks report the
-missing closing brace at EOF instead of falling through to a generic statement
-diagnostic.
+type checking or proof generation. Unterminated struct and statement blocks
+report the missing closing brace at EOF instead of falling through to a generic
+field or statement diagnostic.
 
 ## Static Validation
 

@@ -101,6 +101,9 @@ StructDecl Parser::parse_struct() {
   decl.name = consume(TokenKind::Identifier, "expected struct name").text;
   consume(TokenKind::LBrace, "expected '{' after struct name");
   while (!check(TokenKind::RBrace)) {
+    if (is_at_end()) {
+      throw Diagnostic(peek().range, "expected '}' after struct body");
+    }
     if (check(TokenKind::Invariant)) {
       decl.invariants.push_back(parse_named_predicate(TokenKind::Invariant));
     } else {
