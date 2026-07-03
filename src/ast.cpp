@@ -149,6 +149,27 @@ Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange rang
   return expr;
 }
 
+Expr make_struct_literal(std::string type_name, std::vector<FieldInitializer> fields,
+                         SourceRange range) {
+  auto expr = std::make_shared<ExprNode>();
+  expr->kind = ExprNode::Kind::StructLiteral;
+  expr->name = std::move(type_name);
+  expr->field_initializers = std::move(fields);
+  expr->location = range.start;
+  expr->range = std::move(range);
+  return expr;
+}
+
+Expr make_field_access(Expr base, std::string field_name, SourceRange range) {
+  auto expr = std::make_shared<ExprNode>();
+  expr->kind = ExprNode::Kind::FieldAccess;
+  expr->lhs = std::move(base);
+  expr->name = std::move(field_name);
+  expr->location = range.start;
+  expr->range = std::move(range);
+  return expr;
+}
+
 Expr make_unary(UnaryOp op, Expr operand, SourceRange range) {
   auto expr = std::make_shared<ExprNode>();
   expr->kind = ExprNode::Kind::Unary;
@@ -281,6 +302,17 @@ std::string display_arguments(const std::vector<Expr>& arguments) {
   return out.str();
 }
 
+std::string display_field_initializers(const std::vector<FieldInitializer>& fields) {
+  std::ostringstream out;
+  for (std::size_t index = 0; index < fields.size(); ++index) {
+    if (index != 0) {
+      out << ", ";
+    }
+    out << fields[index].name << ": " << display_expr(fields[index].expr);
+  }
+  return out.str();
+}
+
 std::string sanitize_symbol(const std::string& name) {
   std::string symbol = name;
   std::replace(symbol.begin(), symbol.end(), '.', '_');
@@ -302,6 +334,10 @@ std::string display_expr(const Expr& expr) {
     return expr->name;
   case ExprNode::Kind::Call:
     return expr->name + "(" + display_arguments(expr->arguments) + ")";
+  case ExprNode::Kind::StructLiteral:
+    return expr->name + " { " + display_field_initializers(expr->field_initializers) + " }";
+  case ExprNode::Kind::FieldAccess:
+    return display_expr(expr->lhs) + "." + expr->name;
   case ExprNode::Kind::Unary:
     return unary_display(expr->unary_op) + display_expr(expr->lhs);
   case ExprNode::Kind::Binary:
@@ -327,6 +363,10 @@ std::string emit_smt_expr(const Expr& expr) {
     return sanitize_symbol(expr->name);
   case ExprNode::Kind::Call:
     throw std::runtime_error("cannot emit unresolved call expression '" + expr->name + "'");
+  case ExprNode::Kind::StructLiteral:
+    throw std::runtime_error("cannot emit unresolved struct literal '" + expr->name + "'");
+  case ExprNode::Kind::FieldAccess:
+    throw std::runtime_error("cannot emit unresolved field access '" + display_expr(expr) + "'");
   case ExprNode::Kind::Unary:
     if (expr->unary_op == UnaryOp::Not) {
       return "(not " + emit_smt_expr(expr->lhs) + ")";
@@ -357,6 +397,9 @@ void collect_identifiers(const Expr& expr, std::vector<std::string>& names) {
   collect_identifiers(expr->rhs, names);
   for (const auto& argument : expr->arguments) {
     collect_identifiers(argument, names);
+  }
+  for (const auto& field : expr->field_initializers) {
+    collect_identifiers(field.expr, names);
   }
 }
 

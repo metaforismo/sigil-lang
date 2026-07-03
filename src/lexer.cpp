@@ -52,6 +52,9 @@ std::vector<Token> Lexer::tokenize() {
     case ',':
       tokens.push_back(make_token(TokenKind::Comma, start, location));
       break;
+    case '.':
+      tokens.push_back(make_token(TokenKind::Dot, start, location));
+      break;
     case '+':
       tokens.push_back(make_token(TokenKind::Plus, start, location));
       break;
@@ -221,6 +224,8 @@ const char* token_name(TokenKind kind) {
     return "';'";
   case TokenKind::Comma:
     return "','";
+  case TokenKind::Dot:
+    return "'.'";
   case TokenKind::Arrow:
     return "'->'";
   case TokenKind::Equal:

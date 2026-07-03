@@ -41,6 +41,7 @@ private:
   Expr parse_term();
   Expr parse_factor();
   Expr parse_unary();
+  Expr parse_postfix();
   Expr parse_primary();
 
   std::vector<Token> tokens_;

@@ -8,6 +8,7 @@ namespace sigil {
 namespace {
 
 using FunctionTable = std::unordered_map<std::string, const FunctionDecl*>;
+using StructTable = std::unordered_map<std::string, const StructDecl*>;
 
 bool same_type(const Type& lhs, const Type& rhs) {
   if (lhs.kind == TypeKind::Unknown || rhs.kind == TypeKind::Unknown) {
@@ -24,14 +25,24 @@ bool is_builtin_type_name(const std::string& name) {
   return name == "i64" || name == "bool" || name == "void";
 }
 
-void require_known_type(const Type& type, const SourceRange& range, const std::string& owner) {
-  if (type.kind == TypeKind::Unknown) {
+bool is_declared_struct_type(const Type& type, const StructTable& structs) {
+  return type.kind == TypeKind::Unknown && structs.find(type.spelling) != structs.end();
+}
+
+bool is_known_type(const Type& type, const StructTable& structs) {
+  return type.kind != TypeKind::Unknown || is_declared_struct_type(type, structs);
+}
+
+void require_known_type(const Type& type, const StructTable& structs, const SourceRange& range,
+                        const std::string& owner) {
+  if (!is_known_type(type, structs)) {
     throw Diagnostic(range, owner + " uses unsupported type '" + type.display() + "'");
   }
 }
 
-void require_value_type(const Type& type, const SourceRange& range, const std::string& owner) {
-  require_known_type(type, range, owner);
+void require_value_type(const Type& type, const StructTable& structs, const SourceRange& range,
+                        const std::string& owner) {
+  require_known_type(type, structs, range, owner);
   if (type.kind == TypeKind::Void) {
     throw Diagnostic(range, owner + " cannot use void as a value type");
   }
@@ -62,13 +73,13 @@ void require_unreserved_declaration_name(const std::string& name, const SourceRa
   }
 }
 
-Type infer_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTable& functions,
-                const FunctionDecl& current_function);
+Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                const FunctionTable& functions, const FunctionDecl& current_function);
 
-Type require_type(const Expr& expr, const SymbolTable& symbols, const FunctionTable& functions,
-                  const FunctionDecl& current_function, TypeKind expected,
-                  const std::string& context) {
-  const auto actual = infer_expr(expr, symbols, functions, current_function);
+Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                  const FunctionTable& functions, const FunctionDecl& current_function,
+                  TypeKind expected, const std::string& context) {
+  const auto actual = infer_expr(expr, symbols, structs, functions, current_function);
   if (actual.kind != expected) {
     const auto expected_name = expected == TypeKind::Bool ? "bool" : "i64";
     throw Diagnostic(expr ? expr->range : SourceRange{},
@@ -77,10 +88,10 @@ Type require_type(const Expr& expr, const SymbolTable& symbols, const FunctionTa
   return actual;
 }
 
-Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTable& functions,
-                       const FunctionDecl& current_function) {
-  const auto lhs = infer_expr(expr->lhs, symbols, functions, current_function);
-  const auto rhs = infer_expr(expr->rhs, symbols, functions, current_function);
+Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                       const FunctionTable& functions, const FunctionDecl& current_function) {
+  const auto lhs = infer_expr(expr->lhs, symbols, structs, functions, current_function);
+  const auto rhs = infer_expr(expr->rhs, symbols, structs, functions, current_function);
 
   switch (expr->binary_op) {
   case BinaryOp::Or:
@@ -124,8 +135,8 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Funct
   throw Diagnostic(expr->range, "unknown binary operator");
 }
 
-Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTable& functions,
-                     const FunctionDecl& current_function) {
+Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                     const FunctionTable& functions, const FunctionDecl& current_function) {
   const auto found = functions.find(expr->name);
   if (found == functions.end()) {
     throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
@@ -142,7 +153,8 @@ Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const Functio
   }
 
   for (std::size_t index = 0; index < expr->arguments.size(); ++index) {
-    const auto actual = infer_expr(expr->arguments[index], symbols, functions, current_function);
+    const auto actual =
+        infer_expr(expr->arguments[index], symbols, structs, functions, current_function);
     const auto& expected = callee.params[index].type;
     if (!same_type(actual, expected)) {
       throw Diagnostic(expr->arguments[index]->range,
@@ -156,12 +168,77 @@ Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const Functio
     throw Diagnostic(expr->range,
                      "function '" + expr->name + "' returns void and cannot be used as a value");
   }
-  require_value_type(callee.return_type, callee.range, "function '" + expr->name + "' return type");
+  require_value_type(callee.return_type, structs, callee.range,
+                     "function '" + expr->name + "' return type");
   return callee.return_type;
 }
 
-Type infer_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTable& functions,
-                const FunctionDecl& current_function) {
+const FieldDecl* find_field(const StructDecl& decl, const std::string& name) {
+  for (const auto& field : decl.fields) {
+    if (field.name == name) {
+      return &field;
+    }
+  }
+  return nullptr;
+}
+
+Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
+                               const StructTable& structs, const FunctionTable& functions,
+                               const FunctionDecl& current_function) {
+  const auto found = structs.find(expr->name);
+  if (found == structs.end()) {
+    throw Diagnostic(expr->range, "unknown struct '" + expr->name + "'");
+  }
+  const StructDecl& decl = *found->second;
+
+  std::unordered_set<std::string> initialized;
+  for (const auto& initializer : expr->field_initializers) {
+    const auto* field = find_field(decl, initializer.name);
+    if (!field) {
+      throw Diagnostic(initializer.range,
+                       "struct '" + decl.name + "' has no field '" + initializer.name + "'");
+    }
+    if (!initialized.insert(initializer.name).second) {
+      throw Diagnostic(initializer.range,
+                       "duplicate initializer for field '" + initializer.name + "'");
+    }
+    const auto actual = infer_expr(initializer.expr, symbols, structs, functions, current_function);
+    if (!same_type(actual, field->type)) {
+      throw Diagnostic(initializer.range, "field '" + decl.name + "." + initializer.name +
+                                              "' type mismatch: expected " + field->type.display() +
+                                              ", found " + actual.display());
+    }
+  }
+
+  for (const auto& field : decl.fields) {
+    if (initialized.find(field.name) == initialized.end()) {
+      throw Diagnostic(expr->range,
+                       "missing initializer for field '" + decl.name + "." + field.name + "'");
+    }
+  }
+
+  return Type{TypeKind::Unknown, decl.name};
+}
+
+Type infer_field_access_expr(const Expr& expr, const SymbolTable& symbols,
+                             const StructTable& structs, const FunctionTable& functions,
+                             const FunctionDecl& current_function) {
+  const auto base_type = infer_expr(expr->lhs, symbols, structs, functions, current_function);
+  if (!is_declared_struct_type(base_type, structs)) {
+    throw Diagnostic(expr->range,
+                     "field access requires a struct value, found " + base_type.display());
+  }
+
+  const StructDecl& decl = *structs.at(base_type.spelling);
+  const auto* field = find_field(decl, expr->name);
+  if (!field) {
+    throw Diagnostic(expr->range, "struct '" + decl.name + "' has no field '" + expr->name + "'");
+  }
+  return field->type;
+}
+
+Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                const FunctionTable& functions, const FunctionDecl& current_function) {
   if (!expr) {
     throw Diagnostic(SourceRange{}, "missing expression");
   }
@@ -176,13 +253,17 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTabl
     if (found == symbols.end()) {
       throw Diagnostic(expr->range, "unknown identifier '" + expr->name + "'");
     }
-    require_value_type(found->second, expr->range, "identifier '" + expr->name + "'");
+    require_value_type(found->second, structs, expr->range, "identifier '" + expr->name + "'");
     return found->second;
   }
   case ExprNode::Kind::Call:
-    return infer_call_expr(expr, symbols, functions, current_function);
+    return infer_call_expr(expr, symbols, structs, functions, current_function);
+  case ExprNode::Kind::StructLiteral:
+    return infer_struct_literal_expr(expr, symbols, structs, functions, current_function);
+  case ExprNode::Kind::FieldAccess:
+    return infer_field_access_expr(expr, symbols, structs, functions, current_function);
   case ExprNode::Kind::Unary: {
-    const auto operand = infer_expr(expr->lhs, symbols, functions, current_function);
+    const auto operand = infer_expr(expr->lhs, symbols, structs, functions, current_function);
     if (expr->unary_op == UnaryOp::Not) {
       if (!operand.is_bool()) {
         throw Diagnostic(expr->range, "'!' requires a bool operand");
@@ -195,12 +276,12 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTabl
     return Type{TypeKind::I64, "i64"};
   }
   case ExprNode::Kind::Binary:
-    return infer_binary_expr(expr, symbols, functions, current_function);
+    return infer_binary_expr(expr, symbols, structs, functions, current_function);
   case ExprNode::Kind::If: {
-    require_type(expr->condition, symbols, functions, current_function, TypeKind::Bool,
+    require_type(expr->condition, symbols, structs, functions, current_function, TypeKind::Bool,
                  "if condition");
-    const auto then_type = infer_expr(expr->lhs, symbols, functions, current_function);
-    const auto else_type = infer_expr(expr->rhs, symbols, functions, current_function);
+    const auto then_type = infer_expr(expr->lhs, symbols, structs, functions, current_function);
+    const auto else_type = infer_expr(expr->rhs, symbols, structs, functions, current_function);
     if (!same_type(then_type, else_type)) {
       throw Diagnostic(expr->range, "if branches must have the same type, found " +
                                         then_type.display() + " and " + else_type.display());
@@ -216,15 +297,15 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const FunctionTabl
 }
 
 void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symbols,
-                        const FunctionTable& functions, const FunctionDecl& current_function,
-                        const std::string& owner) {
-  require_type(predicate.expr, symbols, functions, current_function, TypeKind::Bool,
+                        const StructTable& structs, const FunctionTable& functions,
+                        const FunctionDecl& current_function, const std::string& owner) {
+  require_type(predicate.expr, symbols, structs, functions, current_function, TypeKind::Bool,
                owner + " '" + predicate.name + "'");
 }
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals,
-                        std::unordered_set<std::string>& proof_labels,
+                        std::unordered_set<std::string>& proof_labels, const StructTable& structs,
                         const FunctionTable& functions);
 
 void reject_loop_body_returns(const std::vector<Statement>& statements) {
@@ -265,13 +346,14 @@ bool block_returns(const std::vector<Statement>& statements) {
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
                               SymbolTable locals, std::unordered_set<std::string> assignable_locals,
                               std::unordered_set<std::string>& proof_labels,
-                              const FunctionTable& functions) {
+                              const StructTable& structs, const FunctionTable& functions) {
   bool terminated = false;
   for (const auto& statement : statements) {
     if (terminated) {
       throw Diagnostic(statement.range, "unreachable statement after guaranteed return");
     }
-    validate_statement(statement, decl, locals, assignable_locals, proof_labels, functions);
+    validate_statement(statement, decl, locals, assignable_locals, proof_labels, structs,
+                       functions);
     terminated = statement_returns(statement);
   }
 }
@@ -293,14 +375,14 @@ void validate_statement_label(const Statement& statement,
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals,
-                        std::unordered_set<std::string>& proof_labels,
+                        std::unordered_set<std::string>& proof_labels, const StructTable& structs,
                         const FunctionTable& functions) {
   if (statement.kind == StatementKind::Let) {
     require_unreserved_value_name(statement.name, statement.range,
                                   "local '" + decl.name + "." + statement.name + "'");
-    require_value_type(statement.type, statement.range,
+    require_value_type(statement.type, structs, statement.range,
                        "local '" + decl.name + "." + statement.name + "'");
-    const auto actual = infer_expr(statement.expr, locals, functions, decl);
+    const auto actual = infer_expr(statement.expr, locals, structs, functions, decl);
     if (!same_type(actual, statement.type)) {
       throw Diagnostic(statement.range, "let type mismatch: expected " + statement.type.display() +
                                             ", found " + actual.display());
@@ -317,37 +399,41 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       throw Diagnostic(statement.range,
                        "assignment target '" + statement.name + "' is not a mutable local");
     }
-    const auto actual = infer_expr(statement.expr, locals, functions, decl);
+    const auto actual = infer_expr(statement.expr, locals, structs, functions, decl);
     if (!same_type(actual, found->second)) {
       throw Diagnostic(statement.range, "assignment type mismatch: expected " +
                                             found->second.display() + ", found " +
                                             actual.display());
     }
   } else if (statement.kind == StatementKind::If) {
-    require_type(statement.expr, locals, functions, decl, TypeKind::Bool, "if statement condition");
+    require_type(statement.expr, locals, structs, functions, decl, TypeKind::Bool,
+                 "if statement condition");
     validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels,
-                             functions);
+                             structs, functions);
     validate_statement_block(statement.else_branch, decl, locals, assignable_locals, proof_labels,
-                             functions);
+                             structs, functions);
   } else if (statement.kind == StatementKind::While) {
-    require_type(statement.expr, locals, functions, decl, TypeKind::Bool, "while condition");
+    require_type(statement.expr, locals, structs, functions, decl, TypeKind::Bool,
+                 "while condition");
     std::unordered_set<std::string> invariant_names;
     for (const auto& invariant : statement.loop_invariants) {
       if (!invariant_names.insert(invariant.name).second) {
         throw Diagnostic(invariant.range, "duplicate loop invariant '" + invariant.name + "'");
       }
       validate_proof_label(invariant.name, invariant.range, proof_labels);
-      validate_predicate(invariant, locals, functions, decl, "loop invariant");
+      validate_predicate(invariant, locals, structs, functions, decl, "loop invariant");
     }
     reject_loop_body_returns(statement.then_branch);
     validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels,
-                             functions);
+                             structs, functions);
   } else if (statement.kind == StatementKind::Assume) {
     validate_statement_label(statement, proof_labels);
-    require_type(statement.expr, locals, functions, decl, TypeKind::Bool, "assume statement");
+    require_type(statement.expr, locals, structs, functions, decl, TypeKind::Bool,
+                 "assume statement");
   } else if (statement.kind == StatementKind::Assert) {
     validate_statement_label(statement, proof_labels);
-    require_type(statement.expr, locals, functions, decl, TypeKind::Bool, "assert statement");
+    require_type(statement.expr, locals, structs, functions, decl, TypeKind::Bool,
+                 "assert statement");
   } else if (statement.kind == StatementKind::Return) {
     if (decl.return_type.kind == TypeKind::Void) {
       if (statement.expr) {
@@ -358,7 +444,7 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     if (!statement.expr) {
       throw Diagnostic(statement.range, "non-void functions must return a value");
     }
-    const auto actual = infer_expr(statement.expr, locals, functions, decl);
+    const auto actual = infer_expr(statement.expr, locals, structs, functions, decl);
     if (!same_type(actual, decl.return_type)) {
       throw Diagnostic(statement.range, "return type mismatch: expected " +
                                             decl.return_type.display() + ", found " +
@@ -367,12 +453,13 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
   }
 }
 
-void validate_struct(const StructDecl& decl) {
+void validate_struct(const StructDecl& decl, const StructTable& structs) {
   SymbolTable fields;
   for (const auto& field : decl.fields) {
     require_unreserved_value_name(field.name, field.range,
                                   "field '" + decl.name + "." + field.name + "'");
-    require_value_type(field.type, field.range, "field '" + decl.name + "." + field.name + "'");
+    require_value_type(field.type, structs, field.range,
+                       "field '" + decl.name + "." + field.name + "'");
     insert_symbol(fields, field.name, field.type, field.range, "field");
   }
 
@@ -384,19 +471,22 @@ void validate_struct(const StructDecl& decl) {
     if (!invariant_names.insert(invariant.name).second) {
       throw Diagnostic(invariant.range, "duplicate invariant '" + invariant.name + "'");
     }
-    validate_predicate(invariant, fields, no_functions, invariant_context, "invariant");
+    validate_predicate(invariant, fields, structs, no_functions, invariant_context, "invariant");
   }
 }
 
-void validate_function(const FunctionDecl& decl, const FunctionTable& functions) {
+void validate_function(const FunctionDecl& decl, const StructTable& structs,
+                       const FunctionTable& functions) {
   SymbolTable params;
   for (const auto& param : decl.params) {
     require_unreserved_value_name(param.name, param.range,
                                   "parameter '" + decl.name + "." + param.name + "'");
-    require_value_type(param.type, param.range, "parameter '" + decl.name + "." + param.name + "'");
+    require_value_type(param.type, structs, param.range,
+                       "parameter '" + decl.name + "." + param.name + "'");
     insert_symbol(params, param.name, param.type, param.range, "parameter");
   }
-  require_known_type(decl.return_type, decl.range, "function '" + decl.name + "' return type");
+  require_known_type(decl.return_type, structs, decl.range,
+                     "function '" + decl.name + "' return type");
 
   std::unordered_set<std::string> precondition_names;
   std::unordered_set<std::string> postcondition_names;
@@ -406,7 +496,7 @@ void validate_function(const FunctionDecl& decl, const FunctionTable& functions)
       throw Diagnostic(precondition.range, "duplicate precondition '" + precondition.name + "'");
     }
     contract_labels.insert(precondition.name);
-    validate_predicate(precondition, params, functions, decl, "precondition");
+    validate_predicate(precondition, params, structs, functions, decl, "precondition");
   }
 
   SymbolTable post_symbols = params;
@@ -420,13 +510,14 @@ void validate_function(const FunctionDecl& decl, const FunctionTable& functions)
     if (!contract_labels.insert(ensure.name).second) {
       throw Diagnostic(ensure.range, "duplicate contract label '" + ensure.name + "'");
     }
-    validate_predicate(ensure, post_symbols, functions, decl, "postcondition");
+    validate_predicate(ensure, post_symbols, structs, functions, decl, "postcondition");
   }
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
   std::unordered_set<std::string> proof_labels = contract_labels;
-  validate_statement_block(decl.body, decl, locals, assignable_locals, proof_labels, functions);
+  validate_statement_block(decl.body, decl, locals, assignable_locals, proof_labels, structs,
+                           functions);
   if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
     throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
   }
@@ -453,6 +544,9 @@ void collect_call_edges(const Expr& expr, std::vector<CallEdge>& edges) {
   collect_call_edges(expr->condition, edges);
   collect_call_edges(expr->lhs, edges);
   collect_call_edges(expr->rhs, edges);
+  for (const auto& field : expr->field_initializers) {
+    collect_call_edges(field.expr, edges);
+  }
 }
 
 void collect_call_edges(const std::vector<NamedPredicate>& predicates,
@@ -532,6 +626,7 @@ void reject_recursive_calls(const Module& module, const FunctionTable& functions
 void validate_module(const Module& module) {
   std::unordered_set<std::string> declaration_names;
   std::unordered_set<std::string> struct_names;
+  StructTable structs;
   for (const auto& decl : module.structs) {
     require_unreserved_declaration_name(decl.name, decl.range, "struct '" + decl.name + "'");
     if (!struct_names.insert(decl.name).second) {
@@ -540,7 +635,11 @@ void validate_module(const Module& module) {
     if (!declaration_names.insert(decl.name).second) {
       throw Diagnostic(decl.range, "duplicate top-level declaration '" + decl.name + "'");
     }
-    validate_struct(decl);
+    structs[decl.name] = &decl;
+  }
+
+  for (const auto& decl : module.structs) {
+    validate_struct(decl, structs);
   }
 
   std::unordered_set<std::string> function_names;
@@ -557,7 +656,7 @@ void validate_module(const Module& module) {
   }
 
   for (const auto& decl : module.functions) {
-    validate_function(decl, functions);
+    validate_function(decl, structs, functions);
   }
   reject_recursive_calls(module, functions);
 }

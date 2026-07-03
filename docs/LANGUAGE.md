@@ -51,6 +51,20 @@ functions. That preservation check is a core roadmap item.
 Field names share the same value-name restrictions as function parameters and
 local bindings, because fields become direct symbols while checking invariants.
 
+Struct values can be constructed with named field initializers:
+
+```sigil
+let pair: Pair = Pair { left: x, ok: true };
+return pair.left;
+```
+
+The checker requires every field to be initialized exactly once, rejects unknown
+fields, checks each initializer against the declared field type, and checks
+field access against the base struct type. The proof planner materializes scalar
+fields as ordinary SMT symbols such as `pair.left`. Native lowering deliberately
+skips functions that manipulate struct values until the ABI and memory layout
+rules are explicit.
+
 ## Function Contracts
 
 ```sigil
@@ -158,6 +172,8 @@ Supported expression forms:
 - boolean connectives: `&&`, `||`
 - conditionals: `if condition { then_expr } else { else_expr }`
 - function calls: `callee(arg1, arg2)`
+- struct literals: `TypeName { field: value }`
+- field access: `value.field`
 - parentheses
 
 Conditional expressions require a `bool` condition, and both branches must have

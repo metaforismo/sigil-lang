@@ -394,7 +394,35 @@ Expr Parser::parse_unary() {
     return make_unary(op.kind == TokenKind::Bang ? UnaryOp::Not : UnaryOp::Negate, operand,
                       span(op.range, operand->range));
   }
-  return parse_primary();
+  return parse_postfix();
+}
+
+Expr Parser::parse_postfix() {
+  auto expr = parse_primary();
+  while (true) {
+    if (match(TokenKind::LParen)) {
+      if (expr->kind != ExprNode::Kind::Identifier) {
+        throw Diagnostic(expr->range, "function call callee must be an identifier");
+      }
+      std::vector<Expr> arguments;
+      if (!check(TokenKind::RParen)) {
+        do {
+          arguments.push_back(parse_expr());
+        } while (match(TokenKind::Comma));
+      }
+      const auto end = consume(TokenKind::RParen, "expected ')' after call arguments");
+      expr = make_call(expr->name, std::move(arguments), span(expr->range, end.range));
+      continue;
+    }
+
+    if (match(TokenKind::Dot)) {
+      const auto field = consume(TokenKind::Identifier, "expected field name after '.'");
+      expr = make_field_access(expr, field.text, span(expr->range, field.range));
+      continue;
+    }
+
+    return expr;
+  }
 }
 
 Expr Parser::parse_primary() {
@@ -422,15 +450,26 @@ Expr Parser::parse_primary() {
   }
   if (match(TokenKind::Identifier)) {
     const auto token = previous();
-    if (match(TokenKind::LParen)) {
-      std::vector<Expr> arguments;
-      if (!check(TokenKind::RParen)) {
+    if (check(TokenKind::LBrace) && current_ + 2 < tokens_.size() &&
+        tokens_[current_ + 1].kind == TokenKind::Identifier &&
+        tokens_[current_ + 2].kind == TokenKind::Colon) {
+      consume(TokenKind::LBrace, "expected '{' before struct literal");
+      std::vector<FieldInitializer> fields;
+      if (!check(TokenKind::RBrace)) {
         do {
-          arguments.push_back(parse_expr());
+          const auto field = consume(TokenKind::Identifier, "expected field name");
+          FieldInitializer initializer;
+          initializer.name = field.text;
+          initializer.location = field.location;
+          initializer.range = field.range;
+          consume(TokenKind::Colon, "expected ':' after field name");
+          initializer.expr = parse_expr();
+          initializer.range = span(field.range, initializer.expr->range);
+          fields.push_back(std::move(initializer));
         } while (match(TokenKind::Comma));
       }
-      const auto end = consume(TokenKind::RParen, "expected ')' after call arguments");
-      return make_call(token.text, std::move(arguments), span(token.range, end.range));
+      const auto end = consume(TokenKind::RBrace, "expected '}' after struct literal");
+      return make_struct_literal(token.text, std::move(fields), span(token.range, end.range));
     }
     return make_identifier(token.text, token.range);
   }

@@ -56,12 +56,21 @@ enum class BinaryOp {
 struct ExprNode;
 using Expr = std::shared_ptr<ExprNode>;
 
+struct FieldInitializer {
+  std::string name;
+  Expr expr;
+  SourceLocation location;
+  SourceRange range;
+};
+
 struct ExprNode {
   enum class Kind {
     Integer,
     Boolean,
     Identifier,
     Call,
+    StructLiteral,
+    FieldAccess,
     Unary,
     Binary,
     If,
@@ -79,6 +88,7 @@ struct ExprNode {
   Expr lhs;
   Expr rhs;
   std::vector<Expr> arguments;
+  std::vector<FieldInitializer> field_initializers;
 };
 
 Expr make_integer(std::int64_t value, SourceRange range);
@@ -88,6 +98,9 @@ Expr make_boolean(bool value, SourceLocation location = {});
 Expr make_identifier(std::string name, SourceRange range);
 Expr make_identifier(std::string name, SourceLocation location = {});
 Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange range);
+Expr make_struct_literal(std::string type_name, std::vector<FieldInitializer> fields,
+                         SourceRange range);
+Expr make_field_access(Expr base, std::string field_name, SourceRange range);
 Expr make_unary(UnaryOp op, Expr operand, SourceRange range);
 Expr make_unary(UnaryOp op, Expr operand, SourceLocation location = {});
 Expr make_binary(BinaryOp op, Expr lhs, Expr rhs, SourceRange range);

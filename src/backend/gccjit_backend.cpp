@@ -163,6 +163,14 @@ void emit_debug_expr_locations(std::ostringstream& out, const std::string& label
                                 expr->arguments[index]);
     }
     return;
+  case ExprNode::Kind::StructLiteral:
+    for (const auto& field : expr->field_initializers) {
+      emit_debug_expr_locations(out, label + ".field." + field.name, field.expr);
+    }
+    return;
+  case ExprNode::Kind::FieldAccess:
+    emit_debug_expr_locations(out, label + ".base", expr->lhs);
+    return;
   case ExprNode::Kind::Unary:
     emit_debug_expr_locations(out, label + ".operand", expr->lhs);
     return;
@@ -413,6 +421,12 @@ bool expression_is_lowerable(const Expr& expr, const FunctionTable& functions,
     return true;
   case ExprNode::Kind::Call:
     return call_is_lowerable(expr, functions, visiting, diagnostic);
+  case ExprNode::Kind::StructLiteral:
+    diagnostic = make_lowering_diagnostic("struct values are not native-lowered yet", expr->range);
+    return false;
+  case ExprNode::Kind::FieldAccess:
+    diagnostic = make_lowering_diagnostic("field access is not native-lowered yet", expr->range);
+    return false;
   case ExprNode::Kind::Unary:
     return expression_is_lowerable(expr->lhs, functions, visiting, diagnostic);
   case ExprNode::Kind::Binary:
@@ -650,6 +664,10 @@ private:
       }
       return found->second.decl->return_type;
     }
+    case ExprNode::Kind::StructLiteral:
+      throw LoweringError("struct values are not native-lowered yet", expr->range);
+    case ExprNode::Kind::FieldAccess:
+      throw LoweringError("field access is not native-lowered yet", expr->range);
     case ExprNode::Kind::Unary:
       return expr->unary_op == UnaryOp::Not ? Type{TypeKind::Bool, "bool"}
                                             : Type{TypeKind::I64, "i64"};
@@ -703,6 +721,10 @@ private:
     }
     case ExprNode::Kind::Call:
       return lower_call_expr(expr, variables, state);
+    case ExprNode::Kind::StructLiteral:
+      throw LoweringError("struct values are not native-lowered yet", expr->range);
+    case ExprNode::Kind::FieldAccess:
+      throw LoweringError("field access is not native-lowered yet", expr->range);
     case ExprNode::Kind::Unary:
       return lower_unary_expr(expr, variables, state);
     case ExprNode::Kind::Binary:

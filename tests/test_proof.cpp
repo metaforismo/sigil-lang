@@ -108,6 +108,37 @@ ensures advanced: result > x;
   expect(call_assert_smt.find("(assert (= y add_one_call_1_") != std::string::npos,
          "assertion SMT binds let local to call result");
 
+  const char* struct_source = R"(
+module structs;
+
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn read_left(x: i64) -> i64
+ensures exact: result == x;
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  assert field_visible: pair.left == x;
+  return pair.left;
+}
+)";
+
+  const auto struct_module = sigil::parse_source(struct_source, "structs.sigil");
+  const auto struct_obligations = sigil::build_obligations(struct_module);
+  expect(struct_obligations.size() == 2, "struct field assert plus ensure obligations");
+  expect(struct_obligations[0].name == "fn.read_left.assert.1.field_visible",
+         "struct field assertion name");
+  const auto struct_smt = sigil::emit_smt_lib(struct_obligations[0]);
+  expect(struct_smt.find("(declare-const pair_left Int)") != std::string::npos,
+         "struct field symbol is declared");
+  expect(struct_smt.find("(assert (= pair_left x))") != std::string::npos,
+         "struct literal binds scalar field");
+  const auto struct_results = sigil::verify_obligations(struct_obligations, false);
+  expect(struct_results[0].status == sigil::VerificationStatus::Proven,
+         "field assertion proven syntactically");
+
   const char* conditional_source = R"(
 module conditional;
 

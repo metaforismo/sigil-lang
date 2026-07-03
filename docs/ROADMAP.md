@@ -41,6 +41,7 @@ tests, and docs are in the repo.
 - [x] Reject early returns inside loops until control-flow proofs support them.
 - [x] Add scalar function call expressions with static validation.
 - [x] Generate modular call-site proof obligations from callee contracts.
+- [x] Add simple struct values and field access.
 - [x] Lower pure integer and boolean functions through `libgccjit`.
 - [x] Lower scalar function calls through `libgccjit`.
 - [x] Add ABI tests for JIT-compiled functions.
@@ -70,7 +71,7 @@ tests, and docs are in the repo.
 - [ ] Extend scalar validation into a complete language type checker.
 - [x] Add scalar function call expressions with static validation.
 - [x] Add loops with user-written invariants.
-- [ ] Add simple user-defined struct values.
+- [x] Add simple user-defined struct values.
 - [ ] Generate weakest-precondition obligations for control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
 

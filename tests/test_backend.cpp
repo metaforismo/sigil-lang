@@ -368,6 +368,43 @@ fn quotient(x: i64, y: i64) -> i64
   expect(!unsupported_result.available, "unsupported unavailable without backend");
 #endif
 
+  const char* struct_native_source = R"(
+module native;
+
+struct Pair {
+  left: i64;
+  ok: bool;
+}
+
+fn read_left(x: i64) -> i64
+{
+  let pair: Pair = Pair { left: x, ok: true };
+  return pair.left;
+}
+)";
+
+  const auto struct_native_module =
+      sigil::parse_source(struct_native_source, "struct-native.sigil");
+  sigil::validate_module(struct_native_module);
+  const auto struct_native_result = sigil::compile_module_with_gccjit(struct_native_module);
+#if SIGIL_HAVE_GCCJIT
+  expect(struct_native_result.available, "struct native result sees backend");
+  expect(!struct_native_result.compiled, "struct native function is not compiled");
+  expect(struct_native_result.functions.size() == 1, "struct native function report count");
+  expect(!struct_native_result.functions[0].lowered, "struct native function skipped");
+  expect(struct_native_result.functions[0].detail.find("unsupported native type 'Pair'") !=
+             std::string::npos,
+         "struct native skip explains unsupported type");
+  const auto struct_artifacts =
+      sigil::build_native_ir_artifacts(struct_native_module, struct_native_result);
+  expect(struct_artifacts[0].text.find("Pair { left: x, ok: true }") != std::string::npos,
+         "struct native artifact displays literal");
+  expect(struct_artifacts[0].text.find("pair.left") != std::string::npos,
+         "struct native artifact displays field access");
+#else
+  expect(!struct_native_result.available, "struct native unavailable without backend");
+#endif
+
   const char* loop_source = R"(
 module native;
 
