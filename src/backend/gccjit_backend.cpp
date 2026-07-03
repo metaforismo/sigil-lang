@@ -260,6 +260,17 @@ void emit_debug_locations(std::ostringstream& out, const FunctionDecl& fn) {
   }
 }
 
+void emit_signature(std::ostringstream& out, const FunctionDecl& fn) {
+  out << "signature " << fn.name << "(";
+  for (std::size_t index = 0; index < fn.params.size(); ++index) {
+    if (index > 0) {
+      out << ", ";
+    }
+    out << fn.params[index].name << ": " << fn.params[index].type.display();
+  }
+  out << ") -> " << fn.return_type.display() << "\n";
+}
+
 std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionReport& report,
                                 bool debug_info_enabled) {
   std::ostringstream out;
@@ -272,14 +283,7 @@ std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionRepo
   if (!report.lowered && report.range.start.line != 0) {
     out << "diagnostic " << report.range.display() << "\n";
   }
-  out << "signature " << fn.name << "(";
-  for (std::size_t index = 0; index < fn.params.size(); ++index) {
-    if (index > 0) {
-      out << ", ";
-    }
-    out << fn.params[index].name << ": " << fn.params[index].type.display();
-  }
-  out << ") -> " << fn.return_type.display() << "\n";
+  emit_signature(out, fn);
   emit_native_predicates(out, "requires", fn.preconditions);
   emit_native_predicates(out, "ensures", fn.ensures);
   out << "body\n";
@@ -290,6 +294,46 @@ std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionRepo
     emit_native_statement(out, statement, "  ");
   }
   emit_debug_locations(out, fn);
+  return out.str();
+}
+
+std::string emit_binary_proof_text(const FunctionDecl& fn, const GccJitFunctionReport& report,
+                                   bool debug_info_enabled) {
+  std::ostringstream out;
+  out << "sigil-binary-proof-facts v0\n";
+  out << "function " << fn.name << "\n";
+  out << "range " << fn.range.display() << "\n";
+  out << "native-status " << (report.lowered ? "lowered" : "skipped") << "\n";
+  out << "native-detail " << report.detail << "\n";
+  out << "native-ir-file " << native_ir_file_name_for_function(fn.name) << "\n";
+  out << "debug-info " << (debug_info_enabled ? "enabled" : "disabled") << "\n";
+  emit_signature(out, fn);
+  emit_native_predicates(out, "requires", fn.preconditions);
+  emit_native_predicates(out, "ensures", fn.ensures);
+
+  out << "binary-proof-scope\n";
+  out << "  candidate " << (report.lowered ? "yes" : "no") << "\n";
+  out << "  machine-code-bytes captured no\n";
+  out << "  target-instruction-model available no\n";
+  out << "  crash-safety-proven no\n";
+  out << "  cycle-bound-proven no\n";
+  out << "  deterministic-source-map " << (debug_info_enabled ? "yes" : "no") << "\n";
+  if (!report.lowered && report.range.start.line != 0) {
+    out << "  blocking-range " << report.range.display() << "\n";
+  }
+
+  out << "source-body\n";
+  if (fn.body.empty()) {
+    out << "  (empty)\n";
+  }
+  for (const auto& statement : fn.body) {
+    emit_native_statement(out, statement, "  ");
+  }
+
+  out << "experiment-contract\n";
+  out << "  - these are reproducible facts for an external binary-level prover\n";
+  out << "  - no runtime, crash-safety, or cycle-bound claim is proven by this artifact\n";
+  out << "  - any future binary claim must cite the target model and checked proof artifact\n";
   return out.str();
 }
 
@@ -1155,6 +1199,10 @@ std::string native_ir_file_name_for_function(const std::string& function_name) {
   return "fn." + artifact_symbol(function_name) + ".native-ir.txt";
 }
 
+std::string binary_proof_file_name_for_function(const std::string& function_name) {
+  return "fn." + artifact_symbol(function_name) + ".binary-facts.txt";
+}
+
 std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module,
                                                             const GccJitCompileResult& result) {
   std::vector<GccJitNativeArtifact> artifacts;
@@ -1167,6 +1215,22 @@ std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module
     artifacts.push_back(GccJitNativeArtifact{
         fn.name, native_ir_file_name_for_function(fn.name),
         emit_native_ir_text(fn, active_report, result.debug_info_enabled), fn.range});
+  }
+  return artifacts;
+}
+
+std::vector<GccJitBinaryProofArtifact>
+build_binary_proof_artifacts(const Module& module, const GccJitCompileResult& result) {
+  std::vector<GccJitBinaryProofArtifact> artifacts;
+  artifacts.reserve(module.functions.size());
+  for (const auto& fn : module.functions) {
+    const auto* report = report_for_function(result, fn.name);
+    const auto fallback_detail = result.detail.empty() ? "not lowered" : result.detail;
+    const auto fallback = GccJitFunctionReport{fn.name, false, fallback_detail, fn.range};
+    const auto& active_report = report ? *report : fallback;
+    artifacts.push_back(GccJitBinaryProofArtifact{
+        fn.name, binary_proof_file_name_for_function(fn.name),
+        emit_binary_proof_text(fn, active_report, result.debug_info_enabled), fn.range});
   }
   return artifacts;
 }

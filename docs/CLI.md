@@ -74,11 +74,14 @@ the current build exposes:
 - `debug-info`: whether GCCJIT debug information is requested for lowered code.
 - `native-ir-artifacts`: whether deterministic native-lowering artifacts can be
   emitted.
+- `binary-proof-artifacts`: whether deterministic binary-proof experiment facts
+  can be emitted.
 
 ## `sigil compile`
 
 ```sh
 sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]
+              [--dump-binary-facts] [--save-binary-facts <dir>]
 ```
 
 Parses and validates a module, then asks the GCC JIT backend to lower every
@@ -95,6 +98,13 @@ Options:
   source ranges.
 - `--save-native-ir <dir>`: write one native-lowering artifact per function to
   `<dir>`, using stable names such as `fn.add_one.native-ir.txt`.
+- `--dump-binary-facts`: print deterministic binary-proof experiment facts for
+  every function.
+- `--save-binary-facts <dir>`: write one binary-proof experiment artifact per
+  function to `<dir>`, using stable names such as
+  `fn.add_one.binary-facts.txt`. These artifacts record native-lowering status,
+  the linked native-IR artifact name, source contracts, source body surface, and
+  explicit negative claims such as `cycle-bound-proven no`.
 
 The current native subset supports pure scalar functions over `i64` and `bool`
 using:
@@ -113,6 +123,10 @@ Functions containing `while` loops are checked by `sigil check`, but are
 skipped by native lowering for now. Division and modulo are intentionally
 skipped until Sigil pins down the exact source semantics and proves they match
 the native lowering.
+
+Binary-facts artifacts are scaffolding for future binary-level solvers. They do
+not contain machine-code bytes, target instruction semantics, crash-safety
+proofs, or cycle-bound proofs yet.
 
 Exit codes:
 

@@ -37,3 +37,4 @@ case "$expected" in
 esac
 
 printf '%s\n' "$output" | grep "native-ir-artifacts: available" >/dev/null
+printf '%s\n' "$output" | grep "binary-proof-artifacts: available" >/dev/null

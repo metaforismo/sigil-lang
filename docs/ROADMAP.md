@@ -64,6 +64,7 @@ tests, and docs are in the repo.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
 - [x] Add debug metadata for mapping native code back to Sigil source.
+- [x] Save binary-proof experiment fact artifacts beside native IR artifacts.
 - [x] Add cross-platform backend capability tests.
 - [x] Keep CI dependency-light and reproducible.
 
@@ -92,6 +93,7 @@ tests, and docs are in the repo.
 - [x] Add debug metadata for mapping native code back to Sigil source.
 - [x] Keep solver-visible IR and native-lowered IR aligned with native artifacts.
 - [x] Save lowered IR artifacts beside SMT artifacts.
+- [x] Save binary-proof experiment fact artifacts beside native IR artifacts.
 - [x] Add cross-platform backend capability tests.
 - [x] Lower scalar function calls through `libgccjit`.
 
@@ -113,7 +115,7 @@ tests, and docs are in the repo.
 
 ## Binary-Level Experiments
 
-- [ ] Export lowered IR and native code facts.
+- [x] Export lowered IR and native proof-experiment facts.
 - [ ] Model selected target instructions.
 - [ ] Attempt bounded runtime and crash-safety proofs on small functions.
 - [ ] Publish negative results and limitations alongside successful proofs.

@@ -22,6 +22,7 @@ struct GccJitCapabilities {
   bool abi_invocation = false;
   bool debug_info = false;
   bool native_ir_artifacts = true;
+  bool binary_proof_artifacts = true;
   std::string detail;
 };
 
@@ -75,8 +76,18 @@ struct GccJitNativeArtifact {
   SourceRange range;
 };
 
+struct GccJitBinaryProofArtifact {
+  std::string function_name;
+  std::string file_name;
+  std::string text;
+  SourceRange range;
+};
+
 std::string native_ir_file_name_for_function(const std::string& function_name);
+std::string binary_proof_file_name_for_function(const std::string& function_name);
 std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module,
                                                             const GccJitCompileResult& result);
+std::vector<GccJitBinaryProofArtifact>
+build_binary_proof_artifacts(const Module& module, const GccJitCompileResult& result);
 
 } // namespace sigil
