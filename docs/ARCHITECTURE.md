@@ -35,6 +35,8 @@ system:
   compiler-generated `result` symbol;
 - struct invariant expressions must be `bool`;
 - function preconditions and postconditions must be `bool`;
+- function contract labels must be unique across `requires` and `ensures`
+  clauses;
 - identifiers must be declared in the active scope;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - assignments can only target declared local bindings and must preserve the

@@ -341,11 +341,14 @@ void validate_function(const FunctionDecl& decl) {
   }
   require_known_type(decl.return_type, decl.range, "function '" + decl.name + "' return type");
 
-  std::unordered_set<std::string> predicate_names;
+  std::unordered_set<std::string> precondition_names;
+  std::unordered_set<std::string> postcondition_names;
+  std::unordered_set<std::string> contract_labels;
   for (const auto& precondition : decl.preconditions) {
-    if (!predicate_names.insert("requires:" + precondition.name).second) {
+    if (!precondition_names.insert(precondition.name).second) {
       throw Diagnostic(precondition.range, "duplicate precondition '" + precondition.name + "'");
     }
+    contract_labels.insert(precondition.name);
     validate_predicate(precondition, params, "precondition");
   }
 
@@ -354,8 +357,11 @@ void validate_function(const FunctionDecl& decl) {
     post_symbols["result"] = decl.return_type;
   }
   for (const auto& ensure : decl.ensures) {
-    if (!predicate_names.insert("ensures:" + ensure.name).second) {
+    if (!postcondition_names.insert(ensure.name).second) {
       throw Diagnostic(ensure.range, "duplicate postcondition '" + ensure.name + "'");
+    }
+    if (!contract_labels.insert(ensure.name).second) {
+      throw Diagnostic(ensure.range, "duplicate contract label '" + ensure.name + "'");
     }
     validate_predicate(ensure, post_symbols, "postcondition");
   }

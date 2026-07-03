@@ -66,7 +66,8 @@ ensures preserved: result >= 0;
 `ensures` predicates become postcondition proof obligations. `result` names the
 returned value.
 
-Contract predicates must be boolean. `result` is available only in
+Contract predicates must be boolean. Contract labels must be unique across a
+function's `requires` and `ensures` clauses. `result` is available only in
 postconditions for non-void functions. It is a compiler-generated contract
 symbol, so user parameters, local bindings, and struct fields cannot be named
 `result`.

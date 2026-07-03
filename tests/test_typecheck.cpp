@@ -335,6 +335,17 @@ fn duplicate_branch_proof_label(flag: bool, x: i64) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn duplicate_contract_label(x: i64) -> i64
+requires stable: x >= 0;
+ensures stable: result >= 0;
+{
+  return x;
+}
+)",
+                    "duplicate contract label 'stable'");
+
+  expect_diagnostic(R"(
+module bad;
 fn reserved_result_parameter(result: i64) -> i64
 {
   return result;

@@ -28,6 +28,7 @@ tests, and docs are in the repo.
 - [x] Reserve built-in type names in the top-level declaration namespace.
 - [x] Reserve `result` for compiler-generated postcondition values.
 - [x] Reserve built-in type names in value namespaces.
+- [x] Reject duplicate function contract labels across pre/postconditions.
 - [x] Reject duplicate explicit proof labels in function bodies.
 - [x] Reject loop invariant label collisions in function proof namespaces.
 - [x] Support `return;` and path-aware postconditions for `void` functions.
