@@ -1,0 +1,18 @@
+module lemmas;
+
+theorem add_one_gt for (x: i64)
+requires non_negative: x >= 0;
+ensures advanced: x + 1 > x;
+{
+  return x + 1 > x;
+}
+
+fn use_add_one(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  assert lemma_call: add_one_gt(x);
+  let y: i64 = x + 1;
+  assert from_lemma: y > x;
+  return y;
+}

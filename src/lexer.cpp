@@ -177,6 +177,8 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
       {"struct", TokenKind::Struct},
       {"invariant", TokenKind::Invariant},
       {"fn", TokenKind::Fn},
+      {"theorem", TokenKind::Theorem},
+      {"for", TokenKind::For},
       {"requires", TokenKind::Requires},
       {"ensures", TokenKind::Ensures},
       {"let", TokenKind::Let},
@@ -266,6 +268,10 @@ const char* token_name(TokenKind kind) {
     return "'invariant'";
   case TokenKind::Fn:
     return "'fn'";
+  case TokenKind::Theorem:
+    return "'theorem'";
+  case TokenKind::For:
+    return "'for'";
   case TokenKind::Requires:
     return "'requires'";
   case TokenKind::Ensures:

@@ -43,7 +43,8 @@ int main() {
                           "expected '}' after function body", 4, 1);
   expect_parse_diagnostic("module broken;\nstruct Missing {\n  value: i64;\n",
                           "expected '}' after struct body", 4, 1);
-  expect_parse_diagnostic("module broken;\nwat\n", "expected struct or function declaration", 2, 1,
+  expect_parse_diagnostic("module broken;\nwat\n",
+                          "expected struct, theorem, or function declaration", 2, 1,
                           "parse-error.sigil:2:1-3");
   expect_parse_diagnostic(
       "module broken;\nfn nope(x: i64) -> i64 {\n  while x < 10 {\n  }\n  return x;\n}\n",
@@ -70,6 +71,27 @@ fn call_examples(x: i64, y: i64) -> i64
          "display single-argument call");
   expect(sigil::display_expr(call_module.functions[0].body[1].expr) == "sum2(next, y)",
          "display multi-argument call");
+
+  const auto theorem_module = sigil::parse_source(
+      R"(module lemmas;
+theorem add_one_gt for (x: i64)
+requires non_negative: x >= 0;
+ensures advanced: x + 1 > x;
+{
+  return x + 1 > x;
+}
+)",
+      "lemmas.sigil");
+  expect(theorem_module.functions.empty(), "theorem is not a runtime function");
+  expect(theorem_module.theorems.size() == 1, "theorem count");
+  expect(theorem_module.theorems[0].name == "add_one_gt", "theorem name");
+  expect(theorem_module.theorems[0].params.size() == 1, "theorem param count");
+  expect(theorem_module.theorems[0].preconditions.size() == 1, "theorem requires count");
+  expect(theorem_module.theorems[0].ensures.size() == 1, "theorem ensures count");
+  expect(theorem_module.theorems[0].body.size() == 1, "theorem body count");
+  expect(theorem_module.theorems[0].body[0].kind == sigil::StatementKind::Return,
+         "theorem return statement");
+  expect(theorem_module.theorems[0].range.display() == "lemmas.sigil:2:1-7:1", "theorem range");
 
   const auto struct_value_module = sigil::parse_source(
       R"(module structs;

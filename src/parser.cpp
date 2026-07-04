@@ -46,8 +46,11 @@ Module Parser::parse_module() {
     } else if (check(TokenKind::Fn)) {
       module.functions.push_back(parse_function());
       module.range.end = module.functions.back().range.end;
+    } else if (check(TokenKind::Theorem)) {
+      module.theorems.push_back(parse_theorem());
+      module.range.end = module.theorems.back().range.end;
     } else {
-      throw Diagnostic(peek().range, "expected struct or function declaration");
+      throw Diagnostic(peek().range, "expected struct, theorem, or function declaration");
     }
   }
   return module;
@@ -136,6 +139,31 @@ FunctionDecl Parser::parse_function() {
   }
 
   decl.body = parse_statement_block("function body");
+  const auto end = previous();
+  decl.range = span(start.range, end.range);
+  return decl;
+}
+
+TheoremDecl Parser::parse_theorem() {
+  const auto start = consume(TokenKind::Theorem, "expected 'theorem'");
+  TheoremDecl decl;
+  decl.location = start.location;
+  decl.range = start.range;
+  decl.name = consume(TokenKind::Identifier, "expected theorem name").text;
+  consume(TokenKind::For, "expected 'for' after theorem name");
+  consume(TokenKind::LParen, "expected '(' after theorem 'for'");
+  decl.params = parse_params();
+  consume(TokenKind::RParen, "expected ')' after theorem parameters");
+
+  while (check(TokenKind::Requires) || check(TokenKind::Ensures)) {
+    if (check(TokenKind::Requires)) {
+      decl.preconditions.push_back(parse_named_predicate(TokenKind::Requires));
+    } else {
+      decl.ensures.push_back(parse_named_predicate(TokenKind::Ensures));
+    }
+  }
+
+  decl.body = parse_statement_block("theorem body");
   const auto end = previous();
   decl.range = span(start.range, end.range);
   return decl;

@@ -108,6 +108,53 @@ ensures advanced: result > x;
   expect(call_assert_smt.find("(assert (= y add_one_call_1_") != std::string::npos,
          "assertion SMT binds let local to call result");
 
+  const char* theorem_source = R"(
+module lemmas;
+
+theorem add_one_gt for (x: i64)
+requires non_negative: x >= 0;
+ensures advanced: x + 1 > x;
+{
+  return x + 1 > x;
+}
+
+fn use_add_one(x: i64) -> i64
+requires non_negative: x >= 0;
+ensures advanced: result > x;
+{
+  assert lemma_call: add_one_gt(x);
+  let y: i64 = x + 1;
+  assert from_lemma: y > x;
+  return y;
+}
+)";
+
+  const auto theorem_module = sigil::parse_source(theorem_source, "theorems.sigil");
+  const auto theorem_obligations = sigil::build_obligations(theorem_module);
+  expect(theorem_obligations.size() == 6,
+         "theorem proof, theorem call, assertion, and ensure obligations");
+  expect(theorem_obligations[0].name == "theorem.add_one_gt.ensures.1.advanced",
+         "theorem explicit ensure obligation name");
+  expect(theorem_obligations[1].name == "theorem.add_one_gt.ensures.2.holds",
+         "theorem implicit holds obligation name");
+  expect(theorem_obligations[2].name == "fn.use_add_one.call.1.requires.1.non_negative",
+         "theorem call precondition obligation name");
+  expect(theorem_obligations[3].name == "fn.use_add_one.assert.1.lemma_call",
+         "theorem call assertion obligation name");
+  expect(theorem_obligations[4].name == "fn.use_add_one.assert.2.from_lemma",
+         "theorem lemma reuse assertion obligation name");
+  const auto theorem_call_smt = sigil::emit_smt_lib(theorem_obligations[3]);
+  expect(theorem_call_smt.find("(assert (= add_one_gt_call_1_") != std::string::npos,
+         "theorem call assumes implicit holds fact");
+  const auto theorem_reuse_smt = sigil::emit_smt_lib(theorem_obligations[4]);
+  expect(theorem_reuse_smt.find("(assert (> (+ x 1) x))") != std::string::npos,
+         "theorem call assumes explicit theorem postcondition");
+  expect(theorem_reuse_smt.find("(assert (= y (+ x 1)))") != std::string::npos,
+         "theorem reuse sees local let binding");
+  const auto theorem_results = sigil::verify_obligations(theorem_obligations, false);
+  expect(theorem_results[2].status == sigil::VerificationStatus::Proven,
+         "caller precondition proves theorem precondition syntactically");
+
   const char* struct_source = R"(
 module structs;
 
@@ -150,6 +197,49 @@ ensures exact: result == x;
          "struct invariant needs SMT solver");
   expect(struct_results[1].status == sigil::VerificationStatus::Proven,
          "field assertion proven syntactically");
+
+  const char* theorem_invariant_source = R"(
+module invariant_lemmas;
+
+theorem non_negative for (x: i64)
+requires known: x >= 0;
+ensures preserved: x >= 0;
+{
+  return x >= 0;
+}
+
+struct Box {
+  value: i64;
+  invariant value_non_negative: non_negative(value);
+}
+
+fn make_box(x: i64) -> i64
+requires known: x >= 0;
+{
+  let box: Box = Box { value: x };
+  return box.value;
+}
+)";
+
+  const auto theorem_invariant_module =
+      sigil::parse_source(theorem_invariant_source, "invariant-theorems.sigil");
+  const auto theorem_invariant_obligations = sigil::build_obligations(theorem_invariant_module);
+  expect(theorem_invariant_obligations.size() == 4,
+         "theorem plus theorem-backed struct invariant obligations");
+  expect(theorem_invariant_obligations[2].name == "fn.make_box.call.1.requires.1.known",
+         "struct invariant theorem call precondition obligation");
+  expect(theorem_invariant_obligations[3].name ==
+             "fn.make_box.struct.box.invariant.1.value_non_negative",
+         "struct invariant theorem obligation name");
+  const auto theorem_invariant_smt = sigil::emit_smt_lib(theorem_invariant_obligations[3]);
+  expect(theorem_invariant_smt.find("(assert (= non_negative_call_1_") != std::string::npos,
+         "struct invariant assumes theorem call holds");
+  const auto theorem_invariant_results =
+      sigil::verify_obligations(theorem_invariant_obligations, false);
+  expect(theorem_invariant_results[2].status == sigil::VerificationStatus::Proven,
+         "struct field fact proves theorem precondition");
+  expect(theorem_invariant_results[3].status == sigil::VerificationStatus::Proven,
+         "theorem holds fact proves struct invariant");
 
   const char* conditional_source = R"(
 module conditional;

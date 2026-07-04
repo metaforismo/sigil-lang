@@ -64,6 +64,15 @@ parameters and `result` substituted by the actual arguments and result symbol.
 The type checker rejects recursive call graphs for now, so this modular model is
 acyclic.
 
+Theorem declarations use the same modular machinery, but they are proof-only.
+For proof planning, a theorem is converted into an internal boolean proof
+function named `theorem.<name>`. Its explicit `ensures` clauses are checked, and
+Sigil adds an implicit `holds` postcondition proving that the theorem's returned
+boolean is `true`. When a proof expression calls a theorem, the caller proves
+the theorem's `requires` clauses, receives a fresh boolean call-result symbol,
+and may use both the explicit theorem postconditions and the implicit `holds`
+fact as assumptions. The native backend never lowers theorem declarations.
+
 Struct values are materialized by field. A binding like
 `let pair: Pair = Pair { left: x, ok: true };` adds facts for `pair.left == x`
 and `pair.ok == true`; later `pair.left` expressions use the scalar field symbol
