@@ -175,9 +175,20 @@ struct FunctionDecl {
   SourceRange range;
 };
 
+struct TheoremDecl {
+  std::string name;
+  std::vector<ParamDecl> params;
+  std::vector<NamedPredicate> preconditions;
+  std::vector<NamedPredicate> ensures;
+  std::vector<Statement> body;
+  SourceLocation location;
+  SourceRange range;
+};
+
 struct Module {
   std::string name;
   std::vector<StructDecl> structs;
+  std::vector<TheoremDecl> theorems;
   std::vector<FunctionDecl> functions;
   SourceLocation location;
   SourceRange range;

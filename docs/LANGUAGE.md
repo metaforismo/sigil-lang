@@ -12,9 +12,9 @@ module cache;
 
 Every file starts with one module declaration.
 
-Top-level struct and function names share one declaration namespace. Built-in
-type names (`i64`, `bool`, and `void`) are reserved and cannot be reused as
-top-level declarations.
+Top-level struct, theorem, and function names share one declaration namespace.
+Built-in type names (`i64`, `bool`, and `void`) are reserved and cannot be
+reused as top-level declarations.
 
 Value names are also reserved where they would become source-level proof
 symbols. Parameters, local bindings, and struct fields cannot be named
@@ -102,6 +102,35 @@ explicit body proof labels. `result` is available only in postconditions for
 non-void functions. It is a compiler-generated contract symbol, so user
 parameters, local bindings, and struct fields cannot be named `result`.
 
+## Proof-Only Theorems
+
+```sigil
+theorem add_one_gt for (x: i64)
+requires non_negative: x >= 0;
+ensures advanced: x + 1 > x;
+{
+  return x + 1 > x;
+}
+```
+
+A `theorem` is a proof-only declaration. It has scalar parameters, optional
+`requires` and `ensures` contracts, and a body written with the same statement
+and expression syntax as functions. The theorem body must return `bool` on
+every path. The proof planner adds an implicit `holds` postcondition for every
+theorem, proving that the returned boolean is `true`.
+
+Theorem calls are expressions of type `bool`, but they are allowed only in
+proof-only positions: struct invariants, function and theorem contracts, loop
+invariants, `assume`, `assert`, and theorem bodies. They are rejected in runtime
+function value positions such as `let`, assignment, return expressions, and
+statement conditions. This keeps theorem reuse available to the prover without
+asking the native backend to lower a proof-only declaration.
+
+At a theorem call site, the caller proves the theorem's `requires` clauses.
+After that, the theorem's explicit `ensures` clauses and implicit `holds` fact
+become assumptions in the caller's proof context. This is the current lemma
+reuse mechanism.
+
 ## Statements
 
 ```sigil
@@ -170,7 +199,8 @@ validator resolves the callee across the module, checks arity and argument
 types, rejects `void` calls in value position, and rejects direct or indirect
 recursive call graphs until the proof planner has a recursive-function model.
 Callers prove the callee's `requires` clauses at each call site and may use the
-callee's `ensures` clauses as facts about the call result.
+callee's `ensures` clauses as facts about the call result. Theorem calls use the
+same modular proof model, but only in proof-only contexts.
 
 The current body language is deliberately tiny. References and memory operations
 will require proper control-flow and weakest-precondition generation.
@@ -188,6 +218,7 @@ Supported expression forms:
 - boolean connectives: `&&`, `||`
 - conditionals: `if condition { then_expr } else { else_expr }`
 - function calls: `callee(arg1, arg2)`
+- theorem calls in proof-only contexts: `lemma(arg1, arg2)`
 - struct literals: `TypeName { field: value }`
 - field access: `value.field`
 - parentheses

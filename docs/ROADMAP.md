@@ -3,6 +3,17 @@
 This file is the project TODO list. Items move to completed only after code,
 tests, and docs are in the repo.
 
+## Current Objective
+
+Bridge the original source-level invariant idea to the working compiler by
+making reusable proofs first-class in the language. The current step is
+proof-only theorem declarations plus lemma reuse: users write theorem bodies,
+preconditions, and postconditions in ordinary Sigil syntax; the compiler proves
+those theorem obligations; later proof contexts can call the theorem and reuse
+its checked facts. This keeps the language surface simple while preparing the
+path for generics, containers, arrays, slices, a memory model, and eventually an
+agentic SMT loop.
+
 ## Completed
 
 - [x] Parse `.sigil` modules.
@@ -42,6 +53,8 @@ tests, and docs are in the repo.
 - [x] Reject early returns inside loops until control-flow proofs support them.
 - [x] Add scalar function call expressions with static validation.
 - [x] Generate modular call-site proof obligations from callee contracts.
+- [x] Add proof-only theorem declarations.
+- [x] Reuse theorem calls as lemma facts in proof-only expressions.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -70,20 +83,30 @@ tests, and docs are in the repo.
 
 ## Immediate Queue
 
-- [ ] Extend aggregate typing when ownership, layout, and function-boundary
-      semantics are defined.
+- [ ] Add generics and container declarations with explicit instantiation rules.
+- [ ] Add array and slice models with length, bounds, and aliasing facts.
+- [ ] Define a memory model for references, ownership, mutation, and low-level
+      data-structure invariants.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
+- [ ] Build the first agentic SMT loop around saved proof hints and checked
+      theorem candidates.
 
 ## Core Language
 
 - [ ] Extend scalar validation into a complete language type checker.
 - [x] Add scalar function call expressions with static validation.
+- [x] Add proof-only theorem declarations and theorem-call lemma reuse.
 - [x] Add loops with user-written invariants.
 - [x] Add simple user-defined struct values.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
 - [x] Reject aggregate operations whose semantics are not defined yet.
 - [x] Reject recursive by-value struct definitions until references exist.
+- [ ] Add generics with clear monomorphization and proof-instantiation rules.
+- [ ] Add first-class container declarations after generic instantiation is
+      explicit.
+- [ ] Add arrays and slices with explicit length, bounds, element, and alias
+      facts.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
@@ -100,6 +123,7 @@ tests, and docs are in the repo.
 ## Struct Invariant Preservation
 
 - [x] Treat invariants as obligations on struct literal construction.
+- [x] Reuse proof-only theorems as lemmas inside invariant and contract proofs.
 - [ ] Treat invariants as obligations on mutation and public exits.
 - [ ] Add ownership and aliasing rules for low-level memory.
 - [ ] Support user-defined lemmas for data-structure correctness.
@@ -108,10 +132,22 @@ tests, and docs are in the repo.
 ## Agentic Prover
 
 - [x] Save deterministic proof-search hints for unproven obligations.
+- [x] Represent reusable source-level lemmas as checked `theorem` declarations.
 - [ ] Let an LLM propose lemmas, splits, and candidate invariants.
 - [ ] Validate every proposal with Z3 or another deterministic checker.
+- [ ] Feed candidate theorem declarations back through the ordinary Sigil parser,
+      typechecker, and proof planner before accepting them.
 - [ ] Save proof traces as reproducible artifacts.
 - [ ] Add budgets, timeouts, and failure modes that are visible to users.
+
+## Memory Model
+
+- [ ] Define reference and pointer types separately from by-value structs.
+- [ ] Model allocation, lifetime, ownership, borrowing, and aliasing as explicit
+      proof facts.
+- [ ] Prove bounds, initialization, and no-crash properties for arrays and
+      slices before native lowering relies on them.
+- [ ] Connect source-level memory facts to native IR and binary-proof artifacts.
 
 ## Binary-Level Experiments
 

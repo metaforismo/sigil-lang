@@ -26,6 +26,7 @@ private:
 
   StructDecl parse_struct();
   FunctionDecl parse_function();
+  TheoremDecl parse_theorem();
   FieldDecl parse_field();
   NamedPredicate parse_named_predicate(TokenKind keyword);
   Statement parse_statement();

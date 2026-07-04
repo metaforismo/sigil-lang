@@ -60,6 +60,13 @@ struct Pair {
   ok: bool;
 }
 
+theorem nonzero_stays_nonzero for (x: i64)
+requires nonzero: x != 0;
+ensures preserved: x != 0;
+{
+  return x != 0;
+}
+
 fn id(x: i64) -> i64
 requires non_negative: x >= 0;
 ensures preserved: result >= 0;
@@ -154,6 +161,14 @@ fn read_pair(x: i64) -> i64
   let pair: Pair = Pair { left: x, ok: true };
   assert field_visible: pair.left == x;
   return pair.left;
+}
+
+fn proof_only_lemma_use(x: i64) -> i64
+requires nonzero: x != 0;
+ensures preserved: result != 0;
+{
+  assert theorem_visible: nonzero_stays_nonzero(x);
+  return x;
 }
 )";
 
@@ -419,6 +434,53 @@ fn caller(x: i64) -> i64
 }
 )",
                     "unknown function 'missing_call'");
+
+  expect_diagnostic(R"(
+module bad;
+theorem is_nonzero for (x: i64)
+{
+  return x != 0;
+}
+
+fn caller(x: i64) -> bool
+{
+  let ok: bool = is_nonzero(x);
+  return ok;
+}
+)",
+                    "theorem 'is_nonzero' can only be used in proof-only expressions");
+
+  expect_diagnostic(R"(
+module bad;
+theorem returns_i64 for (x: i64)
+{
+  return x;
+}
+)",
+                    "return type mismatch: expected bool, found i64");
+
+  expect_diagnostic(R"(
+module bad;
+theorem dup for ()
+{
+  return true;
+}
+
+fn dup() -> bool
+{
+  return true;
+}
+)",
+                    "duplicate top-level declaration 'dup'");
+
+  expect_diagnostic(R"(
+module bad;
+theorem self for (x: i64)
+{
+  return self(x);
+}
+)",
+                    "recursive theorem calls are not supported yet");
 
   expect_diagnostic(R"(
 module bad;

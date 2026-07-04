@@ -19,8 +19,8 @@ source
 
 The lexer and parser are hand-written C++17. This keeps the grammar easy to
 change while the language is still being designed. Parser output is a typed AST
-containing structs, fields, invariants, functions, contracts, and body
-statements. Numeric literal tokens are converted to exact `i64` AST values at
+containing structs, fields, invariants, proof-only theorems, functions,
+contracts, and body statements. Numeric literal tokens are converted to exact `i64` AST values at
 parse time, and out-of-range literals are rejected with source ranges before
 type checking or proof generation. Unterminated struct and statement blocks
 report the missing closing brace at EOF instead of falling through to a generic
@@ -31,8 +31,8 @@ field or statement diagnostic.
 Before proof obligations are emitted, Sigil validates the current scalar type
 system:
 
-- top-level struct and function declarations must have unique names and cannot
-  reuse built-in type names;
+- top-level struct, theorem, and function declarations must have unique names
+  and cannot reuse built-in type names;
 - parameter, local, and field names cannot reuse built-in type names or the
   compiler-generated `result` symbol;
 - struct invariant expressions must be `bool`;
@@ -45,6 +45,8 @@ system:
 - function calls must resolve to a module function, use the declared arity and
   argument types, return a value when used as an expression, and avoid direct or
   indirect recursion;
+- theorem calls must resolve to a module theorem, use the declared arity and
+  argument types, and appear only in proof-only expressions;
 - struct literals must initialize declared fields exactly once, and field access
   must target a field on a struct-typed expression;
 - local `let` bindings cannot shadow parameters or earlier locals;
@@ -84,6 +86,12 @@ The planner walks each function and builds proof obligations:
 - function call expressions emit call-site obligations for callee `requires`
   predicates and add callee `ensures` predicates as assumptions over the fresh
   call-result symbol;
+- theorem declarations are planned before functions as proof-only boolean
+  subjects named `theorem.<name>`, with explicit postconditions plus an implicit
+  `holds` postcondition;
+- theorem call expressions in proof contexts emit call-site obligations for
+  theorem `requires` predicates and add explicit theorem `ensures` plus
+  implicit `holds` as reusable assumptions;
 - struct literal bindings materialize scalar field facts, and field accesses
   resolve to those field symbols;
 - struct literal construction emits invariant obligations for every invariant
@@ -177,13 +185,14 @@ cycle-bound proofs are not available yet. The goal is to give future external
 binary provers a stable handoff format without making claims the compiler cannot
 check.
 
-Contracts, loop invariants, `assume`, and `assert` remain proof-layer
-constructs. The native backend erases proof-only constructs after static
-validation and proof generation, and currently skips functions containing loops.
-Struct values and field access are also skipped by native lowering until layout
-and ABI rules are explicit. Division and modulo are deliberately not lowered
-yet, because Sigil still needs an explicit source-level semantics that is known
-to match the native backend for negative operands and zero divisors.
+Contracts, loop invariants, `assume`, `assert`, and `theorem` declarations
+remain proof-layer constructs. The native backend erases proof-only constructs
+after static validation and proof generation, ignores theorem declarations, and
+currently skips functions containing loops. Struct values and field access are
+also skipped by native lowering until layout and ABI rules are explicit.
+Division and modulo are deliberately not lowered yet, because Sigil still needs
+an explicit source-level semantics that is known to match the native backend for
+negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.

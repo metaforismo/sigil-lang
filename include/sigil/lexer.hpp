@@ -40,6 +40,8 @@ enum class TokenKind {
   Struct,
   Invariant,
   Fn,
+  Theorem,
+  For,
   Requires,
   Ensures,
   Let,

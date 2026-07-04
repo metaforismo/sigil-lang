@@ -391,7 +391,21 @@ struct ProofContext {
 };
 
 using FunctionTable = std::unordered_map<std::string, const FunctionDecl*>;
+using TheoremTable = std::unordered_map<std::string, const FunctionDecl*>;
 using StructTable = std::unordered_map<std::string, const StructDecl*>;
+
+constexpr std::string_view kTheoremProofPrefix = "theorem.";
+
+bool is_theorem_proof_subject(const FunctionDecl& fn) {
+  return fn.name.rfind(std::string(kTheoremProofPrefix), 0) == 0;
+}
+
+std::string proof_subject_name(const FunctionDecl& fn) {
+  if (is_theorem_proof_subject(fn)) {
+    return fn.name;
+  }
+  return "fn." + fn.name;
+}
 
 std::string scoped_symbol(const std::string& name, const SourceLocation& location,
                           const std::string& purpose) {
@@ -552,7 +566,7 @@ ProofObligation make_safety_obligation(const FunctionDecl& fn, int safety_index,
                                        const Expr& divisor, const ProofContext& context) {
   ProofObligation obligation;
   obligation.name =
-      "fn." + fn.name + ".safety." + std::to_string(safety_index) + ".divisor_nonzero";
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".divisor_nonzero";
   obligation.location = divisor ? divisor->location : SourceLocation{};
   obligation.range = divisor && divisor->range.start.line != 0
                          ? divisor->range
@@ -629,15 +643,15 @@ NamedPredicate make_guarded_fact(const Expr& condition, const NamedPredicate& fa
 
 Expr materialize_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& context,
                       int& call_index, const StructTable& structs, const FunctionTable& functions,
-                      std::vector<ProofObligation>& obligations);
+                      const TheoremTable& theorems, std::vector<ProofObligation>& obligations);
 
 ProofObligation make_call_precondition_obligation(const FunctionDecl& caller, int call_index,
                                                   int precondition_index, const Expr& call,
                                                   const NamedPredicate& goal,
                                                   const ProofContext& context) {
   ProofObligation obligation;
-  obligation.name = "fn." + caller.name + ".call." + std::to_string(call_index) + ".requires." +
-                    std::to_string(precondition_index) + "." + goal.name;
+  obligation.name = proof_subject_name(caller) + ".call." + std::to_string(call_index) +
+                    ".requires." + std::to_string(precondition_index) + "." + goal.name;
   obligation.location = call ? call->location : SourceLocation{};
   obligation.range = call && call->range.start.line != 0
                          ? call->range
@@ -648,21 +662,16 @@ ProofObligation make_call_precondition_obligation(const FunctionDecl& caller, in
   return obligation;
 }
 
-Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& context,
-                           int& call_index, const StructTable& structs,
-                           const FunctionTable& functions,
-                           std::vector<ProofObligation>& obligations) {
-  const auto found = functions.find(expr->name);
-  if (found == functions.end()) {
-    throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
-  }
-  const FunctionDecl& callee = *found->second;
-
+Expr materialize_resolved_call_expr(const Expr& expr, const FunctionDecl& fn,
+                                    const FunctionDecl& callee, ProofContext& context,
+                                    int& call_index, const StructTable& structs,
+                                    const FunctionTable& functions, const TheoremTable& theorems,
+                                    std::vector<ProofObligation>& obligations) {
   std::vector<Expr> arguments;
   arguments.reserve(expr->arguments.size());
   for (const auto& argument : expr->arguments) {
-    arguments.push_back(
-        materialize_expr(argument, fn, context, call_index, structs, functions, obligations));
+    arguments.push_back(materialize_expr(argument, fn, context, call_index, structs, functions,
+                                         theorems, obligations));
   }
 
   ExprSubstitutions substitutions;
@@ -701,6 +710,25 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   return result_expr;
 }
 
+Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& context,
+                           int& call_index, const StructTable& structs,
+                           const FunctionTable& functions, const TheoremTable& theorems,
+                           std::vector<ProofObligation>& obligations) {
+  const auto found = functions.find(expr->name);
+  if (found != functions.end()) {
+    return materialize_resolved_call_expr(expr, fn, *found->second, context, call_index, structs,
+                                          functions, theorems, obligations);
+  }
+
+  const auto theorem_found = theorems.find(expr->name);
+  if (theorem_found != theorems.end()) {
+    return materialize_resolved_call_expr(expr, fn, *theorem_found->second, context, call_index,
+                                          structs, functions, theorems, obligations);
+  }
+
+  throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
+}
+
 ExprSubstitutions struct_field_substitutions(const StructDecl& decl, const std::string& symbol,
                                              const SourceRange& range) {
   ExprSubstitutions substitutions;
@@ -712,7 +740,9 @@ ExprSubstitutions struct_field_substitutions(const StructDecl& decl, const std::
 
 void append_struct_invariant_obligations(const Expr& expr, const std::string& target_symbol,
                                          const StructDecl& decl, const FunctionDecl& fn,
-                                         ProofContext& context,
+                                         ProofContext& context, int& call_index,
+                                         const StructTable& structs, const FunctionTable& functions,
+                                         const TheoremTable& theorems,
                                          std::vector<ProofObligation>& obligations) {
   const auto substitutions = struct_field_substitutions(decl, target_symbol, expr->range);
   int invariant_index = 0;
@@ -720,9 +750,11 @@ void append_struct_invariant_obligations(const Expr& expr, const std::string& ta
     ++invariant_index;
     auto goal =
         substitute_predicate(invariant, substitutions, expr->location, expr->range, invariant.name);
+    goal.expr = materialize_expr(goal.expr, fn, context, call_index, structs, functions, theorems,
+                                 obligations);
 
     ProofObligation obligation;
-    obligation.name = "fn." + fn.name + ".struct." + target_symbol + ".invariant." +
+    obligation.name = proof_subject_name(fn) + ".struct." + target_symbol + ".invariant." +
                       std::to_string(invariant_index) + "." + invariant.name;
     obligation.location = expr->location;
     obligation.range = expr->range;
@@ -739,6 +771,7 @@ void append_struct_invariant_obligations(const Expr& expr, const std::string& ta
 void materialize_struct_binding(const Expr& expr, const std::string& target_symbol,
                                 const FunctionDecl& fn, ProofContext& context, int& call_index,
                                 const StructTable& structs, const FunctionTable& functions,
+                                const TheoremTable& theorems,
                                 std::vector<ProofObligation>& obligations) {
   const auto found = structs.find(expr->name);
   if (found == structs.end()) {
@@ -758,12 +791,12 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     if (is_struct_type(field->type, structs) &&
         initializer.expr->kind == ExprNode::Kind::StructLiteral) {
       materialize_struct_binding(initializer.expr, target_field, fn, context, call_index, structs,
-                                 functions, obligations);
+                                 functions, theorems, obligations);
       continue;
     }
 
     const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
-                                        functions, obligations);
+                                        functions, theorems, obligations);
     context.symbols[target_field] = field->type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(target_field, initializer.range),
                                 value, initializer.range);
@@ -771,25 +804,27 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
         NamedPredicate{"field_" + target_field, equality, initializer.location, initializer.range});
   }
 
-  append_struct_invariant_obligations(expr, target_symbol, decl, fn, context, obligations);
+  append_struct_invariant_obligations(expr, target_symbol, decl, fn, context, call_index, structs,
+                                      functions, theorems, obligations);
 }
 
 Expr materialize_struct_literal_expr(const Expr& expr, const FunctionDecl& fn,
                                      ProofContext& context, int& call_index,
                                      const StructTable& structs, const FunctionTable& functions,
+                                     const TheoremTable& theorems,
                                      std::vector<ProofObligation>& obligations) {
   const auto symbol = scoped_symbol(expr->name, expr->location, "struct");
-  materialize_struct_binding(expr, symbol, fn, context, call_index, structs, functions,
+  materialize_struct_binding(expr, symbol, fn, context, call_index, structs, functions, theorems,
                              obligations);
   return make_identifier(symbol, expr->range);
 }
 
 Expr materialize_field_access_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& context,
                                    int& call_index, const StructTable& structs,
-                                   const FunctionTable& functions,
+                                   const FunctionTable& functions, const TheoremTable& theorems,
                                    std::vector<ProofObligation>& obligations) {
-  const auto base =
-      materialize_expr(expr->lhs, fn, context, call_index, structs, functions, obligations);
+  const auto base = materialize_expr(expr->lhs, fn, context, call_index, structs, functions,
+                                     theorems, obligations);
   if (!base || base->kind != ExprNode::Kind::Identifier) {
     throw Diagnostic(expr->range, "field access base could not be materialized");
   }
@@ -805,7 +840,7 @@ Expr materialize_field_access_expr(const Expr& expr, const FunctionDecl& fn, Pro
 
 Expr materialize_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& context,
                       int& call_index, const StructTable& structs, const FunctionTable& functions,
-                      std::vector<ProofObligation>& obligations) {
+                      const TheoremTable& theorems, std::vector<ProofObligation>& obligations) {
   if (!expr) {
     return expr;
   }
@@ -821,30 +856,34 @@ Expr materialize_expr(const Expr& expr, const FunctionDecl& fn, ProofContext& co
                            expr->range);
   }
   case ExprNode::Kind::Call:
-    return materialize_call_expr(expr, fn, context, call_index, structs, functions, obligations);
+    return materialize_call_expr(expr, fn, context, call_index, structs, functions, theorems,
+                                 obligations);
   case ExprNode::Kind::StructLiteral:
     return materialize_struct_literal_expr(expr, fn, context, call_index, structs, functions,
-                                           obligations);
+                                           theorems, obligations);
   case ExprNode::Kind::FieldAccess:
     return materialize_field_access_expr(expr, fn, context, call_index, structs, functions,
-                                         obligations);
+                                         theorems, obligations);
   case ExprNode::Kind::Unary:
-    return make_unary(
-        expr->unary_op,
-        materialize_expr(expr->lhs, fn, context, call_index, structs, functions, obligations),
-        expr->range);
+    return make_unary(expr->unary_op,
+                      materialize_expr(expr->lhs, fn, context, call_index, structs, functions,
+                                       theorems, obligations),
+                      expr->range);
   case ExprNode::Kind::Binary:
-    return make_binary(
-        expr->binary_op,
-        materialize_expr(expr->lhs, fn, context, call_index, structs, functions, obligations),
-        materialize_expr(expr->rhs, fn, context, call_index, structs, functions, obligations),
-        expr->range);
+    return make_binary(expr->binary_op,
+                       materialize_expr(expr->lhs, fn, context, call_index, structs, functions,
+                                        theorems, obligations),
+                       materialize_expr(expr->rhs, fn, context, call_index, structs, functions,
+                                        theorems, obligations),
+                       expr->range);
   case ExprNode::Kind::If:
-    return make_if(
-        materialize_expr(expr->condition, fn, context, call_index, structs, functions, obligations),
-        materialize_expr(expr->lhs, fn, context, call_index, structs, functions, obligations),
-        materialize_expr(expr->rhs, fn, context, call_index, structs, functions, obligations),
-        expr->range);
+    return make_if(materialize_expr(expr->condition, fn, context, call_index, structs, functions,
+                                    theorems, obligations),
+                   materialize_expr(expr->lhs, fn, context, call_index, structs, functions,
+                                    theorems, obligations),
+                   materialize_expr(expr->rhs, fn, context, call_index, structs, functions,
+                                    theorems, obligations),
+                   expr->range);
   }
 
   return expr;
@@ -854,7 +893,7 @@ void process_statements(const std::vector<Statement>& statements, const Function
                         ProofContext& context, int& assert_index, int& return_index,
                         int& loop_index, int& safety_index, int& call_index,
                         const StructTable& structs, const FunctionTable& functions,
-                        std::vector<ProofObligation>& obligations);
+                        const TheoremTable& theorems, std::vector<ProofObligation>& obligations);
 
 void preserve_branch_facts(const Expr& condition, const ProofContext& branch,
                            std::size_t fact_start, bool then_branch, ProofContext& target) {
@@ -986,7 +1025,7 @@ ProofObligation make_loop_obligation(const FunctionDecl& fn, const Statement& st
                                      int loop_index, int invariant_index, const std::string& phase,
                                      const NamedPredicate& invariant, const ProofContext& context) {
   ProofObligation obligation;
-  obligation.name = "fn." + fn.name + ".loop." + std::to_string(loop_index) + ".invariant." +
+  obligation.name = proof_subject_name(fn) + ".loop." + std::to_string(loop_index) + ".invariant." +
                     std::to_string(invariant_index) + "." + invariant.name + "." + phase;
   obligation.location = invariant.location;
   obligation.range = invariant.range.start.line == 0 ? statement.range : invariant.range;
@@ -999,11 +1038,11 @@ ProofObligation make_loop_obligation(const FunctionDecl& fn, const Statement& st
 void process_if_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
                           int& assert_index, int& return_index, int& loop_index, int& safety_index,
                           int& call_index, const StructTable& structs,
-                          const FunctionTable& functions,
+                          const FunctionTable& functions, const TheoremTable& theorems,
                           std::vector<ProofObligation>& obligations) {
   append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
-  const auto condition =
-      materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations);
+  const auto condition = materialize_expr(statement.expr, fn, context, call_index, structs,
+                                          functions, theorems, obligations);
   const auto return_start = context.returns.size();
   const auto parent_scope_depth = context.scope_depth;
 
@@ -1012,14 +1051,16 @@ void process_if_statement(const Statement& statement, const FunctionDecl& fn, Pr
   then_context.active.push_back(make_branch_condition(condition, true));
   const auto then_fact_start = then_context.active.size();
   process_statements(statement.then_branch, fn, then_context, assert_index, return_index,
-                     loop_index, safety_index, call_index, structs, functions, obligations);
+                     loop_index, safety_index, call_index, structs, functions, theorems,
+                     obligations);
 
   auto else_context = context;
   else_context.scope_depth = context.scope_depth + 1;
   else_context.active.push_back(make_branch_condition(condition, false));
   const auto else_fact_start = else_context.active.size();
   process_statements(statement.else_branch, fn, else_context, assert_index, return_index,
-                     loop_index, safety_index, call_index, structs, functions, obligations);
+                     loop_index, safety_index, call_index, structs, functions, theorems,
+                     obligations);
 
   std::vector<ProofContext::ReturnPath> merged_returns = context.returns;
   append_new_returns(then_context, return_start, merged_returns);
@@ -1055,6 +1096,7 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
                              ProofContext& context, int& assert_index, int& return_index,
                              int& loop_index, int& safety_index, int& call_index,
                              const StructTable& structs, const FunctionTable& functions,
+                             const TheoremTable& theorems,
                              std::vector<ProofObligation>& obligations) {
   ++loop_index;
   const auto current_loop = loop_index;
@@ -1081,13 +1123,14 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   head_context.active.push_back(
       NamedPredicate{"while_condition",
                      materialize_expr(statement.expr, fn, head_context, call_index, structs,
-                                      functions, obligations),
+                                      functions, theorems, obligations),
                      statement.location, statement.expr ? statement.expr->range : statement.range});
 
   auto body_context = head_context;
   body_context.scope_depth = context.scope_depth + 1;
   process_statements(statement.then_branch, fn, body_context, assert_index, return_index,
-                     loop_index, safety_index, call_index, structs, functions, obligations);
+                     loop_index, safety_index, call_index, structs, functions, theorems,
+                     obligations);
 
   if (!body_context.terminated) {
     invariant_index = 0;
@@ -1106,10 +1149,10 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   for (const auto& invariant : statement.loop_invariants) {
     context.active.push_back(rewrite_predicate(invariant, context.bindings));
   }
-  auto exit_condition = make_unary(
-      UnaryOp::Not,
-      materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations),
-      statement.range);
+  auto exit_condition = make_unary(UnaryOp::Not,
+                                   materialize_expr(statement.expr, fn, context, call_index,
+                                                    structs, functions, theorems, obligations),
+                                   statement.range);
   context.active.push_back(
       NamedPredicate{"while_exit", exit_condition, statement.location, statement.range});
 }
@@ -1117,7 +1160,7 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
 void process_statement(const Statement& statement, const FunctionDecl& fn, ProofContext& context,
                        int& assert_index, int& return_index, int& loop_index, int& safety_index,
                        int& call_index, const StructTable& structs, const FunctionTable& functions,
-                       std::vector<ProofObligation>& obligations) {
+                       const TheoremTable& theorems, std::vector<ProofObligation>& obligations) {
   if (statement.kind == StatementKind::Let) {
     append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     const auto symbol = context.scope_depth == 0
@@ -1127,12 +1170,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     if (is_struct_type(statement.type, structs) &&
         statement.expr->kind == ExprNode::Kind::StructLiteral) {
       materialize_struct_binding(statement.expr, symbol, fn, context, call_index, structs,
-                                 functions, obligations);
+                                 functions, theorems, obligations);
       return;
     }
 
-    const auto value =
-        materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations);
+    const auto value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
+                                        theorems, obligations);
     context.symbols[symbol] = statement.type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(symbol, statement.location), value,
                                 statement.location);
@@ -1141,8 +1184,8 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
   } else if (statement.kind == StatementKind::Assign) {
     append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
     const auto current = context.bindings.at(statement.name);
-    const auto value =
-        materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations);
+    const auto value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
+                                        theorems, obligations);
     const auto symbol = scoped_symbol(statement.name, statement.location, "assign");
     context.symbols[symbol] = context.symbols.at(current);
     context.bindings[statement.name] = symbol;
@@ -1152,24 +1195,24 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
         NamedPredicate{"assign_" + statement.name, equality, statement.location, statement.range});
   } else if (statement.kind == StatementKind::If) {
     process_if_statement(statement, fn, context, assert_index, return_index, loop_index,
-                         safety_index, call_index, structs, functions, obligations);
+                         safety_index, call_index, structs, functions, theorems, obligations);
   } else if (statement.kind == StatementKind::While) {
     process_while_statement(statement, fn, context, assert_index, return_index, loop_index,
-                            safety_index, call_index, structs, functions, obligations);
+                            safety_index, call_index, structs, functions, theorems, obligations);
   } else if (statement.kind == StatementKind::Assume) {
     append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
-    const auto value =
-        materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations);
+    const auto value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
+                                        theorems, obligations);
     context.active.push_back(
         NamedPredicate{statement.name, value, statement.location, statement.range});
   } else if (statement.kind == StatementKind::Assert) {
     append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
-    const auto value =
-        materialize_expr(statement.expr, fn, context, call_index, structs, functions, obligations);
+    const auto value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
+                                        theorems, obligations);
     ++assert_index;
     ProofObligation obligation;
     obligation.name =
-        "fn." + fn.name + ".assert." + std::to_string(assert_index) + "." + statement.name;
+        proof_subject_name(fn) + ".assert." + std::to_string(assert_index) + "." + statement.name;
     obligation.location = statement.location;
     obligation.range = statement.range;
     obligation.assumptions = context.active;
@@ -1183,7 +1226,7 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
     if (statement.expr) {
       append_expression_safety_obligations(statement.expr, fn, context, safety_index, obligations);
       value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
-                               obligations);
+                               theorems, obligations);
     }
     ++return_index;
     const auto return_name = "return_" + std::to_string(return_index);
@@ -1205,13 +1248,13 @@ void process_statements(const std::vector<Statement>& statements, const Function
                         ProofContext& context, int& assert_index, int& return_index,
                         int& loop_index, int& safety_index, int& call_index,
                         const StructTable& structs, const FunctionTable& functions,
-                        std::vector<ProofObligation>& obligations) {
+                        const TheoremTable& theorems, std::vector<ProofObligation>& obligations) {
   for (const auto& statement : statements) {
     if (context.terminated) {
       break;
     }
     process_statement(statement, fn, context, assert_index, return_index, loop_index, safety_index,
-                      call_index, structs, functions, obligations);
+                      call_index, structs, functions, theorems, obligations);
   }
 }
 
@@ -1220,16 +1263,16 @@ std::string ensure_obligation_name(const FunctionDecl& fn, int ensure_index,
                                    const ProofContext::ReturnPath* return_path,
                                    std::size_t path_count, bool fallthrough_path) {
   if (path_count <= 1) {
-    return "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+    return proof_subject_name(fn) + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
   }
   if (fallthrough_path) {
-    return "fn." + fn.name + ".fallthrough.ensures." + std::to_string(ensure_index) + "." +
+    return proof_subject_name(fn) + ".fallthrough.ensures." + std::to_string(ensure_index) + "." +
            ensure.name;
   }
   if (return_path == nullptr) {
-    return "fn." + fn.name + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
+    return proof_subject_name(fn) + ".ensures." + std::to_string(ensure_index) + "." + ensure.name;
   }
-  return "fn." + fn.name + ".return." + std::to_string(return_path->index) + ".ensures." +
+  return proof_subject_name(fn) + ".return." + std::to_string(return_path->index) + ".ensures." +
          std::to_string(ensure_index) + "." + ensure.name;
 }
 
@@ -1265,6 +1308,42 @@ FunctionTable build_function_table(const Module& module) {
   return functions;
 }
 
+NamedPredicate theorem_holds_predicate(const TheoremDecl& theorem) {
+  auto result = make_identifier("result", theorem.range);
+  auto truth = make_boolean(true, theorem.range);
+  auto expr = make_binary(BinaryOp::Equal, result, truth, theorem.range);
+  return NamedPredicate{"holds", expr, theorem.location, theorem.range};
+}
+
+std::vector<FunctionDecl> build_theorem_proof_functions(const Module& module) {
+  std::vector<FunctionDecl> proof_functions;
+  proof_functions.reserve(module.theorems.size());
+  for (const auto& theorem : module.theorems) {
+    FunctionDecl fn;
+    fn.name = std::string(kTheoremProofPrefix) + theorem.name;
+    fn.params = theorem.params;
+    fn.return_type = Type{TypeKind::Bool, "bool"};
+    fn.preconditions = theorem.preconditions;
+    fn.ensures = theorem.ensures;
+    fn.ensures.push_back(theorem_holds_predicate(theorem));
+    fn.body = theorem.body;
+    fn.location = theorem.location;
+    fn.range = theorem.range;
+    proof_functions.push_back(std::move(fn));
+  }
+  return proof_functions;
+}
+
+TheoremTable build_theorem_table(const Module& module,
+                                 const std::vector<FunctionDecl>& proof_functions) {
+  TheoremTable theorems;
+  for (std::size_t index = 0; index < module.theorems.size() && index < proof_functions.size();
+       ++index) {
+    theorems[module.theorems[index].name] = &proof_functions[index];
+  }
+  return theorems;
+}
+
 StructTable build_struct_table(const Module& module) {
   StructTable structs;
   for (const auto& decl : module.structs) {
@@ -1287,59 +1366,69 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
   }
 }
 
+void append_function_obligations(const FunctionDecl& fn, const StructTable& structs,
+                                 const FunctionTable& functions, const TheoremTable& theorems,
+                                 std::vector<ProofObligation>& obligations) {
+  ProofContext context;
+  for (const auto& param : fn.params) {
+    context.bindings[param.name] = param.name;
+    register_struct_value(param.name, param.type, structs, context);
+  }
+  if (fn.return_type.kind != TypeKind::Void) {
+    context.bindings["result"] = "result";
+    register_struct_value("result", fn.return_type, structs, context);
+  }
+
+  int safety_index = 0;
+  for (const auto& precondition : fn.preconditions) {
+    append_expression_safety_obligations(precondition.expr, fn, context, safety_index, obligations);
+    context.active.push_back(rewrite_predicate(precondition, context.bindings));
+  }
+  int assert_index = 0;
+  int return_index = 0;
+  int loop_index = 0;
+  int call_index = 0;
+  process_statements(fn.body, fn, context, assert_index, return_index, loop_index, safety_index,
+                     call_index, structs, functions, theorems, obligations);
+
+  const bool has_void_fallthrough = fn.return_type.kind == TypeKind::Void && !context.terminated;
+  const auto path_count = context.returns.size() + (has_void_fallthrough ? 1U : 0U);
+
+  if (!context.returns.empty()) {
+    for (const auto& return_path : context.returns) {
+      int ensure_index = 0;
+      for (const auto& ensure : fn.ensures) {
+        ++ensure_index;
+        append_ensure_obligation(fn, ensure, ensure_index, return_path.assumptions,
+                                 return_path.symbols, return_path.bindings, &return_path,
+                                 path_count, false, safety_index, obligations);
+      }
+    }
+  }
+  if (context.returns.empty() || has_void_fallthrough) {
+    int ensure_index = 0;
+    for (const auto& ensure : fn.ensures) {
+      ++ensure_index;
+      append_ensure_obligation(fn, ensure, ensure_index, context.active, context.symbols,
+                               context.bindings, nullptr, path_count, has_void_fallthrough,
+                               safety_index, obligations);
+    }
+  }
+}
+
 } // namespace
 
 std::vector<ProofObligation> build_obligations(const Module& module) {
   std::vector<ProofObligation> obligations;
   const auto functions = build_function_table(module);
   const auto structs = build_struct_table(module);
+  const auto theorem_functions = build_theorem_proof_functions(module);
+  const auto theorems = build_theorem_table(module, theorem_functions);
+  for (const auto& theorem : theorem_functions) {
+    append_function_obligations(theorem, structs, functions, theorems, obligations);
+  }
   for (const auto& fn : module.functions) {
-    ProofContext context;
-    for (const auto& param : fn.params) {
-      context.bindings[param.name] = param.name;
-      register_struct_value(param.name, param.type, structs, context);
-    }
-    if (fn.return_type.kind != TypeKind::Void) {
-      context.bindings["result"] = "result";
-      register_struct_value("result", fn.return_type, structs, context);
-    }
-
-    int safety_index = 0;
-    for (const auto& precondition : fn.preconditions) {
-      append_expression_safety_obligations(precondition.expr, fn, context, safety_index,
-                                           obligations);
-      context.active.push_back(rewrite_predicate(precondition, context.bindings));
-    }
-    int assert_index = 0;
-    int return_index = 0;
-    int loop_index = 0;
-    int call_index = 0;
-    process_statements(fn.body, fn, context, assert_index, return_index, loop_index, safety_index,
-                       call_index, structs, functions, obligations);
-
-    const bool has_void_fallthrough = fn.return_type.kind == TypeKind::Void && !context.terminated;
-    const auto path_count = context.returns.size() + (has_void_fallthrough ? 1U : 0U);
-
-    if (!context.returns.empty()) {
-      for (const auto& return_path : context.returns) {
-        int ensure_index = 0;
-        for (const auto& ensure : fn.ensures) {
-          ++ensure_index;
-          append_ensure_obligation(fn, ensure, ensure_index, return_path.assumptions,
-                                   return_path.symbols, return_path.bindings, &return_path,
-                                   path_count, false, safety_index, obligations);
-        }
-      }
-    }
-    if (context.returns.empty() || has_void_fallthrough) {
-      int ensure_index = 0;
-      for (const auto& ensure : fn.ensures) {
-        ++ensure_index;
-        append_ensure_obligation(fn, ensure, ensure_index, context.active, context.symbols,
-                                 context.bindings, nullptr, path_count, has_void_fallthrough,
-                                 safety_index, obligations);
-      }
-    }
+    append_function_obligations(fn, structs, functions, theorems, obligations);
   }
   return obligations;
 }

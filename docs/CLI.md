@@ -14,6 +14,12 @@ the local checker cannot prove. Each proof result includes the source range of
 the `assert` or `ensures` clause that produced it. Single-line ranges are
 printed as `file:line:start-end`.
 
+The summary reports struct, theorem, and function counts. Proof-only theorem
+obligations use stable names such as `theorem.add_one_gt.ensures.1.advanced`.
+When a function calls a theorem in a proof-only expression, the usual call-site
+`requires` obligations are emitted under the caller, and the theorem's
+postconditions become assumptions for later obligations in that proof context.
+
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
 obligations point at the divisor expression that must be proven nonzero. Guards
@@ -118,6 +124,10 @@ using:
 - `void` functions with explicit `return;` or fallthrough;
 - proof-only `assume` and `assert` statements, which are erased before native
   lowering.
+
+Proof-only `theorem` declarations are validated before native lowering and then
+ignored by the native backend. They do not produce native IR or binary-facts
+artifacts.
 
 Functions containing `while` loops are checked by `sigil check`, but are
 skipped by native lowering for now. Division and modulo are intentionally

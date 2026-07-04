@@ -25,6 +25,11 @@ production verifier yet.
   returns.
 - Function call expressions with static callee, arity, argument-type, and
   acyclic-call-graph validation.
+- Proof-only `theorem` declarations with scalar parameters, contracts, boolean
+  bodies, and reusable lemma facts.
+- Theorem calls are allowed only in proof-only expressions such as contracts,
+  invariants, `assume`, `assert`, and theorem bodies; they are rejected in
+  runtime value positions.
 - Simple struct value literals and field access expressions over declared
   struct fields.
 - Struct literal construction emits proof obligations for declared struct
@@ -46,6 +51,9 @@ production verifier yet.
   postconditions.
 - Modular call-site proof obligations: callers prove callee `requires`
   predicates and then assume callee `ensures` predicates on the call result.
+- Theorem proof obligations use `theorem.name.*` artifact names and include an
+  implicit `holds` postcondition proving that the theorem's returned boolean is
+  true.
 - Branch- and short-circuit-aware arithmetic safety obligations for division and
   modulo divisors.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
@@ -115,6 +123,7 @@ Save SMT artifacts and show counterexample models:
 
 ```sh
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
+./build/sigil check examples/theorems.sigil --no-z3 --save-smt build/theorem-smt
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
@@ -163,6 +172,7 @@ Full command details are in [docs/CLI.md](docs/CLI.md).
 Sigil intentionally keeps the proof surface close to the program surface:
 
 - `invariant` attaches a predicate to a struct.
+- `theorem` declares a proof-only lemma in Sigil syntax.
 - `requires` and `ensures` attach contracts to a function.
 - `assume` introduces a fact into the current proof context.
 - `assert` creates a proof obligation.
@@ -188,12 +198,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 ## Roadmap
 
-The next hard pieces are:
+The next hard pieces are, in order:
 
+- generics and container declarations with explicit monomorphization rules;
+- array and slice models with length, bounds, and aliasing facts;
 - aggregate ownership, layout, copy, and function-boundary semantics;
-- weakest-precondition generation beyond the current straight-line assignment
-  rewrite;
-- preservation checks for struct invariants across constructors and mutators;
+- a memory model for references, mutation, and low-level data structures;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 

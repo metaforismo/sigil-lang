@@ -269,6 +269,7 @@ int check_command(const std::vector<std::string>& args) {
 
   std::cout << "module " << module.name << "\n";
   std::cout << "  structs: " << module.structs.size() << "\n";
+  std::cout << "  theorems: " << module.theorems.size() << "\n";
   std::cout << "  functions: " << module.functions.size() << "\n";
   std::cout << "  registered struct invariants: " << invariant_count << "\n";
   std::cout << "  proof obligations: " << results.size() << "\n";
