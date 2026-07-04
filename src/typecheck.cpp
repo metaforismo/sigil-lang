@@ -10,6 +10,8 @@ namespace {
 using FunctionTable = std::unordered_map<std::string, const FunctionDecl*>;
 using TheoremTable = std::unordered_map<std::string, const TheoremDecl*>;
 using StructTable = std::unordered_map<std::string, const StructDecl*>;
+using TypeParamSet = std::unordered_set<std::string>;
+using TypeSubstitutions = std::unordered_map<std::string, Type>;
 
 struct CallableContext {
   const FunctionTable& functions;
@@ -21,9 +23,18 @@ struct CallableContext {
 
 bool same_type(const Type& lhs, const Type& rhs) {
   if (lhs.kind == TypeKind::Unknown || rhs.kind == TypeKind::Unknown) {
-    return lhs.kind == rhs.kind && lhs.spelling == rhs.spelling;
+    if (lhs.kind != rhs.kind || lhs.spelling != rhs.spelling ||
+        lhs.arguments.size() != rhs.arguments.size()) {
+      return false;
+    }
+    for (std::size_t index = 0; index < lhs.arguments.size(); ++index) {
+      if (!same_type(lhs.arguments[index], rhs.arguments[index])) {
+        return false;
+      }
+    }
+    return true;
   }
-  return lhs.kind == rhs.kind;
+  return lhs.kind == rhs.kind && lhs.arguments.empty() && rhs.arguments.empty();
 }
 
 bool is_reserved_value_name(const std::string& name) {
@@ -38,19 +49,67 @@ bool is_declared_struct_type(const Type& type, const StructTable& structs) {
   return type.kind == TypeKind::Unknown && structs.find(type.spelling) != structs.end();
 }
 
-bool is_known_type(const Type& type, const StructTable& structs) {
-  return type.kind != TypeKind::Unknown || is_declared_struct_type(type, structs);
+bool is_type_parameter_reference(const Type& type, const TypeParamSet& type_params) {
+  return type.kind == TypeKind::Unknown && type.arguments.empty() &&
+         type_params.find(type.spelling) != type_params.end();
 }
 
 bool is_aggregate_type(const Type& type, const StructTable& structs) {
   return is_declared_struct_type(type, structs);
 }
 
-void require_known_type(const Type& type, const StructTable& structs, const SourceRange& range,
+void require_known_type(const Type& type, const StructTable& structs,
+                        const TypeParamSet& type_params, const SourceRange& range,
+                        const std::string& owner);
+
+void require_type_argument(const Type& type, const StructTable& structs,
+                           const TypeParamSet& type_params, const SourceRange& range,
+                           const std::string& owner) {
+  require_known_type(type, structs, type_params, range, owner);
+  if (type.kind == TypeKind::Void) {
+    throw Diagnostic(range, owner + " cannot use void as a type argument");
+  }
+}
+
+void require_known_type(const Type& type, const StructTable& structs,
+                        const TypeParamSet& type_params, const SourceRange& range,
                         const std::string& owner) {
-  if (!is_known_type(type, structs)) {
+  if (is_type_parameter_reference(type, type_params)) {
+    return;
+  }
+  if (type.kind != TypeKind::Unknown) {
+    if (type.has_arguments()) {
+      throw Diagnostic(range, "type '" + type.spelling + "' cannot take type arguments");
+    }
+    return;
+  }
+
+  const auto found = structs.find(type.spelling);
+  if (found == structs.end()) {
     throw Diagnostic(range, owner + " uses unsupported type '" + type.display() + "'");
   }
+
+  const auto expected = found->second->type_params.size();
+  const auto actual = type.arguments.size();
+  if (expected != actual) {
+    if (expected == 0) {
+      throw Diagnostic(range, "struct '" + type.spelling + "' expects 0 type argument(s), got " +
+                                  std::to_string(actual));
+    }
+    throw Diagnostic(range, "generic struct '" + type.spelling + "' expects " +
+                                std::to_string(expected) + " type argument(s), got " +
+                                std::to_string(actual));
+  }
+
+  for (const auto& argument : type.arguments) {
+    require_type_argument(argument, structs, type_params, range,
+                          "type argument for '" + type.display() + "'");
+  }
+}
+
+void require_known_type(const Type& type, const StructTable& structs, const SourceRange& range,
+                        const std::string& owner) {
+  require_known_type(type, structs, TypeParamSet{}, range, owner);
 }
 
 void require_value_type(const Type& type, const StructTable& structs, const SourceRange& range,
@@ -104,6 +163,44 @@ void require_unreserved_declaration_name(const std::string& name, const SourceRa
   }
 }
 
+Type substitute_type(const Type& type, const TypeSubstitutions& substitutions) {
+  if (type.kind == TypeKind::Unknown && type.arguments.empty()) {
+    const auto found = substitutions.find(type.spelling);
+    if (found != substitutions.end()) {
+      return found->second;
+    }
+  }
+
+  Type substituted = type;
+  for (auto& argument : substituted.arguments) {
+    argument = substitute_type(argument, substitutions);
+  }
+  return substituted;
+}
+
+TypeParamSet collect_type_params(const StructDecl& decl) {
+  TypeParamSet params;
+  for (const auto& param : decl.type_params) {
+    if (is_builtin_type_name(param.name)) {
+      throw Diagnostic(param.range,
+                       "type parameter cannot use reserved type name '" + param.name + "'");
+    }
+    if (!params.insert(param.name).second) {
+      throw Diagnostic(param.range, "duplicate type parameter '" + param.name + "'");
+    }
+  }
+  return params;
+}
+
+TypeSubstitutions build_type_substitutions(const StructDecl& decl, const Type& concrete_type) {
+  TypeSubstitutions substitutions;
+  for (std::size_t index = 0;
+       index < decl.type_params.size() && index < concrete_type.arguments.size(); ++index) {
+    substitutions[decl.type_params[index].name] = concrete_type.arguments[index];
+  }
+  return substitutions;
+}
+
 CallableContext with_theorem_calls_allowed(const CallableContext& context) {
   return CallableContext{context.functions, context.theorems, context.current_function,
                          context.current_is_theorem, true};
@@ -111,6 +208,10 @@ CallableContext with_theorem_calls_allowed(const CallableContext& context) {
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
                 const CallableContext& context);
+
+void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symbols,
+                        const StructTable& structs, const CallableContext& context,
+                        const std::string& owner);
 
 Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
                   const CallableContext& calls, TypeKind expected, const std::string& context) {
@@ -134,7 +235,7 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Struc
     if (!lhs.is_bool() || !rhs.is_bool()) {
       throw Diagnostic(expr->range, "boolean operator requires bool operands");
     }
-    return Type{TypeKind::Bool, "bool"};
+    return Type{TypeKind::Bool, "bool", {}};
 
   case BinaryOp::Less:
   case BinaryOp::LessEqual:
@@ -143,7 +244,7 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Struc
     if (!lhs.is_integer() || !rhs.is_integer()) {
       throw Diagnostic(expr->range, "comparison operator requires i64 operands");
     }
-    return Type{TypeKind::Bool, "bool"};
+    return Type{TypeKind::Bool, "bool", {}};
 
   case BinaryOp::Add:
   case BinaryOp::Subtract:
@@ -153,7 +254,7 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Struc
     if (!lhs.is_integer() || !rhs.is_integer()) {
       throw Diagnostic(expr->range, "arithmetic operator requires i64 operands");
     }
-    return Type{TypeKind::I64, "i64"};
+    return Type{TypeKind::I64, "i64", {}};
 
   case BinaryOp::Equal:
   case BinaryOp::NotEqual:
@@ -168,7 +269,7 @@ Type infer_binary_expr(const Expr& expr, const SymbolTable& symbols, const Struc
       throw Diagnostic(expr->range, "equality does not support aggregate type '" + lhs.display() +
                                         "' until structural equality semantics are defined");
     }
-    return Type{TypeKind::Bool, "bool"};
+    return Type{TypeKind::Bool, "bool", {}};
   }
 
   throw Diagnostic(expr->range, "unknown binary operator");
@@ -208,7 +309,7 @@ Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const StructT
                              actual.display());
       }
     }
-    return Type{TypeKind::Bool, "bool"};
+    return Type{TypeKind::Bool, "bool", {}};
   }
   if (!context.current_is_theorem && expr->name == context.current_function.name) {
     throw Diagnostic(expr->range, "recursive function calls are not supported yet");
@@ -252,11 +353,14 @@ const FieldDecl* find_field(const StructDecl& decl, const std::string& name) {
 
 Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
                                const StructTable& structs, const CallableContext& context) {
-  const auto found = structs.find(expr->name);
+  const auto found = structs.find(expr->literal_type.spelling);
   if (found == structs.end()) {
-    throw Diagnostic(expr->range, "unknown struct '" + expr->name + "'");
+    throw Diagnostic(expr->range, "unknown struct '" + expr->literal_type.spelling + "'");
   }
   const StructDecl& decl = *found->second;
+  require_known_type(expr->literal_type, structs, expr->range,
+                     "struct literal '" + expr->literal_type.display() + "'");
+  const auto type_substitutions = build_type_substitutions(decl, expr->literal_type);
 
   std::unordered_set<std::string> initialized;
   for (const auto& initializer : expr->field_initializers) {
@@ -270,9 +374,10 @@ Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
                        "duplicate initializer for field '" + initializer.name + "'");
     }
     const auto actual = infer_expr(initializer.expr, symbols, structs, context);
-    if (!same_type(actual, field->type)) {
+    const auto expected = substitute_type(field->type, type_substitutions);
+    if (!same_type(actual, expected)) {
       throw Diagnostic(initializer.range, "field '" + decl.name + "." + initializer.name +
-                                              "' type mismatch: expected " + field->type.display() +
+                                              "' type mismatch: expected " + expected.display() +
                                               ", found " + actual.display());
     }
   }
@@ -284,7 +389,15 @@ Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
     }
   }
 
-  return Type{TypeKind::Unknown, decl.name};
+  SymbolTable invariant_fields;
+  for (const auto& field : decl.fields) {
+    invariant_fields[field.name] = substitute_type(field.type, type_substitutions);
+  }
+  for (const auto& invariant : decl.invariants) {
+    validate_predicate(invariant, invariant_fields, structs, context, "invariant");
+  }
+
+  return expr->literal_type;
 }
 
 Type infer_field_access_expr(const Expr& expr, const SymbolTable& symbols,
@@ -300,7 +413,7 @@ Type infer_field_access_expr(const Expr& expr, const SymbolTable& symbols,
   if (!field) {
     throw Diagnostic(expr->range, "struct '" + decl.name + "' has no field '" + expr->name + "'");
   }
-  return field->type;
+  return substitute_type(field->type, build_type_substitutions(decl, base_type));
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -311,9 +424,9 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable&
 
   switch (expr->kind) {
   case ExprNode::Kind::Integer:
-    return Type{TypeKind::I64, "i64"};
+    return Type{TypeKind::I64, "i64", {}};
   case ExprNode::Kind::Boolean:
-    return Type{TypeKind::Bool, "bool"};
+    return Type{TypeKind::Bool, "bool", {}};
   case ExprNode::Kind::Identifier: {
     const auto found = symbols.find(expr->name);
     if (found == symbols.end()) {
@@ -334,12 +447,12 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable&
       if (!operand.is_bool()) {
         throw Diagnostic(expr->range, "'!' requires a bool operand");
       }
-      return Type{TypeKind::Bool, "bool"};
+      return Type{TypeKind::Bool, "bool", {}};
     }
     if (!operand.is_integer()) {
       throw Diagnostic(expr->range, "unary '-' requires an i64 operand");
     }
-    return Type{TypeKind::I64, "i64"};
+    return Type{TypeKind::I64, "i64", {}};
   }
   case ExprNode::Kind::Binary:
     return infer_binary_expr(expr, symbols, structs, context);
@@ -538,12 +651,17 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
 
 void validate_struct(const StructDecl& decl, const StructTable& structs,
                      const TheoremTable& theorems) {
+  const auto type_params = collect_type_params(decl);
   SymbolTable fields;
   for (const auto& field : decl.fields) {
     require_unreserved_value_name(field.name, field.range,
                                   "field '" + decl.name + "." + field.name + "'");
-    require_value_type(field.type, structs, field.range,
+    require_known_type(field.type, structs, type_params, field.range,
                        "field '" + decl.name + "." + field.name + "'");
+    if (field.type.kind == TypeKind::Void) {
+      throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
+                                        "' cannot use void as a value type");
+    }
     insert_symbol(fields, field.name, field.type, field.range, "field");
   }
 
@@ -556,7 +674,9 @@ void validate_struct(const StructDecl& decl, const StructTable& structs,
     if (!invariant_names.insert(invariant.name).second) {
       throw Diagnostic(invariant.range, "duplicate invariant '" + invariant.name + "'");
     }
-    validate_predicate(invariant, fields, structs, context, "invariant");
+    if (type_params.empty()) {
+      validate_predicate(invariant, fields, structs, context, "invariant");
+    }
   }
 }
 
@@ -651,7 +771,7 @@ void validate_theorem(const TheoremDecl& decl, const StructTable& structs,
   FunctionDecl proof_decl;
   proof_decl.name = decl.name;
   proof_decl.params = decl.params;
-  proof_decl.return_type = Type{TypeKind::Bool, "bool"};
+  proof_decl.return_type = Type{TypeKind::Bool, "bool", {}};
   proof_decl.preconditions = decl.preconditions;
   proof_decl.ensures = decl.ensures;
   proof_decl.body = decl.body;

@@ -60,6 +60,15 @@ struct Pair {
   ok: bool;
 }
 
+struct Box[T] {
+  value: T;
+}
+
+struct PairBox[A, B] {
+  left: A;
+  right: B;
+}
+
 theorem nonzero_stays_nonzero for (x: i64)
 requires nonzero: x != 0;
 ensures preserved: x != 0;
@@ -163,6 +172,23 @@ fn read_pair(x: i64) -> i64
   return pair.left;
 }
 
+fn unwrap_box(x: i64) -> i64
+{
+  let box: Box[i64] = Box[i64] { value: x };
+  assert field_visible: box.value == x;
+  return box.value;
+}
+
+fn read_pair_box(x: i64, flag: bool) -> i64
+{
+  let pair: PairBox[i64, bool] = PairBox[i64, bool] { left: x, right: flag };
+  if pair.right {
+    return pair.left;
+  } else {
+    return 0;
+  }
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -173,6 +199,117 @@ ensures preserved: result != 0;
 )";
 
   sigil::validate_module(sigil::parse_source(valid, "valid.sigil"));
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[T] {
+  value: T;
+}
+
+fn missing_type_arg(x: i64) -> i64
+{
+  let box: Box = Box { value: x };
+  return box.value;
+}
+)",
+                    "generic struct 'Box' expects 1 type argument(s), got 0");
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[T] {
+  value: T;
+}
+
+fn too_many_type_args(x: i64) -> i64
+{
+  let box: Box[i64, bool] = Box[i64, bool] { value: x };
+  return box.value;
+}
+)",
+                    "generic struct 'Box' expects 1 type argument(s), got 2");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  value: i64;
+}
+
+fn non_generic_has_args(x: i64) -> i64
+{
+  let pair: Pair[i64] = Pair[i64] { value: x };
+  return pair.value;
+}
+)",
+                    "struct 'Pair' expects 0 type argument(s), got 1");
+
+  expect_diagnostic(R"(
+module bad;
+fn builtin_type_args(x: i64) -> i64
+{
+  let y: i64[i64] = x;
+  return y;
+}
+)",
+                    "type 'i64' cannot take type arguments");
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[T] {
+  value: T;
+}
+
+fn wrong_field_type(x: i64) -> i64
+{
+  let box: Box[i64] = Box[i64] { value: true };
+  return x;
+}
+)",
+                    "field 'Box.value' type mismatch: expected i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[T] {
+  value: T;
+}
+
+fn wrong_literal_type(x: i64) -> i64
+{
+  let box: Box[bool] = Box[i64] { value: x };
+  return x;
+}
+)",
+                    "let type mismatch: expected Box[bool], found Box[i64]");
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[T, T] {
+  value: T;
+}
+)",
+                    "duplicate type parameter 'T'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Box[i64] {
+  value: i64;
+}
+)",
+                    "type parameter cannot use reserved type name 'i64'");
+
+  expect_diagnostic(R"(
+module bad;
+struct LowerBound[T] {
+  value: T;
+  invariant non_negative: value >= 0;
+}
+
+fn invalid_invariant_instantiation(flag: bool) -> bool
+{
+  let box: LowerBound[bool] = LowerBound[bool] { value: flag };
+  return box.value;
+}
+)",
+                    "comparison operator requires i64 operands");
 
   expect_diagnostic(R"(
 module bad;

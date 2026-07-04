@@ -30,10 +30,17 @@ production verifier yet.
 - Theorem calls are allowed only in proof-only expressions such as contracts,
   invariants, `assume`, `assert`, and theorem bodies; they are rejected in
   runtime value positions.
+- Generic struct declarations with type parameters, concrete type arguments,
+  arity checks, and duplicate-parameter validation.
+- Generic struct instantiations substitute concrete field types before
+  typechecking field initializers, field access, and invariant predicates.
 - Simple struct value literals and field access expressions over declared
   struct fields.
 - Struct literal construction emits proof obligations for declared struct
   invariants.
+- Generic struct invariant obligations are emitted over instantiated field
+  symbols, so `Box[bool].value` reaches SMT as `Bool`, not as an opaque type
+  parameter.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -124,6 +131,7 @@ Save SMT artifacts and show counterexample models:
 ```sh
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
 ./build/sigil check examples/theorems.sigil --no-z3 --save-smt build/theorem-smt
+./build/sigil check examples/generics.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
@@ -173,6 +181,8 @@ Sigil intentionally keeps the proof surface close to the program surface:
 
 - `invariant` attaches a predicate to a struct.
 - `theorem` declares a proof-only lemma in Sigil syntax.
+- `struct Box[T]` declares a generic struct whose concrete uses write
+  `Box[i64]`, `Box[bool]`, or another fully supplied type argument list.
 - `requires` and `ensures` attach contracts to a function.
 - `assume` introduces a fact into the current proof context.
 - `assert` creates a proof obligation.
@@ -200,7 +210,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- generics and container declarations with explicit monomorphization rules;
+- first-class container declarations on top of the generic struct foundation;
 - array and slice models with length, bounds, and aliasing facts;
 - aggregate ownership, layout, copy, and function-boundary semantics;
 - a memory model for references, mutation, and low-level data structures;

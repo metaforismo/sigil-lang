@@ -65,32 +65,48 @@ Diagnostic::Diagnostic(SourceRange range, const std::string& message)
 
 Type Type::from_name(const std::string& name) {
   if (name == "i64") {
-    return {TypeKind::I64, name};
+    return {TypeKind::I64, name, {}};
   }
   if (name == "bool") {
-    return {TypeKind::Bool, name};
+    return {TypeKind::Bool, name, {}};
   }
   if (name == "void") {
-    return {TypeKind::Void, name};
+    return {TypeKind::Void, name, {}};
   }
-  return {TypeKind::Unknown, name};
+  return {TypeKind::Unknown, name, {}};
 }
 
 std::string Type::display() const {
-  if (!spelling.empty()) {
-    return spelling;
+  std::string base = spelling;
+  if (base.empty()) {
+    switch (kind) {
+    case TypeKind::I64:
+      base = "i64";
+      break;
+    case TypeKind::Bool:
+      base = "bool";
+      break;
+    case TypeKind::Void:
+      base = "void";
+      break;
+    case TypeKind::Unknown:
+      base = "unknown";
+      break;
+    }
   }
-  switch (kind) {
-  case TypeKind::I64:
-    return "i64";
-  case TypeKind::Bool:
-    return "bool";
-  case TypeKind::Void:
-    return "void";
-  case TypeKind::Unknown:
-    return "unknown";
+  if (arguments.empty()) {
+    return base;
   }
-  return "unknown";
+  std::ostringstream out;
+  out << base << "[";
+  for (std::size_t index = 0; index < arguments.size(); ++index) {
+    if (index != 0) {
+      out << ", ";
+    }
+    out << arguments[index].display();
+  }
+  out << "]";
+  return out.str();
 }
 
 std::string Type::smt_sort() const {
@@ -149,15 +165,20 @@ Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange rang
   return expr;
 }
 
-Expr make_struct_literal(std::string type_name, std::vector<FieldInitializer> fields,
-                         SourceRange range) {
+Expr make_struct_literal(Type type, std::vector<FieldInitializer> fields, SourceRange range) {
   auto expr = std::make_shared<ExprNode>();
   expr->kind = ExprNode::Kind::StructLiteral;
-  expr->name = std::move(type_name);
+  expr->name = type.spelling;
+  expr->literal_type = std::move(type);
   expr->field_initializers = std::move(fields);
   expr->location = range.start;
   expr->range = std::move(range);
   return expr;
+}
+
+Expr make_struct_literal(std::string type_name, std::vector<FieldInitializer> fields,
+                         SourceRange range) {
+  return make_struct_literal(Type::from_name(type_name), std::move(fields), std::move(range));
 }
 
 Expr make_field_access(Expr base, std::string field_name, SourceRange range) {
@@ -335,7 +356,8 @@ std::string display_expr(const Expr& expr) {
   case ExprNode::Kind::Call:
     return expr->name + "(" + display_arguments(expr->arguments) + ")";
   case ExprNode::Kind::StructLiteral:
-    return expr->name + " { " + display_field_initializers(expr->field_initializers) + " }";
+    return expr->literal_type.display() + " { " +
+           display_field_initializers(expr->field_initializers) + " }";
   case ExprNode::Kind::FieldAccess:
     return display_expr(expr->lhs) + "." + expr->name;
   case ExprNode::Kind::Unary:
@@ -364,7 +386,8 @@ std::string emit_smt_expr(const Expr& expr) {
   case ExprNode::Kind::Call:
     throw std::runtime_error("cannot emit unresolved call expression '" + expr->name + "'");
   case ExprNode::Kind::StructLiteral:
-    throw std::runtime_error("cannot emit unresolved struct literal '" + expr->name + "'");
+    throw std::runtime_error("cannot emit unresolved struct literal '" +
+                             expr->literal_type.display() + "'");
   case ExprNode::Kind::FieldAccess:
     throw std::runtime_error("cannot emit unresolved field access '" + display_expr(expr) + "'");
   case ExprNode::Kind::Unary:

@@ -32,7 +32,9 @@ private:
   Statement parse_statement();
   std::vector<Statement> parse_statement_block(const std::string& owner);
   std::vector<ParamDecl> parse_params();
+  std::vector<TypeParamDecl> parse_type_params();
   Type parse_type();
+  std::vector<Type> parse_type_arguments();
 
   Expr parse_expr();
   Expr parse_or();

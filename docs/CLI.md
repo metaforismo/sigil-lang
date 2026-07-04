@@ -19,6 +19,9 @@ obligations use stable names such as `theorem.add_one_gt.ensures.1.advanced`.
 When a function calls a theorem in a proof-only expression, the usual call-site
 `requires` obligations are emitted under the caller, and the theorem's
 postconditions become assumptions for later obligations in that proof context.
+Generic struct instantiations use the same proof artifact flow: concrete fields
+are visible in SMT under materialized names such as `box.value`, and invariant
+obligations are named from the function, local binding, and invariant label.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -43,6 +46,12 @@ Options:
   timeout is preserved in `--dump-smt` output and `--save-smt` artifacts.
 - `--strict`: exit non-zero if any obligation is `UNKNOWN`.
 - `--no-z3`: skip Z3 and run local checks only.
+
+Example with generic structs and a theorem-backed invariant:
+
+```sh
+sigil check examples/generics.sigil --strict --solver-timeout-ms 250 --save-smt build/generic-smt
+```
 
 Exit codes:
 

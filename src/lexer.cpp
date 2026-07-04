@@ -43,6 +43,12 @@ std::vector<Token> Lexer::tokenize() {
     case '}':
       tokens.push_back(make_token(TokenKind::RBrace, start, location));
       break;
+    case '[':
+      tokens.push_back(make_token(TokenKind::LBracket, start, location));
+      break;
+    case ']':
+      tokens.push_back(make_token(TokenKind::RBracket, start, location));
+      break;
     case ':':
       tokens.push_back(make_token(TokenKind::Colon, start, location));
       break;
@@ -220,6 +226,10 @@ const char* token_name(TokenKind kind) {
     return "'{'";
   case TokenKind::RBrace:
     return "'}'";
+  case TokenKind::LBracket:
+    return "'['";
+  case TokenKind::RBracket:
+    return "']'";
   case TokenKind::Colon:
     return "':'";
   case TokenKind::Semicolon:

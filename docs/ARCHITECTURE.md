@@ -20,11 +20,13 @@ source
 The lexer and parser are hand-written C++17. This keeps the grammar easy to
 change while the language is still being designed. Parser output is a typed AST
 containing structs, fields, invariants, proof-only theorems, functions,
-contracts, and body statements. Numeric literal tokens are converted to exact `i64` AST values at
-parse time, and out-of-range literals are rejected with source ranges before
-type checking or proof generation. Unterminated struct and statement blocks
-report the missing closing brace at EOF instead of falling through to a generic
-field or statement diagnostic.
+contracts, and body statements. Struct declarations may carry generic type
+parameters, and type nodes preserve nested type arguments such as
+`PairBox[i64, bool]`. Numeric literal tokens are converted to exact `i64` AST
+values at parse time, and out-of-range literals are rejected with source ranges
+before type checking or proof generation. Unterminated struct and statement
+blocks report the missing closing brace at EOF instead of falling through to a
+generic field or statement diagnostic.
 
 ## Static Validation
 
@@ -33,9 +35,13 @@ system:
 
 - top-level struct, theorem, and function declarations must have unique names
   and cannot reuse built-in type names;
+- generic struct type parameter names must be unique and cannot reuse built-in
+  type names;
 - parameter, local, and field names cannot reuse built-in type names or the
   compiler-generated `result` symbol;
-- struct invariant expressions must be `bool`;
+- non-generic struct invariant expressions must be `bool`;
+- generic struct invariant expressions are validated at each concrete
+  instantiation after type parameters are substituted;
 - function preconditions and postconditions must be `bool`;
 - function contract labels must be unique across `requires`, `ensures`, and
   explicit body proof labels;
@@ -47,8 +53,9 @@ system:
   indirect recursion;
 - theorem calls must resolve to a module theorem, use the declared arity and
   argument types, and appear only in proof-only expressions;
-- struct literals must initialize declared fields exactly once, and field access
-  must target a field on a struct-typed expression;
+- struct literals must use valid generic arity, initialize declared fields
+  exactly once, and field access must target a field on a struct-typed
+  expression;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - struct-typed locals must be initialized directly from struct literals;
 - assignments can only target declared local bindings and must preserve the
@@ -92,10 +99,11 @@ The planner walks each function and builds proof obligations:
 - theorem call expressions in proof contexts emit call-site obligations for
   theorem `requires` predicates and add explicit theorem `ensures` plus
   implicit `holds` as reusable assumptions;
-- struct literal bindings materialize scalar field facts, and field accesses
-  resolve to those field symbols;
+- struct literal bindings materialize scalar field facts, with generic type
+  parameters substituted by concrete type arguments before symbols are recorded;
+- field accesses resolve to those field symbols;
 - struct literal construction emits invariant obligations for every invariant
-  declared on the constructed type;
+  declared on the constructed type after generic substitution;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;

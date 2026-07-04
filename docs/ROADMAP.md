@@ -6,13 +6,13 @@ tests, and docs are in the repo.
 ## Current Objective
 
 Bridge the original source-level invariant idea to the working compiler by
-making reusable proofs first-class in the language. The current step is
-proof-only theorem declarations plus lemma reuse: users write theorem bodies,
-preconditions, and postconditions in ordinary Sigil syntax; the compiler proves
-those theorem obligations; later proof contexts can call the theorem and reuse
-its checked facts. This keeps the language surface simple while preparing the
-path for generics, containers, arrays, slices, a memory model, and eventually an
-agentic SMT loop.
+building the smallest useful path from reusable lemmas to generic
+data-structure specifications. Proof-only theorem declarations and lemma reuse
+are now in place. The current step is the generic struct foundation: users can
+declare type parameters, instantiate concrete struct types, and have field and
+invariant proof obligations generated after concrete type substitution. This
+keeps the language surface simple while preparing the path for real containers,
+arrays, slices, a memory model, and eventually an agentic SMT loop.
 
 ## Completed
 
@@ -55,6 +55,8 @@ agentic SMT loop.
 - [x] Generate modular call-site proof obligations from callee contracts.
 - [x] Add proof-only theorem declarations.
 - [x] Reuse theorem calls as lemma facts in proof-only expressions.
+- [x] Add generic struct declarations with concrete type-argument validation.
+- [x] Instantiate generic struct fields and invariants before proof emission.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -83,7 +85,8 @@ agentic SMT loop.
 
 ## Immediate Queue
 
-- [ ] Add generics and container declarations with explicit instantiation rules.
+- [ ] Add first-class container declarations on top of generic struct
+      instantiation.
 - [ ] Add array and slice models with length, bounds, and aliasing facts.
 - [ ] Define a memory model for references, ownership, mutation, and low-level
       data-structure invariants.
@@ -102,7 +105,8 @@ agentic SMT loop.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
 - [x] Reject aggregate operations whose semantics are not defined yet.
 - [x] Reject recursive by-value struct definitions until references exist.
-- [ ] Add generics with clear monomorphization and proof-instantiation rules.
+- [x] Add generic struct declarations with clear proof-instantiation rules.
+- [ ] Define monomorphized runtime layout rules for generic aggregates.
 - [ ] Add first-class container declarations after generic instantiation is
       explicit.
 - [ ] Add arrays and slices with explicit length, bounds, element, and alias
@@ -124,6 +128,7 @@ agentic SMT loop.
 
 - [x] Treat invariants as obligations on struct literal construction.
 - [x] Reuse proof-only theorems as lemmas inside invariant and contract proofs.
+- [x] Instantiate generic struct invariants over concrete field types.
 - [ ] Treat invariants as obligations on mutation and public exits.
 - [ ] Add ownership and aliasing rules for low-level memory.
 - [ ] Support user-defined lemmas for data-structure correctness.

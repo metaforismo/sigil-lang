@@ -28,8 +28,17 @@ The initial scalar types are:
 - `bool`
 - `void`
 
-Unknown type names are preserved by the parser so future user-defined types can
-be added without redesigning the AST.
+User-defined struct types can be named directly, and generic struct
+instantiations use square-bracket type arguments:
+
+```sigil
+Box[i64]
+PairBox[i64, bool]
+```
+
+Unknown type names are still preserved by the parser so future user-defined
+types can be added without redesigning the AST, but the static checker rejects
+unknown concrete types before proof generation.
 
 Struct types are supported for fields and local values constructed directly
 from struct literals. Function parameters and return values are scalar-only for
@@ -80,6 +89,53 @@ merge semantics.
 Struct fields are by value. Recursive struct definitions such as
 `Node { next: Node }` are rejected until the language has references or pointer
 types.
+
+## Generic Structs
+
+```sigil
+struct Box[T] {
+  value: T;
+}
+
+struct PairBox[A, B] {
+  left: A;
+  right: B;
+}
+```
+
+Generic structs declare one or more type parameters after the struct name. Each
+concrete use must provide exactly that many type arguments:
+
+```sigil
+let box: Box[i64] = Box[i64] { value: x };
+let pair: PairBox[i64, bool] = PairBox[i64, bool] { left: x, right: ok };
+```
+
+The checker rejects missing type arguments, extra type arguments, type
+arguments on non-generic structs, and type arguments on built-in scalar types.
+Type parameter names must be unique and cannot reuse built-in type names.
+
+Generic field types are substituted at each concrete instantiation before
+field initializers, field access, and invariants are checked. This means a
+generic invariant can mention a field whose final type is known only when the
+struct literal is constructed:
+
+```sigil
+struct NonNegativeBox[T] {
+  value: T;
+
+  invariant value_non_negative: value >= 0;
+}
+
+let box: NonNegativeBox[i64] = NonNegativeBox[i64] { value: x };
+```
+
+The `NonNegativeBox[i64]` construction is valid when `value >= 0` typechecks
+over an `i64` field. A `NonNegativeBox[bool]` construction is rejected because
+the instantiated invariant would compare a `bool` field with an integer.
+Generic structs are a proof-instantiation foundation, not a complete container
+or monomorphized runtime system yet. Native lowering still skips aggregate
+values until layout and ABI rules are explicit.
 
 ## Function Contracts
 
@@ -219,7 +275,8 @@ Supported expression forms:
 - conditionals: `if condition { then_expr } else { else_expr }`
 - function calls: `callee(arg1, arg2)`
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
-- struct literals: `TypeName { field: value }`
+- struct literals: `TypeName { field: value }` and
+  `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
 - parentheses
 
