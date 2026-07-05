@@ -1,0 +1,18 @@
+module model_updates;
+
+fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == value;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  assert length_preserved: len(updated) == len(xs);
+  return at(updated, index);
+}
+
+fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == value;
+{
+  let updated: Array[bool] = store(flags, index, value);
+  return at(updated, index);
+}

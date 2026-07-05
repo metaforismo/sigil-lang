@@ -120,8 +120,22 @@ index >= 0 && index < len(container)
 This mirrors division and modulo safety obligations: bounds are not assumed
 silently, and callers must prove them from preconditions, invariants, branch
 guards, or earlier facts. The model currently gives every array and slice a
-non-negative length axiom. It does not model aliasing, element mutation,
-allocation, or pointer provenance yet.
+non-negative length axiom.
+
+`store(xs, i, value)` is modeled as an immutable array/slice update. When a
+store is bound to a model local or model container field, the planner creates
+component facts for the new model:
+
+```sigil
+updated.len == xs.len
+updated.data == store(xs.data, i, value)
+```
+
+The write also emits an `index_in_bounds` safety obligation at the store site.
+Reads from the updated model then lower to `select(updated.data, index)`, so Z3
+can prove standard array-theory facts such as reading the same index that was
+just written. This is still not runtime mutation: Sigil does not model aliasing,
+allocation, slice origins, pointer provenance, or native memory effects yet.
 
 Reference model parameters are materialized as `ref.addr`, `ref.valid`, and
 `ref.value`. `addr(ref)` lowers to the address symbol, `is_valid(ref)` lowers to

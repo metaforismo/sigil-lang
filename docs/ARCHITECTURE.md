@@ -58,8 +58,10 @@ system:
   indirect recursion;
 - theorem calls must resolve to a module theorem, use the declared arity and
   argument types, and appear only in proof-only expressions;
-- `len(model)` and `at(model, index)` are built-in array/slice model
-  intrinsics; `len` returns `i64`, and `at` returns the model element type;
+- `len(model)`, `at(model, index)`, and `store(model, index, value)` are
+  built-in array/slice model intrinsics; `len` returns `i64`, `at` returns the
+  model element type, and `store` returns the same model type after checking
+  the stored value type;
 - `is_valid(ref)`, `addr(ref)`, `load(ref)`, `same_ref(left, right)`, and
   `disjoint(left, right)` are built-in reference model intrinsics;
 - aggregate literals must use valid generic arity, initialize declared fields
@@ -68,7 +70,10 @@ system:
 - container fields may use `Array[T]`, `Slice[T]`, or `Ref[T]` proof models;
   ordinary struct fields still reject model types;
 - local `let` bindings cannot shadow parameters or earlier locals;
-- aggregate-typed locals must be initialized directly from aggregate literals;
+- aggregate-typed locals must be initialized directly from aggregate literals,
+  except proof model locals may be initialized from model aliases, and array or
+  slice model locals may be initialized from materialized proof-level `store`
+  updates;
 - assignments can only target declared local bindings and must preserve the
   local type; struct assignment is rejected until aggregate copy semantics are
   defined;
@@ -127,6 +132,9 @@ The planner walks each function and builds proof obligations:
   guards reflected in the active assumptions;
 - array and slice `at(container, index)` expressions create `index_in_bounds`
   safety obligations and lower to SMT `select` over an abstract backing array;
+- array and slice `store(container, index, value)` bindings create
+  `index_in_bounds` safety obligations, preserve the source length, and lower
+  the updated data fact to SMT array `store`;
 - reference `load(ref)` expressions create `memory_valid` safety obligations
   and lower to the modeled referenced value;
 - `if` statements build separate then/else proof contexts and merge

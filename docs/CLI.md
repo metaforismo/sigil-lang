@@ -28,7 +28,10 @@ Container instantiations use the same flow, but their model fields also expose
 SMT facts such as `window.items.len == xs.len` and
 `window.items.data == xs.data`.
 Array and slice model accesses add `index_in_bounds` safety obligations and
-emit SMT array `select` terms for `at(model, index)`.
+emit SMT array `select` terms for `at(model, index)`. Array and slice
+`store(model, index, value)` updates are immutable proof facts: they preserve
+length, emit write-bounds obligations, and emit SMT array `store` terms for the
+updated backing data.
 Reference model loads add `memory_valid` safety obligations and expose modeled
 address, validity, and value symbols in SMT.
 
@@ -77,6 +80,12 @@ Example with proof-level array and slice bounds:
 
 ```sh
 sigil check examples/slices.sigil --strict --solver-timeout-ms 250 --save-smt build/slice-smt
+```
+
+Example with proof-level array and slice update facts:
+
+```sh
+sigil check examples/model_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/model-update-smt
 ```
 
 Example with proof-level reference validity and alias predicates:

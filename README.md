@@ -48,6 +48,9 @@ production verifier yet.
   `at(value, index)` intrinsics.
 - `at` emits index-in-bounds proof obligations and lowers to SMT `select` over
   an abstract backing array whose element sort comes from `T`.
+- Immutable proof-level `store(model, index, value)` facts for `Array[T]` and
+  `Slice[T]`: stores preserve length, emit write-bounds obligations, and lower
+  to SMT array `store`.
 - Proof-level `Ref[T]` model types with `is_valid(ref)`, `addr(ref)`,
   `load(ref)`, `same_ref(left, right)`, and `disjoint(left, right)` intrinsics.
 - `load` emits memory-valid proof obligations before exposing the modeled
@@ -150,6 +153,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/generics.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/containers.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/slices.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/model_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests

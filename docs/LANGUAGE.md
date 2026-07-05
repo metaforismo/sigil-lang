@@ -196,11 +196,34 @@ index >= 0 && index < len(value)
 ```
 
 The SMT model uses an abstract backing array and lowers `at(xs, i)` to a
-solver-level `select`. This is intentionally a proof model, not a runtime
-memory model. It does not define allocation, aliasing, mutation, pointer
-provenance, slice origins, or native layout yet. Aggregate returns are still
-rejected, and native lowering skips functions that take array or slice model
-parameters.
+solver-level `select`.
+
+`store(value, index, element)` is an immutable proof-level update. It returns
+the same model type as `value`, preserves the model length, emits an
+`index_in_bounds` obligation for the write index, and lowers the backing data
+to solver-level `store`:
+
+```sigil
+fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == value;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  assert length_preserved: len(updated) == len(xs);
+  return at(updated, index);
+}
+```
+
+Model stores must currently be materialized in a `let` binding or container
+field before later `len` or `at` facts use them. Plain model aliases, such as
+`let alias: Slice[i64] = xs;`, are also materialized as length/data component
+facts. This keeps the proof IR explicit until Sigil has first-class temporary
+model values.
+
+This is intentionally a proof model, not a runtime memory model. It does not
+define allocation, aliasing, pointer provenance, slice origins, or native
+layout yet. Aggregate returns are still rejected, and native lowering skips
+functions that take array or slice model parameters.
 
 ## Reference Model
 
@@ -365,7 +388,8 @@ Supported expression forms:
 - conditionals: `if condition { then_expr } else { else_expr }`
 - function calls: `callee(arg1, arg2)`
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
-- model intrinsics: `len(xs)`, `at(xs, index)`
+- model intrinsics: `len(xs)`, `at(xs, index)`,
+  `store(xs, index, value)`
 - reference intrinsics: `is_valid(ptr)`, `load(ptr)`, `addr(ptr)`,
   `same_ref(left, right)`, `disjoint(left, right)`
 - aggregate literals: `TypeName { field: value }` and

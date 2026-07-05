@@ -397,6 +397,7 @@ using TypeSubstitutions = std::unordered_map<std::string, Type>;
 
 constexpr std::string_view kTheoremProofPrefix = "theorem.";
 constexpr std::string_view kModelSelectCall = "__sigil_select";
+constexpr std::string_view kModelStoreCall = "__sigil_store";
 
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
   return fn.name.rfind(std::string(kTheoremProofPrefix), 0) == 0;
@@ -681,15 +682,16 @@ ProofObligation make_safety_obligation(const FunctionDecl& fn, int safety_index,
 
 ProofObligation make_index_bounds_obligation(const FunctionDecl& fn, int safety_index,
                                              const Expr& access, const ProofContext& context) {
-  if (!access || access->arguments.size() != 2) {
+  const auto operation = access && !access->name.empty() ? access->name : std::string("model");
+  if (!access || access->arguments.size() < 2) {
     throw Diagnostic(access ? access->range : SourceRange{},
-                     "at access requires a container and an index");
+                     operation + " access requires a container and an index");
   }
 
   const auto container = rewrite_expr(access->arguments[0], context.bindings);
   if (!container || container->kind != ExprNode::Kind::Identifier) {
     throw Diagnostic(access->arguments[0]->range,
-                     "at access requires a materialized Array or Slice value");
+                     operation + " access requires a materialized Array or Slice value");
   }
 
   const auto index = rewrite_expr(access->arguments[1], context.bindings);
@@ -745,7 +747,7 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     for (const auto& argument : expr->arguments) {
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
     }
-    if (expr->name == "at") {
+    if (expr->name == "at" || expr->name == "store") {
       ++safety_index;
       obligations.push_back(make_index_bounds_obligation(fn, safety_index, expr, context));
     }
@@ -901,6 +903,11 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
     return lower_model_intrinsic_call(expr->name, std::move(arguments), expr->range);
   }
 
+  if (expr->name == "store") {
+    throw Diagnostic(expr->range,
+                     "store returns a model value and must be bound with let before proof use");
+  }
+
   throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
 }
 
@@ -1000,6 +1007,59 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
   }
 }
 
+bool is_model_store_call(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Call && expr->name == "store";
+}
+
+void register_model_store_binding(const Expr& expr, const std::string& target_symbol,
+                                  const Type& type, const FunctionDecl& fn, ProofContext& context,
+                                  int& call_index, const StructTable& structs,
+                                  const FunctionTable& functions, const TheoremTable& theorems,
+                                  std::vector<ProofObligation>& obligations) {
+  if (!is_model_container_type(type) || !is_model_store_call(expr) || expr->arguments.size() != 3) {
+    throw Diagnostic(expr ? expr->range : SourceRange{},
+                     "store binding requires an Array[T] or Slice[T] target");
+  }
+
+  const auto source = materialize_expr(expr->arguments[0], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(expr->arguments[0]->range,
+                     "store source requires a materialized Array or Slice value");
+  }
+
+  const auto index = materialize_expr(expr->arguments[1], fn, context, call_index, structs,
+                                      functions, theorems, obligations);
+  const auto value = materialize_expr(expr->arguments[2], fn, context, call_index, structs,
+                                      functions, theorems, obligations);
+
+  context.symbols[target_symbol] = type;
+  const auto target_len = model_len_symbol(target_symbol);
+  const auto target_data = model_data_symbol(target_symbol);
+  const auto source_len = model_len_symbol(source->name);
+  const auto source_data = model_data_symbol(source->name);
+
+  context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[target_data] = model_data_type(type);
+
+  auto len_non_negative =
+      make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
+                  make_integer(0, SourceLocation{}), SourceLocation{});
+  context.active.push_back(
+      NamedPredicate{"model_" + sanitize_symbol(target_symbol) + "_len_non_negative",
+                     len_non_negative, SourceLocation{}, SourceRange{}});
+  add_symbol_equality_fact("store_" + target_len, target_len, source_len, expr->range,
+                           expr->location, context);
+
+  auto store_expr = make_call(
+      std::string(kModelStoreCall),
+      {make_identifier(source_data, expr->arguments[0]->range), index, value}, expr->range);
+  auto data_equality = make_binary(BinaryOp::Equal, make_identifier(target_data, expr->range),
+                                   store_expr, expr->range);
+  context.active.push_back(
+      NamedPredicate{"store_" + target_data, data_equality, expr->location, expr->range});
+}
+
 void materialize_struct_binding(const Expr& expr, const std::string& target_symbol,
                                 const FunctionDecl& fn, ProofContext& context, int& call_index,
                                 const StructTable& structs, const FunctionTable& functions,
@@ -1029,14 +1089,21 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
       continue;
     }
 
-    const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
-                                        functions, theorems, obligations);
     if (is_model_type(expected_type)) {
+      if (is_model_container_type(expected_type) && is_model_store_call(initializer.expr)) {
+        register_model_store_binding(initializer.expr, target_field, expected_type, fn, context,
+                                     call_index, structs, functions, theorems, obligations);
+        continue;
+      }
+      const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
+                                          functions, theorems, obligations);
       register_model_alias(target_field, expected_type, value, initializer.range,
                            initializer.location, context);
       continue;
     }
 
+    const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
+                                        functions, theorems, obligations);
     context.symbols[target_field] = expected_type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(target_field, initializer.range),
                                 value, initializer.range);
@@ -1414,8 +1481,20 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
       return;
     }
 
+    if (is_model_container_type(statement.type) && is_model_store_call(statement.expr)) {
+      register_model_store_binding(statement.expr, symbol, statement.type, fn, context, call_index,
+                                   structs, functions, theorems, obligations);
+      return;
+    }
+
     const auto value = materialize_expr(statement.expr, fn, context, call_index, structs, functions,
                                         theorems, obligations);
+    if (is_model_type(statement.type)) {
+      register_model_alias(symbol, statement.type, value, statement.range, statement.location,
+                           context);
+      return;
+    }
+
     context.symbols[symbol] = statement.type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(symbol, statement.location), value,
                                 statement.location);
