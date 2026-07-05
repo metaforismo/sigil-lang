@@ -153,6 +153,12 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/proof-hints")
 
 add_test(
+  NAME sigil_cli_agent_request_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_requests.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_BINARY_DIR}/agent-requests")
+
+add_test(
   NAME sigil_cli_theorem_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_theorems.sh"
           "$<TARGET_FILE:sigil>"

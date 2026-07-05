@@ -4,7 +4,8 @@
 
 ```sh
 sigil check <file.sigil> [--dump-smt] [--save-smt <dir>]
-                  [--save-proof-hints <dir>] [--show-model]
+                  [--save-proof-hints <dir>] [--save-agent-requests <dir>]
+                  [--show-model]
                   [--solver-timeout-ms <ms>] [--strict] [--no-z3]
 ```
 
@@ -43,6 +44,11 @@ Options:
   source goal, active assumptions, visible symbols, optional SMT path, embedded
   SMT-LIB, and an explicit agent contract that proposals must be rechecked by
   Sigil and Z3.
+- `--save-agent-requests <dir>`: write deterministic agent request artifacts
+  and theorem-candidate skeletons for obligations that are not proven. These
+  files are work queues for external proof-search agents; they are not proof
+  certificates, and candidate lemmas must be inserted into source and rechecked
+  with `sigil check --strict`.
 - `--show-model`: when Z3 refutes an obligation, ask Z3 for a model, render the
   scalar values as a Sigil source-level `counterexample`, and keep the raw Z3
   model under the refuted result.

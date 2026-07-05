@@ -54,6 +54,12 @@ struct ProofHintArtifact {
   std::string text;
 };
 
+struct AgentHandoffArtifact {
+  std::string label;
+  std::string file_name;
+  std::string text;
+};
+
 struct ProofOptions {
   bool use_z3 = true;
   bool include_models = false;
@@ -66,11 +72,16 @@ std::string emit_smt_lib(const ProofObligation& obligation);
 std::string emit_smt_lib(const ProofObligation& obligation, int solver_timeout_ms);
 std::string smt_file_name_for_obligation(const std::string& obligation_name);
 std::string proof_hint_file_name_for_obligation(const std::string& obligation_name);
+std::string agent_request_file_name_for_obligation(const std::string& obligation_name);
+std::string theorem_candidate_file_name_for_obligation(const std::string& obligation_name);
 std::string render_source_counterexample(const ProofObligation& obligation,
                                          const std::string& z3_model);
 std::vector<ProofHintArtifact>
 build_proof_hint_artifacts(const std::vector<ProofObligation>& obligations,
                            const std::vector<VerificationResult>& results);
+std::vector<AgentHandoffArtifact>
+build_agent_handoff_artifacts(const std::vector<ProofObligation>& obligations,
+                              const std::vector<VerificationResult>& results);
 std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,
                                                    const ProofOptions& options);
 std::vector<VerificationResult> verify_obligations(const std::vector<ProofObligation>& obligations,

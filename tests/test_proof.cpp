@@ -745,6 +745,27 @@ ensures advanced: result > x;
   expect(hint_artifacts[0].text.find("(check-sat)") != std::string::npos,
          "proof hint embeds smt query");
 
+  const auto agent_artifacts = sigil::build_agent_handoff_artifacts(hint_obligations, hint_results);
+  expect(agent_artifacts.size() == 2, "agent handoff artifacts generated");
+  expect(agent_artifacts[0].label == "agent-request", "agent request label");
+  expect(agent_artifacts[0].file_name == "fn.add_one.ensures.1.advanced.agent-request.txt",
+         "agent request file name is stable");
+  expect(agent_artifacts[0].text.find("sigil-agent-request-v1") != std::string::npos,
+         "agent request includes format marker");
+  expect(agent_artifacts[0].text.find(
+             "candidate-file: fn.add_one.ensures.1.advanced.candidate.sigil") != std::string::npos,
+         "agent request points at candidate skeleton");
+  expect(agent_artifacts[0].text.find("acceptance-gate:") != std::string::npos,
+         "agent request includes acceptance gate");
+  expect(agent_artifacts[1].label == "theorem-candidate", "theorem candidate label");
+  expect(agent_artifacts[1].file_name == "fn.add_one.ensures.1.advanced.candidate.sigil",
+         "theorem candidate file name is stable");
+  expect(agent_artifacts[1].text.find("sigil-theorem-candidate-v1") != std::string::npos,
+         "theorem candidate includes marker");
+  expect(agent_artifacts[1].text.find("module candidate_fn_add_one_ensures_1_advanced;") !=
+             std::string::npos,
+         "theorem candidate module is sanitized");
+
   const char* loop_source = R"(
 module loops;
 

@@ -180,6 +180,19 @@ future lemma search and LLM-assisted triage. They are not proof certificates:
 any proposed lemma must be represented back in Sigil or SMT and checked by the
 deterministic verifier.
 
+Use `--save-agent-requests <dir>` to write the first agentic SMT loop hook. For
+each unproven obligation, Sigil writes:
+
+- an `agent-request` artifact with the obligation, goal, assumptions, symbols,
+  SMT-LIB query, acceptance gate, and the matching candidate filename;
+- a `theorem-candidate` `.sigil` scaffold that is intentionally not accepted as
+  a proof until an agent or human replaces the placeholder theorem and wires the
+  checked lemma back into source.
+
+The compiler never consumes these artifacts as authority. They are a durable
+queue for external agents. Acceptance still means ordinary Sigil source parses,
+typechecks, and proves under the deterministic local checker and Z3.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.
