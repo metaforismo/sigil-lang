@@ -714,13 +714,14 @@ ProofObligation make_index_bounds_obligation(const FunctionDecl& fn, int safety_
 
 ProofObligation make_memory_valid_obligation(const FunctionDecl& fn, int safety_index,
                                              const Expr& access, const ProofContext& context) {
-  if (!access || access->arguments.size() != 1) {
-    throw Diagnostic(access ? access->range : SourceRange{}, "load requires a reference");
+  const auto operation = access && !access->name.empty() ? access->name : std::string("ref");
+  if (!access || access->arguments.empty()) {
+    throw Diagnostic(access ? access->range : SourceRange{}, operation + " requires a reference");
   }
 
   const auto ref = rewrite_expr(access->arguments[0], context.bindings);
   if (!ref || ref->kind != ExprNode::Kind::Identifier) {
-    throw Diagnostic(access->arguments[0]->range, "load requires a materialized Ref value");
+    throw Diagnostic(access->arguments[0]->range, operation + " requires a materialized Ref value");
   }
 
   auto goal = make_identifier(ref_valid_symbol(ref->name), access->arguments[0]->range);
@@ -747,11 +748,11 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     for (const auto& argument : expr->arguments) {
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
     }
-    if (expr->name == "at" || expr->name == "store") {
+    if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;
       obligations.push_back(make_index_bounds_obligation(fn, safety_index, expr, context));
     }
-    if (expr->name == "load") {
+    if (expr->name == "load" || (expr->name == "store" && expr->arguments.size() == 2)) {
       ++safety_index;
       obligations.push_back(make_memory_valid_obligation(fn, safety_index, expr, context));
     }
@@ -1011,12 +1012,20 @@ bool is_model_store_call(const Expr& expr) {
   return expr && expr->kind == ExprNode::Kind::Call && expr->name == "store";
 }
 
+bool is_model_container_store_call(const Expr& expr) {
+  return is_model_store_call(expr) && expr->arguments.size() == 3;
+}
+
+bool is_ref_store_call(const Expr& expr) {
+  return is_model_store_call(expr) && expr->arguments.size() == 2;
+}
+
 void register_model_store_binding(const Expr& expr, const std::string& target_symbol,
                                   const Type& type, const FunctionDecl& fn, ProofContext& context,
                                   int& call_index, const StructTable& structs,
                                   const FunctionTable& functions, const TheoremTable& theorems,
                                   std::vector<ProofObligation>& obligations) {
-  if (!is_model_container_type(type) || !is_model_store_call(expr) || expr->arguments.size() != 3) {
+  if (!is_model_container_type(type) || !is_model_container_store_call(expr)) {
     throw Diagnostic(expr ? expr->range : SourceRange{},
                      "store binding requires an Array[T] or Slice[T] target");
   }
@@ -1060,6 +1069,46 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
       NamedPredicate{"store_" + target_data, data_equality, expr->location, expr->range});
 }
 
+void register_ref_store_binding(const Expr& expr, const std::string& target_symbol,
+                                const Type& type, const FunctionDecl& fn, ProofContext& context,
+                                int& call_index, const StructTable& structs,
+                                const FunctionTable& functions, const TheoremTable& theorems,
+                                std::vector<ProofObligation>& obligations) {
+  if (!is_ref_model_type(type) || !is_ref_store_call(expr)) {
+    throw Diagnostic(expr ? expr->range : SourceRange{}, "store binding requires a Ref[T] target");
+  }
+
+  const auto source = materialize_expr(expr->arguments[0], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(expr->arguments[0]->range, "store source requires a materialized Ref value");
+  }
+
+  const auto value = materialize_expr(expr->arguments[1], fn, context, call_index, structs,
+                                      functions, theorems, obligations);
+
+  context.symbols[target_symbol] = type;
+  const auto target_addr = ref_addr_symbol(target_symbol);
+  const auto target_valid = ref_valid_symbol(target_symbol);
+  const auto target_value = ref_value_symbol(target_symbol);
+  const auto source_addr = ref_addr_symbol(source->name);
+  const auto source_valid = ref_valid_symbol(source->name);
+
+  context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
+  context.symbols[target_value] = type.arguments.front();
+
+  add_symbol_equality_fact("store_" + target_addr, target_addr, source_addr, expr->range,
+                           expr->location, context);
+  add_symbol_equality_fact("store_" + target_valid, target_valid, source_valid, expr->range,
+                           expr->location, context);
+
+  auto value_equality =
+      make_binary(BinaryOp::Equal, make_identifier(target_value, expr->range), value, expr->range);
+  context.active.push_back(
+      NamedPredicate{"store_" + target_value, value_equality, expr->location, expr->range});
+}
+
 void materialize_struct_binding(const Expr& expr, const std::string& target_symbol,
                                 const FunctionDecl& fn, ProofContext& context, int& call_index,
                                 const StructTable& structs, const FunctionTable& functions,
@@ -1090,9 +1139,15 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     }
 
     if (is_model_type(expected_type)) {
-      if (is_model_container_type(expected_type) && is_model_store_call(initializer.expr)) {
+      if (is_model_container_type(expected_type) &&
+          is_model_container_store_call(initializer.expr)) {
         register_model_store_binding(initializer.expr, target_field, expected_type, fn, context,
                                      call_index, structs, functions, theorems, obligations);
+        continue;
+      }
+      if (is_ref_model_type(expected_type) && is_ref_store_call(initializer.expr)) {
+        register_ref_store_binding(initializer.expr, target_field, expected_type, fn, context,
+                                   call_index, structs, functions, theorems, obligations);
         continue;
       }
       const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
@@ -1481,9 +1536,15 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
       return;
     }
 
-    if (is_model_container_type(statement.type) && is_model_store_call(statement.expr)) {
+    if (is_model_container_type(statement.type) && is_model_container_store_call(statement.expr)) {
       register_model_store_binding(statement.expr, symbol, statement.type, fn, context, call_index,
                                    structs, functions, theorems, obligations);
+      return;
+    }
+
+    if (is_ref_model_type(statement.type) && is_ref_store_call(statement.expr)) {
+      register_ref_store_binding(statement.expr, symbol, statement.type, fn, context, call_index,
+                                 structs, functions, theorems, obligations);
       return;
     }
 

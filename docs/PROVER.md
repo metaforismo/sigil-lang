@@ -145,10 +145,26 @@ the access site. Address predicates are purely modeled facts today:
 `same_ref(a, b)` lowers to `addr(a) == addr(b)`, and `disjoint(a, b)` lowers to
 `addr(a) != addr(b)`.
 
+`store(ref, value)` is modeled as an immutable reference update. When a store is
+bound to a model local or model container field, the planner creates component
+facts for the new reference:
+
+```sigil
+updated.addr == ref.addr
+updated.valid == ref.valid
+updated.value == value
+```
+
+The write emits a `memory_valid` safety obligation at the store site. Loading
+from the updated reference then reads `updated.value`, so the local
+weakest-precondition substitution can prove straight-line facts such as
+`load(store(ref, value)) == value` once the store has been materialized.
+
 The reference model is intentionally not a full memory semantics. It has no
-allocation, lifetime, borrow, mutation, field projection, byte layout, or
-native-code provenance model yet. Those pieces must be added before Sigil can
-claim low-level memory safety beyond explicit validity obligations.
+allocation, lifetime, borrow, aliasing, field projection, byte layout, native
+memory mutation, or native-code provenance model yet. Those pieces must be
+added before Sigil can claim low-level memory safety beyond explicit validity
+obligations.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
