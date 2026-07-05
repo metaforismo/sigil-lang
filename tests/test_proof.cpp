@@ -241,6 +241,81 @@ requires known: x >= 0;
   expect(theorem_invariant_results[3].status == sigil::VerificationStatus::Proven,
          "theorem holds fact proves struct invariant");
 
+  const char* generic_struct_source = R"(
+module generic_structs;
+
+struct Box[T] {
+  value: T;
+}
+
+fn read_i64(x: i64) -> i64
+ensures exact: result == x;
+{
+  let box: Box[i64] = Box[i64] { value: x };
+  assert field_visible: box.value == x;
+  return box.value;
+}
+
+fn read_bool(flag: bool) -> bool
+ensures exact: result == flag;
+{
+  let box: Box[bool] = Box[bool] { value: flag };
+  assert field_visible: box.value == flag;
+  return box.value;
+}
+)";
+
+  const auto generic_struct_module =
+      sigil::parse_source(generic_struct_source, "generic-structs.sigil");
+  const auto generic_struct_obligations = sigil::build_obligations(generic_struct_module);
+  expect(generic_struct_obligations.size() == 4, "generic struct assert and ensure obligations");
+  expect(generic_struct_obligations[0].name == "fn.read_i64.assert.1.field_visible",
+         "generic i64 field assertion name");
+  expect(generic_struct_obligations[2].name == "fn.read_bool.assert.1.field_visible",
+         "generic bool field assertion name");
+  const auto generic_bool_smt = sigil::emit_smt_lib(generic_struct_obligations[2]);
+  expect(generic_bool_smt.find("(declare-const box_value Bool)") != std::string::npos,
+         "generic bool field is declared as Bool");
+  const auto generic_struct_results = sigil::verify_obligations(generic_struct_obligations, false);
+  expect(generic_struct_results[0].status == sigil::VerificationStatus::Proven,
+         "generic i64 field assertion proven");
+  expect(generic_struct_results[2].status == sigil::VerificationStatus::Proven,
+         "generic bool field assertion proven");
+
+  const char* generic_invariant_source = R"(
+module generic_invariants;
+
+struct Witness[T] {
+  value: T;
+  invariant holds: value == true;
+}
+
+fn make_witness(flag: bool) -> bool
+requires flag_true: flag == true;
+ensures exact: result == true;
+{
+  let witness: Witness[bool] = Witness[bool] { value: flag };
+  return witness.value;
+}
+)";
+
+  const auto generic_invariant_module =
+      sigil::parse_source(generic_invariant_source, "generic-invariants.sigil");
+  const auto generic_invariant_obligations = sigil::build_obligations(generic_invariant_module);
+  expect(generic_invariant_obligations.size() == 2, "generic invariant and ensure obligations");
+  expect(generic_invariant_obligations[0].name ==
+             "fn.make_witness.struct.witness.invariant.1.holds",
+         "generic invariant obligation name");
+  const auto generic_invariant_smt = sigil::emit_smt_lib(generic_invariant_obligations[0]);
+  expect(generic_invariant_smt.find("(declare-const witness_value Bool)") != std::string::npos,
+         "generic invariant field is declared as Bool");
+  const auto generic_invariant_results =
+      sigil::verify_obligations(generic_invariant_obligations, false);
+  expect(generic_invariant_results[0].status == sigil::VerificationStatus::Proven,
+         "generic bool invariant proven");
+  expect(generic_invariant_results[1].status == sigil::VerificationStatus::Proven,
+         "generic bool ensure proven");
+
   const char* conditional_source = R"(
 module conditional;
 

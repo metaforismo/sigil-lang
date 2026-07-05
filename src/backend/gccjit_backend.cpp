@@ -691,9 +691,9 @@ private:
     }
     switch (expr->kind) {
     case ExprNode::Kind::Integer:
-      return Type{TypeKind::I64, "i64"};
+      return Type{TypeKind::I64, "i64", {}};
     case ExprNode::Kind::Boolean:
-      return Type{TypeKind::Bool, "bool"};
+      return Type{TypeKind::Bool, "bool", {}};
     case ExprNode::Kind::Identifier: {
       const auto found = variables.find(expr->name);
       if (found == variables.end()) {
@@ -713,8 +713,8 @@ private:
     case ExprNode::Kind::FieldAccess:
       throw LoweringError("field access is not native-lowered yet", expr->range);
     case ExprNode::Kind::Unary:
-      return expr->unary_op == UnaryOp::Not ? Type{TypeKind::Bool, "bool"}
-                                            : Type{TypeKind::I64, "i64"};
+      return expr->unary_op == UnaryOp::Not ? Type{TypeKind::Bool, "bool", {}}
+                                            : Type{TypeKind::I64, "i64", {}};
     case ExprNode::Kind::Binary:
       switch (expr->binary_op) {
       case BinaryOp::Add:
@@ -722,7 +722,7 @@ private:
       case BinaryOp::Multiply:
       case BinaryOp::Divide:
       case BinaryOp::Modulo:
-        return Type{TypeKind::I64, "i64"};
+        return Type{TypeKind::I64, "i64", {}};
       case BinaryOp::Or:
       case BinaryOp::And:
       case BinaryOp::Equal:
@@ -731,7 +731,7 @@ private:
       case BinaryOp::LessEqual:
       case BinaryOp::Greater:
       case BinaryOp::GreaterEqual:
-        return Type{TypeKind::Bool, "bool"};
+        return Type{TypeKind::Bool, "bool", {}};
       }
       break;
     case ExprNode::Kind::If:

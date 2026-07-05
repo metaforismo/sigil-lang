@@ -20,6 +20,7 @@ enum class TypeKind {
 struct Type {
   TypeKind kind = TypeKind::Unknown;
   std::string spelling;
+  std::vector<Type> arguments;
 
   static Type from_name(const std::string& name);
   std::string display() const;
@@ -29,6 +30,9 @@ struct Type {
   }
   bool is_bool() const {
     return kind == TypeKind::Bool;
+  }
+  bool has_arguments() const {
+    return !arguments.empty();
   }
 };
 
@@ -82,6 +86,7 @@ struct ExprNode {
   std::int64_t integer_value = 0;
   bool boolean_value = false;
   std::string name;
+  Type literal_type;
   UnaryOp unary_op = UnaryOp::Not;
   BinaryOp binary_op = BinaryOp::Equal;
   Expr condition;
@@ -98,6 +103,7 @@ Expr make_boolean(bool value, SourceLocation location = {});
 Expr make_identifier(std::string name, SourceRange range);
 Expr make_identifier(std::string name, SourceLocation location = {});
 Expr make_call(std::string callee, std::vector<Expr> arguments, SourceRange range);
+Expr make_struct_literal(Type type, std::vector<FieldInitializer> fields, SourceRange range);
 Expr make_struct_literal(std::string type_name, std::vector<FieldInitializer> fields,
                          SourceRange range);
 Expr make_field_access(Expr base, std::string field_name, SourceRange range);
@@ -126,8 +132,15 @@ struct FieldDecl {
   SourceRange range;
 };
 
+struct TypeParamDecl {
+  std::string name;
+  SourceLocation location;
+  SourceRange range;
+};
+
 struct StructDecl {
   std::string name;
+  std::vector<TypeParamDecl> type_params;
   std::vector<FieldDecl> fields;
   std::vector<NamedPredicate> invariants;
   SourceLocation location;

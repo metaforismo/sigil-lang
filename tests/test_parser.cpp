@@ -93,6 +93,30 @@ ensures advanced: x + 1 > x;
          "theorem return statement");
   expect(theorem_module.theorems[0].range.display() == "lemmas.sigil:2:1-7:1", "theorem range");
 
+  const auto generic_module = sigil::parse_source(
+      R"(module generics;
+struct Box[T] {
+  value: T;
+}
+
+fn unwrap(x: i64) -> i64
+{
+  let box: Box[i64] = Box[i64] { value: x };
+  return box.value;
+}
+)",
+      "generics.sigil");
+  expect(generic_module.structs[0].name == "Box", "generic struct name");
+  expect(generic_module.structs[0].type_params.size() == 1, "generic struct type param count");
+  expect(generic_module.structs[0].type_params[0].name == "T", "generic struct type param name");
+  expect(generic_module.structs[0].fields[0].type.display() == "T", "generic field type");
+  expect(generic_module.functions[0].body[0].type.display() == "Box[i64]",
+         "generic local type display");
+  expect(generic_module.functions[0].body[0].expr->literal_type.display() == "Box[i64]",
+         "generic struct literal type");
+  expect(sigil::display_expr(generic_module.functions[0].body[0].expr) == "Box[i64] { value: x }",
+         "display generic struct literal");
+
   const auto struct_value_module = sigil::parse_source(
       R"(module structs;
 struct Pair {

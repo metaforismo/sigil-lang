@@ -159,6 +159,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/theorems")
 
 add_test(
+  NAME sigil_cli_generics_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_generics.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/generics.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/generics")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -270,6 +277,12 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_structs
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/structs.sigil" --strict)
   set_tests_properties(sigil_z3_structs PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_generics
+    COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/generics.sigil" --strict)
+  set_tests_properties(sigil_z3_generics PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

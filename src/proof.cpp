@@ -393,6 +393,7 @@ struct ProofContext {
 using FunctionTable = std::unordered_map<std::string, const FunctionDecl*>;
 using TheoremTable = std::unordered_map<std::string, const FunctionDecl*>;
 using StructTable = std::unordered_map<std::string, const StructDecl*>;
+using TypeSubstitutions = std::unordered_map<std::string, Type>;
 
 constexpr std::string_view kTheoremProofPrefix = "theorem.";
 
@@ -415,6 +416,28 @@ std::string scoped_symbol(const std::string& name, const SourceLocation& locatio
 
 bool is_struct_type(const Type& type, const StructTable& structs) {
   return type.kind == TypeKind::Unknown && structs.find(type.spelling) != structs.end();
+}
+
+Type substitute_type(const Type& type, const TypeSubstitutions& substitutions) {
+  const auto found = substitutions.find(type.spelling);
+  if (type.kind == TypeKind::Unknown && found != substitutions.end()) {
+    return found->second;
+  }
+
+  auto substituted = type;
+  for (auto& argument : substituted.arguments) {
+    argument = substitute_type(argument, substitutions);
+  }
+  return substituted;
+}
+
+TypeSubstitutions build_type_substitutions(const StructDecl& decl, const Type& concrete_type) {
+  TypeSubstitutions substitutions;
+  const auto count = std::min(decl.type_params.size(), concrete_type.arguments.size());
+  for (std::size_t index = 0; index < count; ++index) {
+    substitutions[decl.type_params[index].name] = concrete_type.arguments[index];
+  }
+  return substitutions;
 }
 
 const FieldDecl* find_field(const StructDecl& decl, const std::string& name) {
@@ -773,11 +796,12 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
                                 const StructTable& structs, const FunctionTable& functions,
                                 const TheoremTable& theorems,
                                 std::vector<ProofObligation>& obligations) {
-  const auto found = structs.find(expr->name);
+  const auto found = structs.find(expr->literal_type.spelling);
   if (found == structs.end()) {
-    throw Diagnostic(expr->range, "unknown struct '" + expr->name + "'");
+    throw Diagnostic(expr->range, "unknown struct '" + expr->literal_type.spelling + "'");
   }
   const StructDecl& decl = *found->second;
+  const auto type_substitutions = build_type_substitutions(decl, expr->literal_type);
   context.struct_types[target_symbol] = decl.name;
 
   for (const auto& initializer : expr->field_initializers) {
@@ -788,7 +812,8 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     }
 
     const auto target_field = field_symbol(target_symbol, initializer.name);
-    if (is_struct_type(field->type, structs) &&
+    const auto expected_type = substitute_type(field->type, type_substitutions);
+    if (is_struct_type(expected_type, structs) &&
         initializer.expr->kind == ExprNode::Kind::StructLiteral) {
       materialize_struct_binding(initializer.expr, target_field, fn, context, call_index, structs,
                                  functions, theorems, obligations);
@@ -797,7 +822,7 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
 
     const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
                                         functions, theorems, obligations);
-    context.symbols[target_field] = field->type;
+    context.symbols[target_field] = expected_type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(target_field, initializer.range),
                                 value, initializer.range);
     context.active.push_back(
@@ -1322,7 +1347,7 @@ std::vector<FunctionDecl> build_theorem_proof_functions(const Module& module) {
     FunctionDecl fn;
     fn.name = std::string(kTheoremProofPrefix) + theorem.name;
     fn.params = theorem.params;
-    fn.return_type = Type{TypeKind::Bool, "bool"};
+    fn.return_type = Type{TypeKind::Bool, "bool", {}};
     fn.preconditions = theorem.preconditions;
     fn.ensures = theorem.ensures;
     fn.ensures.push_back(theorem_holds_predicate(theorem));
@@ -1360,9 +1385,11 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
   }
 
   const StructDecl& decl = *structs.at(type.spelling);
+  const auto type_substitutions = build_type_substitutions(decl, type);
   context.struct_types[symbol] = decl.name;
   for (const auto& field : decl.fields) {
-    register_struct_value(field_symbol(symbol, field.name), field.type, structs, context);
+    register_struct_value(field_symbol(symbol, field.name),
+                          substitute_type(field.type, type_substitutions), structs, context);
   }
 }
 
@@ -1442,7 +1469,7 @@ std::string emit_smt_lib(const ProofObligation& obligation, int solver_timeout_m
   collect_identifiers(obligation.goal.expr, identifiers);
   for (const auto& identifier : identifiers) {
     if (symbols.find(identifier) == symbols.end()) {
-      symbols[identifier] = Type{TypeKind::Unknown, "i64"};
+      symbols[identifier] = Type{TypeKind::Unknown, "i64", {}};
     }
   }
 

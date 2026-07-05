@@ -102,6 +102,9 @@ StructDecl Parser::parse_struct() {
   decl.location = start.location;
   decl.range = start.range;
   decl.name = consume(TokenKind::Identifier, "expected struct name").text;
+  if (check(TokenKind::LBracket)) {
+    decl.type_params = parse_type_params();
+  }
   consume(TokenKind::LBrace, "expected '{' after struct name");
   while (!check(TokenKind::RBrace)) {
     if (is_at_end()) {
@@ -325,9 +328,44 @@ std::vector<ParamDecl> Parser::parse_params() {
   return params;
 }
 
+std::vector<TypeParamDecl> Parser::parse_type_params() {
+  consume(TokenKind::LBracket, "expected '[' before type parameters");
+  std::vector<TypeParamDecl> params;
+  if (check(TokenKind::RBracket)) {
+    throw Diagnostic(peek().range, "expected at least one type parameter");
+  }
+  do {
+    const auto name = consume(TokenKind::Identifier, "expected type parameter name");
+    TypeParamDecl param;
+    param.name = name.text;
+    param.location = name.location;
+    param.range = name.range;
+    params.push_back(std::move(param));
+  } while (match(TokenKind::Comma));
+  consume(TokenKind::RBracket, "expected ']' after type parameters");
+  return params;
+}
+
 Type Parser::parse_type() {
   const auto token = consume(TokenKind::Identifier, "expected type name");
-  return Type::from_name(token.text);
+  auto type = Type::from_name(token.text);
+  if (check(TokenKind::LBracket)) {
+    type.arguments = parse_type_arguments();
+  }
+  return type;
+}
+
+std::vector<Type> Parser::parse_type_arguments() {
+  consume(TokenKind::LBracket, "expected '[' before type arguments");
+  std::vector<Type> arguments;
+  if (check(TokenKind::RBracket)) {
+    throw Diagnostic(peek().range, "expected at least one type argument");
+  }
+  do {
+    arguments.push_back(parse_type());
+  } while (match(TokenKind::Comma));
+  consume(TokenKind::RBracket, "expected ']' after type arguments");
+  return arguments;
 }
 
 Expr Parser::parse_expr() {
@@ -478,6 +516,10 @@ Expr Parser::parse_primary() {
   }
   if (match(TokenKind::Identifier)) {
     const auto token = previous();
+    auto literal_type = Type::from_name(token.text);
+    if (check(TokenKind::LBracket)) {
+      literal_type.arguments = parse_type_arguments();
+    }
     if (check(TokenKind::LBrace) && current_ + 2 < tokens_.size() &&
         tokens_[current_ + 1].kind == TokenKind::Identifier &&
         tokens_[current_ + 2].kind == TokenKind::Colon) {
@@ -497,7 +539,11 @@ Expr Parser::parse_primary() {
         } while (match(TokenKind::Comma));
       }
       const auto end = consume(TokenKind::RBrace, "expected '}' after struct literal");
-      return make_struct_literal(token.text, std::move(fields), span(token.range, end.range));
+      return make_struct_literal(std::move(literal_type), std::move(fields),
+                                 span(token.range, end.range));
+    }
+    if (literal_type.has_arguments()) {
+      throw Diagnostic(token.range, "generic type expression must be a struct literal");
     }
     return make_identifier(token.text, token.range);
   }

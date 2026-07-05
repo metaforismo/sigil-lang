@@ -1,0 +1,54 @@
+module generics;
+
+theorem non_negative_i64 for (x: i64)
+requires known: x >= 0;
+ensures preserved: x >= 0;
+{
+  return x >= 0;
+}
+
+struct Box[T] {
+  value: T;
+}
+
+struct PairBox[A, B] {
+  left: A;
+  right: B;
+}
+
+struct NonNegativeBox[T] {
+  value: T;
+
+  invariant value_non_negative: non_negative_i64(value);
+}
+
+fn unwrap_i64(x: i64) -> i64
+ensures exact: result == x;
+{
+  let box: Box[i64] = Box[i64] { value: x };
+  assert field_visible: box.value == x;
+  return box.value;
+}
+
+fn unwrap_bool(flag: bool) -> bool
+ensures exact: result == flag;
+{
+  let box: Box[bool] = Box[bool] { value: flag };
+  assert field_visible: box.value == flag;
+  return box.value;
+}
+
+fn pair_left(x: i64, flag: bool) -> i64
+ensures exact: result == x;
+{
+  let pair: PairBox[i64, bool] = PairBox[i64, bool] { left: x, right: flag };
+  return pair.left;
+}
+
+fn make_non_negative(x: i64) -> i64
+requires known: x >= 0;
+ensures preserved: result >= 0;
+{
+  let box: NonNegativeBox[i64] = NonNegativeBox[i64] { value: x };
+  return box.value;
+}

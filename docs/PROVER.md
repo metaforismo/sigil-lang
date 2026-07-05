@@ -81,6 +81,14 @@ constructed struct and then assumes the instantiated invariant for later proof
 steps. Mutation-site preservation is not modeled yet because field assignment is
 not part of the language.
 
+Generic struct values use the same field-materialization path after concrete
+type arguments are substituted. A binding such as
+`let box: Box[bool] = Box[bool] { value: flag };` declares `box.value` as an
+SMT `Bool`, while `Box[i64]` declares the same field name pattern as `Int` in
+that obligation's symbol table. Generic invariants are emitted only after this
+substitution step, so theorem calls and arithmetic predicates see the concrete
+field types selected by the struct literal.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 
