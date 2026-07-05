@@ -43,8 +43,10 @@ int main() {
                           "expected '}' after function body", 4, 1);
   expect_parse_diagnostic("module broken;\nstruct Missing {\n  value: i64;\n",
                           "expected '}' after struct body", 4, 1);
+  expect_parse_diagnostic("module broken;\ncontainer Missing {\n  value: i64;\n",
+                          "expected '}' after container body", 4, 1);
   expect_parse_diagnostic("module broken;\nwat\n",
-                          "expected struct, theorem, or function declaration", 2, 1,
+                          "expected struct, container, theorem, or function declaration", 2, 1,
                           "parse-error.sigil:2:1-3");
   expect_parse_diagnostic(
       "module broken;\nfn nope(x: i64) -> i64 {\n  while x < 10 {\n  }\n  return x;\n}\n",
@@ -116,6 +118,24 @@ fn unwrap(x: i64) -> i64
          "generic struct literal type");
   expect(sigil::display_expr(generic_module.functions[0].body[0].expr) == "Box[i64] { value: x }",
          "display generic struct literal");
+
+  const auto container_module = sigil::parse_source(
+      R"(module containers;
+container Window[T] {
+  items: Slice[T];
+  index: i64;
+
+  invariant index_within_items: index < len(items);
+}
+)",
+      "containers.sigil");
+  expect(container_module.structs.size() == 1, "container stored with aggregate declarations");
+  expect(container_module.structs[0].is_container, "container declaration flag");
+  expect(container_module.structs[0].name == "Window", "container name");
+  expect(container_module.structs[0].type_params.size() == 1, "generic container type param");
+  expect(container_module.structs[0].fields[0].type.display() == "Slice[T]",
+         "container model field type");
+  expect(container_module.structs[0].invariants.size() == 1, "container invariant count");
 
   const auto struct_value_module = sigil::parse_source(
       R"(module structs;

@@ -140,6 +140,7 @@ struct TypeParamDecl {
 
 struct StructDecl {
   std::string name;
+  bool is_container = false;
   std::vector<TypeParamDecl> type_params;
   std::vector<FieldDecl> fields;
   std::vector<NamedPredicate> invariants;

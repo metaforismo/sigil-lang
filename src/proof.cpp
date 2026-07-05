@@ -428,6 +428,10 @@ bool is_ref_model_type(const Type& type) {
   return type.kind == TypeKind::Unknown && type.spelling == "Ref" && type.arguments.size() == 1;
 }
 
+bool is_model_type(const Type& type) {
+  return is_model_container_type(type) || is_ref_model_type(type);
+}
+
 Type model_data_type(const Type& container_type) {
   return Type{TypeKind::Unknown, "__sigil_model_data", {container_type.arguments.front()}};
 }
@@ -485,6 +489,10 @@ const FieldDecl* find_field(const StructDecl& decl, const std::string& name) {
 
 std::string field_symbol(const std::string& base_symbol, const std::string& field_name) {
   return base_symbol + "." + field_name;
+}
+
+const char* aggregate_proof_label(const StructDecl& decl) {
+  return decl.is_container ? "container" : "struct";
 }
 
 Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
@@ -921,8 +929,9 @@ void append_struct_invariant_obligations(const Expr& expr, const std::string& ta
                                  obligations);
 
     ProofObligation obligation;
-    obligation.name = proof_subject_name(fn) + ".struct." + target_symbol + ".invariant." +
-                      std::to_string(invariant_index) + "." + invariant.name;
+    obligation.name = proof_subject_name(fn) + "." + aggregate_proof_label(decl) + "." +
+                      target_symbol + ".invariant." + std::to_string(invariant_index) + "." +
+                      invariant.name;
     obligation.location = expr->location;
     obligation.range = expr->range;
     obligation.assumptions = context.active;
@@ -932,6 +941,62 @@ void append_struct_invariant_obligations(const Expr& expr, const std::string& ta
 
     goal.name = "struct_" + target_symbol + "_" + invariant.name;
     context.active.push_back(std::move(goal));
+  }
+}
+
+void add_symbol_equality_fact(const std::string& name, const std::string& target_symbol,
+                              const std::string& source_symbol, const SourceRange& range,
+                              const SourceLocation& location, ProofContext& context) {
+  auto equality = make_binary(BinaryOp::Equal, make_identifier(target_symbol, range),
+                              make_identifier(source_symbol, range), range);
+  context.active.push_back(NamedPredicate{name, equality, location, range});
+}
+
+void register_model_alias(const std::string& target_symbol, const Type& type,
+                          const Expr& source_expr, const SourceRange& range,
+                          const SourceLocation& location, ProofContext& context) {
+  if (!source_expr || source_expr->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(range, "model field initializer could not be materialized");
+  }
+  context.symbols[target_symbol] = type;
+
+  if (is_model_container_type(type)) {
+    const auto target_len = model_len_symbol(target_symbol);
+    const auto target_data = model_data_symbol(target_symbol);
+    const auto source_len = model_len_symbol(source_expr->name);
+    const auto source_data = model_data_symbol(source_expr->name);
+    context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[target_data] = model_data_type(type);
+
+    auto len_non_negative =
+        make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
+                    make_integer(0, SourceLocation{}), SourceLocation{});
+    context.active.push_back(
+        NamedPredicate{"model_" + sanitize_symbol(target_symbol) + "_len_non_negative",
+                       len_non_negative, SourceLocation{}, SourceRange{}});
+    add_symbol_equality_fact("field_" + target_len, target_len, source_len, range, location,
+                             context);
+    add_symbol_equality_fact("field_" + target_data, target_data, source_data, range, location,
+                             context);
+    return;
+  }
+
+  if (is_ref_model_type(type)) {
+    const auto target_addr = ref_addr_symbol(target_symbol);
+    const auto target_valid = ref_valid_symbol(target_symbol);
+    const auto target_value = ref_value_symbol(target_symbol);
+    const auto source_addr = ref_addr_symbol(source_expr->name);
+    const auto source_valid = ref_valid_symbol(source_expr->name);
+    const auto source_value = ref_value_symbol(source_expr->name);
+    context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
+    context.symbols[target_value] = type.arguments.front();
+    add_symbol_equality_fact("field_" + target_addr, target_addr, source_addr, range, location,
+                             context);
+    add_symbol_equality_fact("field_" + target_valid, target_valid, source_valid, range, location,
+                             context);
+    add_symbol_equality_fact("field_" + target_value, target_value, source_value, range, location,
+                             context);
   }
 }
 
@@ -966,6 +1031,12 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
 
     const auto value = materialize_expr(initializer.expr, fn, context, call_index, structs,
                                         functions, theorems, obligations);
+    if (is_model_type(expected_type)) {
+      register_model_alias(target_field, expected_type, value, initializer.range,
+                           initializer.location, context);
+      continue;
+    }
+
     context.symbols[target_field] = expected_type;
     auto equality = make_binary(BinaryOp::Equal, make_identifier(target_field, initializer.range),
                                 value, initializer.range);

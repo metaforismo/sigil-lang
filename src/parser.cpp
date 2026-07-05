@@ -40,7 +40,7 @@ Module Parser::parse_module() {
   module.range = span(module_token.range, module_semicolon.range);
 
   while (!is_at_end()) {
-    if (check(TokenKind::Struct)) {
+    if (check(TokenKind::Struct) || check(TokenKind::Container)) {
       module.structs.push_back(parse_struct());
       module.range.end = module.structs.back().range.end;
     } else if (check(TokenKind::Fn)) {
@@ -50,7 +50,8 @@ Module Parser::parse_module() {
       module.theorems.push_back(parse_theorem());
       module.range.end = module.theorems.back().range.end;
     } else {
-      throw Diagnostic(peek().range, "expected struct, theorem, or function declaration");
+      throw Diagnostic(peek().range,
+                       "expected struct, container, theorem, or function declaration");
     }
   }
   return module;
@@ -97,18 +98,22 @@ Token Parser::consume(TokenKind kind, const std::string& message) {
 }
 
 StructDecl Parser::parse_struct() {
-  const auto start = consume(TokenKind::Struct, "expected 'struct'");
+  const bool is_container = check(TokenKind::Container);
+  const auto start = is_container ? consume(TokenKind::Container, "expected 'container'")
+                                  : consume(TokenKind::Struct, "expected 'struct'");
+  const std::string declaration_kind = is_container ? "container" : "struct";
   StructDecl decl;
+  decl.is_container = is_container;
   decl.location = start.location;
   decl.range = start.range;
-  decl.name = consume(TokenKind::Identifier, "expected struct name").text;
+  decl.name = consume(TokenKind::Identifier, "expected " + declaration_kind + " name").text;
   if (check(TokenKind::LBracket)) {
     decl.type_params = parse_type_params();
   }
-  consume(TokenKind::LBrace, "expected '{' after struct name");
+  consume(TokenKind::LBrace, "expected '{' after " + declaration_kind + " name");
   while (!check(TokenKind::RBrace)) {
     if (is_at_end()) {
-      throw Diagnostic(peek().range, "expected '}' after struct body");
+      throw Diagnostic(peek().range, "expected '}' after " + declaration_kind + " body");
     }
     if (check(TokenKind::Invariant)) {
       decl.invariants.push_back(parse_named_predicate(TokenKind::Invariant));
@@ -116,7 +121,7 @@ StructDecl Parser::parse_struct() {
       decl.fields.push_back(parse_field());
     }
   }
-  const auto end = consume(TokenKind::RBrace, "expected '}' after struct body");
+  const auto end = consume(TokenKind::RBrace, "expected '}' after " + declaration_kind + " body");
   decl.range = span(start.range, end.range);
   return decl;
 }

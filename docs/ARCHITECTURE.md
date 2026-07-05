@@ -19,32 +19,32 @@ source
 
 The lexer and parser are hand-written C++17. This keeps the grammar easy to
 change while the language is still being designed. Parser output is a typed AST
-containing structs, fields, invariants, proof-only theorems, functions,
-contracts, and body statements. Struct declarations may carry generic type
-parameters, and type nodes preserve nested type arguments such as
-`PairBox[i64, bool]`, `Slice[i64]`, `Array[bool]`, and `Ref[i64]`. Numeric
-literal tokens are converted to exact `i64` AST values at parse time, and
-out-of-range literals are rejected with source ranges before type checking or
-proof generation. Unterminated struct and statement blocks report the missing
-closing brace at EOF instead of falling through to a generic field or statement
-diagnostic.
+containing structs, containers, fields, invariants, proof-only theorems,
+functions, contracts, and body statements. Struct and container declarations may
+carry generic type parameters, and type nodes preserve nested type arguments
+such as `PairBox[i64, bool]`, `Slice[i64]`, `Array[bool]`, and `Ref[i64]`.
+Numeric literal tokens are converted to exact `i64` AST values at parse time,
+and out-of-range literals are rejected with source ranges before type checking
+or proof generation. Unterminated aggregate and statement blocks report the
+missing closing brace at EOF instead of falling through to a generic field or
+statement diagnostic.
 
 ## Static Validation
 
 Before proof obligations are emitted, Sigil validates the current scalar type
 system:
 
-- top-level struct, theorem, and function declarations must have unique names
-  and cannot reuse built-in type names;
-- generic struct type parameter names must be unique and cannot reuse built-in
-  type names;
+- top-level struct, container, theorem, and function declarations must have
+  unique names and cannot reuse built-in type names;
+- generic aggregate type parameter names must be unique and cannot reuse
+  built-in type names;
 - `Array`, `Slice`, and `Ref` are reserved proof model type names;
 - `Array[T]`, `Slice[T]`, and `Ref[T]` must have one scalar element type
   argument;
 - parameter, local, and field names cannot reuse built-in type names or the
   compiler-generated `result` symbol;
-- non-generic struct invariant expressions must be `bool`;
-- generic struct invariant expressions are validated at each concrete
+- non-generic aggregate invariant expressions must be `bool`;
+- generic aggregate invariant expressions are validated at each concrete
   instantiation after type parameters are substituted;
 - function preconditions and postconditions must be `bool`;
 - function contract labels must be unique across `requires`, `ensures`, and
@@ -62,19 +62,21 @@ system:
   intrinsics; `len` returns `i64`, and `at` returns the model element type;
 - `is_valid(ref)`, `addr(ref)`, `load(ref)`, `same_ref(left, right)`, and
   `disjoint(left, right)` are built-in reference model intrinsics;
-- struct literals must use valid generic arity, initialize declared fields
-  exactly once, and field access must target a field on a struct-typed
+- aggregate literals must use valid generic arity, initialize declared fields
+  exactly once, and field access must target a field on an aggregate-typed
   expression;
+- container fields may use `Array[T]`, `Slice[T]`, or `Ref[T]` proof models;
+  ordinary struct fields still reject model types;
 - local `let` bindings cannot shadow parameters or earlier locals;
-- struct-typed locals must be initialized directly from struct literals;
+- aggregate-typed locals must be initialized directly from aggregate literals;
 - assignments can only target declared local bindings and must preserve the
   local type; struct assignment is rejected until aggregate copy semantics are
   defined;
 - conditional expression conditions must be `bool`, and branch types must match;
 - conditional expressions and equality comparisons cannot produce or compare
   aggregate values until merge and structural equality semantics are defined;
-- recursive by-value struct fields are rejected until the language has explicit
-  reference or pointer types;
+- recursive by-value aggregate fields are rejected until the language has
+  explicit reference or pointer types;
 - statement-level `if` conditions must be `bool`, and branch-local bindings do
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
@@ -108,11 +110,14 @@ The planner walks each function and builds proof obligations:
 - theorem call expressions in proof contexts emit call-site obligations for
   theorem `requires` predicates and add explicit theorem `ensures` plus
   implicit `holds` as reusable assumptions;
-- struct literal bindings materialize scalar field facts, with generic type
+- aggregate literal bindings materialize scalar field facts, with generic type
   parameters substituted by concrete type arguments before symbols are recorded;
 - field accesses resolve to those field symbols;
 - struct literal construction emits invariant obligations for every invariant
   declared on the constructed type after generic substitution;
+- container literal construction emits the same invariant obligations, and
+  model fields are materialized by component facts such as `value.len`,
+  `value.data`, `value.addr`, `value.valid`, and `value.value`;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
@@ -224,9 +229,10 @@ remain proof-layer constructs. The native backend erases proof-only constructs
 after static validation and proof generation, ignores theorem declarations, and
 currently skips functions containing loops. Struct values and field access are
 also skipped by native lowering until layout and ABI rules are explicit.
-Division and modulo are deliberately not lowered yet, because Sigil still needs
-an explicit source-level semantics that is known to match the native backend for
-negative operands and zero divisors.
+Container values are likewise proof-layer aggregate models and have no native
+layout yet. Division and modulo are deliberately not lowered yet, because Sigil
+still needs an explicit source-level semantics that is known to match the native
+backend for negative operands and zero divisors.
 
 The project intentionally builds without `libgccjit`, because many development
 machines and CI images do not ship it by default.

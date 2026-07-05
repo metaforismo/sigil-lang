@@ -69,6 +69,14 @@ struct PairBox[A, B] {
   right: B;
 }
 
+container Window[T] {
+  items: Slice[T];
+  index: i64;
+
+  invariant index_non_negative: index >= 0;
+  invariant index_within_items: index < len(items);
+}
+
 theorem nonzero_stays_nonzero for (x: i64)
 requires nonzero: x != 0;
 ensures preserved: x != 0;
@@ -201,6 +209,16 @@ requires in_bounds: index >= 0 && index < len(flags);
 ensures exact: result == at(flags, index);
 {
   return at(flags, index);
+}
+
+fn read_window(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  let window: Window[i64] = Window[i64] { items: xs, index: index };
+  assert len_visible: len(window.items) == len(xs);
+  assert index_visible: window.index == index;
+  return at(xs, index);
 }
 
 fn read_ref(ptr: Ref[i64]) -> i64
@@ -395,6 +413,14 @@ struct Window {
 )",
                     "field 'Window.items' cannot use model type 'Slice[i64]' until aggregate model "
                     "fields are supported");
+
+  expect_diagnostic(R"(
+module bad;
+container Bad {
+  item: Slice[void];
+}
+)",
+                    "type argument for 'Slice[void]' cannot use void as a type argument");
 
   expect_diagnostic(R"(
 module bad;
@@ -674,7 +700,7 @@ fn field_on_scalar(x: i64) -> i64
   return x.left;
 }
 )",
-                    "field access requires a struct value, found i64");
+                    "field access requires an aggregate value, found i64");
 
   expect_diagnostic(R"(
 module bad;

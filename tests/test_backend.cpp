@@ -438,6 +438,36 @@ fn read_left(x: i64) -> i64
   expect(!struct_native_result.available, "struct native unavailable without backend");
 #endif
 
+  const char* container_native_source = R"(
+module native;
+
+container Box {
+  value: i64;
+}
+
+fn unwrap(x: i64) -> i64
+{
+  let box: Box = Box { value: x };
+  return box.value;
+}
+)";
+
+  const auto container_native_module =
+      sigil::parse_source(container_native_source, "container-native.sigil");
+  sigil::validate_module(container_native_module);
+  const auto container_native_result = sigil::compile_module_with_gccjit(container_native_module);
+#if SIGIL_HAVE_GCCJIT
+  expect(container_native_result.available, "container native result sees backend");
+  expect(!container_native_result.compiled, "container native function is not compiled");
+  expect(container_native_result.functions.size() == 1, "container native function report count");
+  expect(!container_native_result.functions[0].lowered, "container native function skipped");
+  expect(container_native_result.functions[0].detail.find("unsupported native type 'Box'") !=
+             std::string::npos,
+         "container native skip explains unsupported type");
+#else
+  expect(!container_native_result.available, "container native unavailable without backend");
+#endif
+
   const char* loop_source = R"(
 module native;
 

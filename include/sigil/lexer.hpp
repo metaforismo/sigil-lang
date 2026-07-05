@@ -40,6 +40,7 @@ enum class TokenKind {
   OrOr,
   Module,
   Struct,
+  Container,
   Invariant,
   Fn,
   Theorem,

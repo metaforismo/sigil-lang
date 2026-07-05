@@ -240,6 +240,26 @@ std::size_t count_struct_invariants(const sigil::Module& module) {
   return invariant_count;
 }
 
+std::size_t count_struct_declarations(const sigil::Module& module) {
+  std::size_t count = 0;
+  for (const auto& decl : module.structs) {
+    if (!decl.is_container) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+std::size_t count_container_declarations(const sigil::Module& module) {
+  std::size_t count = 0;
+  for (const auto& decl : module.structs) {
+    if (decl.is_container) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 struct VerificationSummary {
   bool has_failure = false;
   bool has_unknown = false;
@@ -352,10 +372,11 @@ int check_command(const std::vector<std::string>& args) {
   }
 
   std::cout << "module " << module.name << "\n";
-  std::cout << "  structs: " << module.structs.size() << "\n";
+  std::cout << "  structs: " << count_struct_declarations(module) << "\n";
+  std::cout << "  containers: " << count_container_declarations(module) << "\n";
   std::cout << "  theorems: " << module.theorems.size() << "\n";
   std::cout << "  functions: " << module.functions.size() << "\n";
-  std::cout << "  registered struct invariants: " << count_struct_invariants(module) << "\n";
+  std::cout << "  registered aggregate invariants: " << count_struct_invariants(module) << "\n";
   std::cout << "  proof obligations: " << results.size() << "\n";
 
   const auto summary = summarize_verification_results(results);
@@ -423,10 +444,11 @@ int agent_check_command(const std::vector<std::string>& args) {
   const bool rejected = surface_rejected || proofs_rejected(summary, strict);
 
   std::cout << "agent-candidate " << module.name << "\n";
-  std::cout << "  structs: " << module.structs.size() << "\n";
+  std::cout << "  structs: " << count_struct_declarations(module) << "\n";
+  std::cout << "  containers: " << count_container_declarations(module) << "\n";
   std::cout << "  theorems: " << module.theorems.size() << "\n";
   std::cout << "  functions: " << module.functions.size() << "\n";
-  std::cout << "  registered struct invariants: " << count_struct_invariants(module) << "\n";
+  std::cout << "  registered aggregate invariants: " << count_struct_invariants(module) << "\n";
   std::cout << "  proof obligations: " << results.size() << "\n";
   std::cout << "  status: " << (rejected ? "rejected" : "accepted") << "\n";
   if (surface_rejected) {

@@ -89,6 +89,20 @@ that obligation's symbol table. Generic invariants are emitted only after this
 substitution step, so theorem calls and arithmetic predicates see the concrete
 field types selected by the struct literal.
 
+Container declarations reuse the aggregate proof path, but allow model fields.
+For a binding such as:
+
+```sigil
+let window: Window[i64] = Window[i64] { items: xs, index: index };
+```
+
+the scalar field creates `window.index == index`, while the slice field creates
+component facts such as `window.items.len == xs.len` and
+`window.items.data == xs.data`. Container invariant obligations use the
+`fn.name.container.local.invariant.N.label` artifact namespace, making them
+distinct from ordinary struct invariant obligations while still following the
+same deterministic proof flow.
+
 Array and slice model parameters are materialized as two proof symbols:
 `value.len` and `value.data`. The length symbol is an `Int`; the data symbol is
 an SMT array from integer indices to the concrete element sort. For example,
