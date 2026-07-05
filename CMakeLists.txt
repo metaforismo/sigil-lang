@@ -220,6 +220,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/ref-aliases")
 
 add_test(
+  NAME sigil_cli_ref_epochs_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ref_epochs.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_epochs.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/ref-epochs")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -381,6 +388,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_aliases.sigil")
   set_tests_properties(sigil_z3_ref_aliases PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_ref_epochs
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ref_epochs_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_epochs.sigil")
+  set_tests_properties(sigil_z3_ref_epochs PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

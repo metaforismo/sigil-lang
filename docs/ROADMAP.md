@@ -14,10 +14,10 @@ also exists through `sigil agent-check`, and first-class proof-level container
 declarations can now carry array, slice, and reference model fields. Array and
 slice models also have immutable proof-level `store` facts, and reference
 models have immutable proof-level store facts for validity-preserving value
-updates plus same-snapshot alias consistency for valid references. The next
-compiler work is to turn those abstract facts into a real memory model:
-ownership, allocation, lifetime, provenance, memory-state tokens, and
-function-boundary semantics.
+updates, explicit proof-level epoch tokens, and same-snapshot alias consistency
+for valid references. The next compiler work is to turn those abstract facts
+into a real memory model: ownership, allocation, lifetime, provenance, richer
+state transitions, and function-boundary semantics.
 
 ## Completed
 
@@ -76,6 +76,7 @@ function-boundary semantics.
 - [x] Add modeled address, same-reference, and disjoint-reference predicates.
 - [x] Add immutable proof-level `store` facts for reference models.
 - [x] Add same-snapshot alias consistency for valid same-address references.
+- [x] Add proof-level reference epoch tokens and store epoch advancement.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -174,8 +175,9 @@ function-boundary semantics.
 - [x] Add proof-level `Ref[T]` validity, address, and load facts.
 - [x] Add proof-level `Ref[T]` store facts that preserve validity and address.
 - [x] Add same-snapshot alias consistency for valid same-address references.
-- [ ] Model allocation, lifetime, ownership, borrowing, alias propagation, and
-      memory-state tokens as explicit proof facts.
+- [x] Add proof-level reference epoch tokens and store epoch advancement.
+- [ ] Model allocation, lifetime, ownership, borrowing, and alias propagation as
+      explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
 - [ ] Connect source-level memory facts to native IR and binary-proof artifacts.

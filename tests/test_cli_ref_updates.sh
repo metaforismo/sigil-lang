@@ -32,13 +32,16 @@ grep "(set-option :timeout 250)" "$write_store" >/dev/null
 grep "(declare-const updated_addr Int)" "$write_store" >/dev/null
 grep "(declare-const updated_valid Bool)" "$write_store" >/dev/null
 grep "(declare-const updated_value Int)" "$write_store" >/dev/null
+grep "(declare-const ptr_epoch Int)" "$write_store" >/dev/null
+grep "(declare-const updated_epoch Int)" "$write_store" >/dev/null
 grep "(assert (= updated_addr ptr_addr))" "$write_store" >/dev/null
 grep "(assert (= updated_valid ptr_valid))" "$write_store" >/dev/null
 grep "(assert (= updated_value value))" "$write_store" >/dev/null
-if grep "(= ptr_value updated_value)" "$write_store" >/dev/null; then
+grep "(assert (= updated_epoch (+ ptr_epoch 1)))" "$write_store" >/dev/null
+if grep "(assert (= ptr_value updated_value))" "$write_store" >/dev/null; then
   exit 1
 fi
-if grep "(= updated_value ptr_value)" "$write_store" >/dev/null; then
+if grep "(assert (= updated_value ptr_value))" "$write_store" >/dev/null; then
   exit 1
 fi
 grep "(assert (= result updated_value))" "$write_store" >/dev/null

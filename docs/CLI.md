@@ -33,10 +33,10 @@ emit SMT array `select` terms for `at(model, index)`. Array and slice
 length, emit write-bounds obligations, and emit SMT array `store` terms for the
 updated backing data.
 Reference model loads add `memory_valid` safety obligations and expose modeled
-address, validity, and value symbols in SMT. Reference
+address, validity, epoch, and value symbols in SMT. Reference
 `store(ref, value)` updates are immutable proof facts: they require write-site
-validity, preserve modeled address and validity, and update the modeled
-referenced value.
+validity, preserve modeled address and validity, update the modeled referenced
+value, and advance the modeled epoch.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -107,6 +107,12 @@ Example with proof-level reference alias consistency:
 
 ```sh
 sigil check examples/ref_aliases.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-alias-smt
+```
+
+Example with proof-level reference epoch facts:
+
+```sh
+sigil check examples/ref_epochs.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-epoch-smt
 ```
 
 Exit codes:

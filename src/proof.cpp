@@ -399,6 +399,7 @@ using TypeSubstitutions = std::unordered_map<std::string, Type>;
 constexpr std::string_view kTheoremProofPrefix = "theorem.";
 constexpr std::string_view kModelSelectCall = "__sigil_select";
 constexpr std::string_view kModelStoreCall = "__sigil_store";
+constexpr std::string_view kEntryEpochSymbol = "__sigil_entry_epoch";
 
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
   return fn.name.rfind(std::string(kTheoremProofPrefix), 0) == 0;
@@ -471,6 +472,10 @@ std::string ref_value_symbol(const std::string& symbol) {
   return symbol + ".value";
 }
 
+std::string ref_epoch_symbol(const std::string& symbol) {
+  return symbol + ".epoch";
+}
+
 Type substitute_type(const Type& type, const TypeSubstitutions& substitutions) {
   const auto found = substitutions.find(type.spelling);
   if (type.kind == TypeKind::Unknown && found != substitutions.end()) {
@@ -534,6 +539,10 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   if (name == "addr" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
     return make_identifier(ref_addr_symbol(arguments[0]->name), range);
+  }
+  if (name == "epoch" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(ref_epoch_symbol(arguments[0]->name), range);
   }
   if ((name == "same_ref" || name == "disjoint") && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -907,8 +916,8 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   }
 
   if (expr->name == "len" || expr->name == "at" || expr->name == "load" ||
-      expr->name == "is_valid" || expr->name == "addr" || expr->name == "same_ref" ||
-      expr->name == "disjoint") {
+      expr->name == "is_valid" || expr->name == "addr" || expr->name == "epoch" ||
+      expr->name == "same_ref" || expr->name == "disjoint") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -996,6 +1005,10 @@ void add_ref_alias_consistency_facts(const std::string& symbol, const Type& type
     auto current_invalid =
         make_unary(UnaryOp::Not, make_identifier(ref_valid_symbol(symbol), range), range);
     auto either_invalid = make_binary(BinaryOp::Or, existing_invalid, current_invalid, range);
+    auto epochs_differ =
+        make_binary(BinaryOp::NotEqual, make_identifier(ref_epoch_symbol(existing), range),
+                    make_identifier(ref_epoch_symbol(symbol), range), range);
+    auto invalid_or_epoch = make_binary(BinaryOp::Or, either_invalid, epochs_differ, range);
     auto addresses_differ =
         make_binary(BinaryOp::NotEqual, make_identifier(ref_addr_symbol(existing), range),
                     make_identifier(ref_addr_symbol(symbol), range), range);
@@ -1003,7 +1016,7 @@ void add_ref_alias_consistency_facts(const std::string& symbol, const Type& type
         make_binary(BinaryOp::Equal, make_identifier(ref_value_symbol(existing), range),
                     make_identifier(ref_value_symbol(symbol), range), range);
     auto address_or_value = make_binary(BinaryOp::Or, addresses_differ, values_match, range);
-    auto consistency = make_binary(BinaryOp::Or, either_invalid, address_or_value, range);
+    auto consistency = make_binary(BinaryOp::Or, invalid_or_epoch, address_or_value, range);
 
     context.active.push_back(
         NamedPredicate{"ref_alias_" + sanitize_symbol(existing) + "_" + sanitize_symbol(symbol),
@@ -1044,18 +1057,23 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto target_addr = ref_addr_symbol(target_symbol);
     const auto target_valid = ref_valid_symbol(target_symbol);
     const auto target_value = ref_value_symbol(target_symbol);
+    const auto target_epoch = ref_epoch_symbol(target_symbol);
     const auto source_addr = ref_addr_symbol(source_expr->name);
     const auto source_valid = ref_valid_symbol(source_expr->name);
     const auto source_value = ref_value_symbol(source_expr->name);
+    const auto source_epoch = ref_epoch_symbol(source_expr->name);
     context.ref_symbols[target_symbol] = type;
     context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_value] = type.arguments.front();
+    context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("field_" + target_addr, target_addr, source_addr, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_valid, target_valid, source_valid, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_value, target_value, source_value, range, location,
+                             context);
+    add_symbol_equality_fact("field_" + target_epoch, target_epoch, source_epoch, range, location,
                              context);
     add_ref_alias_consistency_facts(target_symbol, type, range, location, context);
   }
@@ -1144,12 +1162,16 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   const auto target_addr = ref_addr_symbol(target_symbol);
   const auto target_valid = ref_valid_symbol(target_symbol);
   const auto target_value = ref_value_symbol(target_symbol);
+  const auto target_epoch = ref_epoch_symbol(target_symbol);
   const auto source_addr = ref_addr_symbol(source->name);
   const auto source_valid = ref_valid_symbol(source->name);
+  const auto source_epoch = ref_epoch_symbol(source->name);
 
+  context.ref_symbols[target_symbol] = type;
   context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
   context.symbols[target_value] = type.arguments.front();
+  context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
 
   add_symbol_equality_fact("store_" + target_addr, target_addr, source_addr, expr->range,
                            expr->location, context);
@@ -1160,6 +1182,14 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
       make_binary(BinaryOp::Equal, make_identifier(target_value, expr->range), value, expr->range);
   context.active.push_back(
       NamedPredicate{"store_" + target_value, value_equality, expr->location, expr->range});
+
+  auto next_epoch = make_binary(BinaryOp::Add, make_identifier(source_epoch, expr->range),
+                                make_integer(1, expr->range), expr->range);
+  auto epoch_equality = make_binary(BinaryOp::Equal, make_identifier(target_epoch, expr->range),
+                                    next_epoch, expr->range);
+  context.active.push_back(
+      NamedPredicate{"store_" + target_epoch, epoch_equality, expr->location, expr->range});
+  add_ref_alias_consistency_facts(target_symbol, type, expr->range, expr->location, context);
 }
 
 void materialize_struct_binding(const Expr& expr, const std::string& target_symbol,
@@ -1806,6 +1836,11 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[ref_value_symbol(symbol)] = type.arguments.front();
+    const auto epoch_symbol = ref_epoch_symbol(symbol);
+    context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
+    add_symbol_equality_fact("ref_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,
+                             std::string(kEntryEpochSymbol), SourceRange{}, SourceLocation{},
+                             context);
     add_ref_alias_consistency_facts(symbol, type, SourceRange{}, SourceLocation{}, context);
     return;
   }

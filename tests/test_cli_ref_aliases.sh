@@ -28,12 +28,20 @@ test -f "$bool_exact"
 grep "(set-option :timeout 250)" "$i64_exact" >/dev/null
 grep "(declare-const left_value Int)" "$i64_exact" >/dev/null
 grep "(declare-const right_value Int)" "$i64_exact" >/dev/null
-grep "(assert (or (or (not left_valid) (not right_valid)) (or (distinct left_addr right_addr) (= left_value right_value))))" "$i64_exact" >/dev/null
+grep "(declare-const left_epoch Int)" "$i64_exact" >/dev/null
+grep "(declare-const right_epoch Int)" "$i64_exact" >/dev/null
+grep "(assert (= left_epoch __sigil_entry_epoch))" "$i64_exact" >/dev/null
+grep "(assert (= right_epoch __sigil_entry_epoch))" "$i64_exact" >/dev/null
+grep "(assert (or (or (or (not left_valid) (not right_valid)) (distinct left_epoch right_epoch)) (or (distinct left_addr right_addr) (= left_value right_value))))" "$i64_exact" >/dev/null
 grep "(assert (= result left_value))" "$i64_exact" >/dev/null
 grep "(assert (not (= result right_value)))" "$i64_exact" >/dev/null
 
 grep "(declare-const left_value Bool)" "$bool_exact" >/dev/null
 grep "(declare-const right_value Bool)" "$bool_exact" >/dev/null
-grep "(assert (or (or (not left_valid) (not right_valid)) (or (distinct left_addr right_addr) (= left_value right_value))))" "$bool_exact" >/dev/null
+grep "(declare-const left_epoch Int)" "$bool_exact" >/dev/null
+grep "(declare-const right_epoch Int)" "$bool_exact" >/dev/null
+grep "(assert (= left_epoch __sigil_entry_epoch))" "$bool_exact" >/dev/null
+grep "(assert (= right_epoch __sigil_entry_epoch))" "$bool_exact" >/dev/null
+grep "(assert (or (or (or (not left_valid) (not right_valid)) (distinct left_epoch right_epoch)) (or (distinct left_addr right_addr) (= left_value right_value))))" "$bool_exact" >/dev/null
 grep "(assert (= result left_value))" "$bool_exact" >/dev/null
 grep "(assert (not (= result right_value)))" "$bool_exact" >/dev/null
