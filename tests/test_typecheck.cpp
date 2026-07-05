@@ -203,6 +203,19 @@ ensures exact: result == at(flags, index);
   return at(flags, index);
 }
 
+fn read_ref(ptr: Ref[i64]) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn refs_are_disjoint(left: Ref[i64], right: Ref[i64]) -> bool
+ensures exact: result == disjoint(left, right);
+{
+  return disjoint(left, right);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -382,6 +395,34 @@ struct Window {
 )",
                     "field 'Window.items' cannot use model type 'Slice[i64]' until aggregate model "
                     "fields are supported");
+
+  expect_diagnostic(R"(
+module bad;
+fn load_scalar(x: i64) -> i64
+{
+  return load(x);
+}
+)",
+                    "load expects a Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_ref_element(ptr: Ref[Slice[i64]]) -> i64
+{
+  return 0;
+}
+)",
+                    "model type 'Ref' element type cannot be aggregate type 'Slice[i64]'");
+
+  expect_diagnostic(R"(
+module bad;
+fn ref_as_return(ptr: Ref[i64]) -> Ref[i64]
+{
+  return ptr;
+}
+)",
+                    "function 'ref_as_return' return type cannot use aggregate type 'Ref[i64]' "
+                    "until aggregate returns are supported");
 
   expect_diagnostic(R"(
 module bad;

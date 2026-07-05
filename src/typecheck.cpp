@@ -42,7 +42,8 @@ bool is_reserved_value_name(const std::string& name) {
 }
 
 bool is_builtin_type_name(const std::string& name) {
-  return name == "i64" || name == "bool" || name == "void" || name == "Array" || name == "Slice";
+  return name == "i64" || name == "bool" || name == "void" || name == "Array" || name == "Slice" ||
+         name == "Ref";
 }
 
 bool is_declared_struct_type(const Type& type, const StructTable& structs) {
@@ -57,13 +58,29 @@ bool is_model_container_type(const Type& type) {
   return type.kind == TypeKind::Unknown && is_model_container_name(type.spelling);
 }
 
+bool is_ref_model_name(const std::string& name) {
+  return name == "Ref";
+}
+
+bool is_ref_model_type(const Type& type) {
+  return type.kind == TypeKind::Unknown && is_ref_model_name(type.spelling);
+}
+
+bool is_model_type_name(const std::string& name) {
+  return is_model_container_name(name) || is_ref_model_name(name);
+}
+
+bool is_model_type(const Type& type) {
+  return is_model_container_type(type) || is_ref_model_type(type);
+}
+
 bool is_type_parameter_reference(const Type& type, const TypeParamSet& type_params) {
   return type.kind == TypeKind::Unknown && type.arguments.empty() &&
          type_params.find(type.spelling) != type_params.end();
 }
 
 bool is_aggregate_type(const Type& type, const StructTable& structs) {
-  return is_declared_struct_type(type, structs) || is_model_container_type(type);
+  return is_declared_struct_type(type, structs) || is_model_type(type);
 }
 
 bool is_scalar_type(const Type& type) {
@@ -96,7 +113,7 @@ void require_known_type(const Type& type, const StructTable& structs,
     return;
   }
 
-  if (is_model_container_name(type.spelling)) {
+  if (is_model_type_name(type.spelling)) {
     const auto actual = type.arguments.size();
     if (actual != 1) {
       throw Diagnostic(range, "model type '" + type.spelling +
@@ -236,6 +253,11 @@ CallableContext with_theorem_calls_allowed(const CallableContext& context) {
                          context.current_is_theorem, true};
 }
 
+bool is_model_intrinsic_name(const std::string& name) {
+  return name == "len" || name == "at" || name == "load" || name == "is_valid" || name == "addr" ||
+         name == "same_ref" || name == "disjoint";
+}
+
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
                 const CallableContext& context);
 
@@ -267,6 +289,56 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
     }
     require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64, "at index");
     return container.arguments.front();
+  }
+
+  if (expr->name == "load") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range,
+                       "load expects 1 argument, got " + std::to_string(expr->arguments.size()));
+    }
+    const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_ref_model_type(ref)) {
+      throw Diagnostic(expr->arguments[0]->range, "load expects a Ref[T] argument");
+    }
+    return ref.arguments.front();
+  }
+
+  if (expr->name == "is_valid") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, "is_valid expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_ref_model_type(ref)) {
+      throw Diagnostic(expr->arguments[0]->range, "is_valid expects a Ref[T] argument");
+    }
+    return Type{TypeKind::Bool, "bool", {}};
+  }
+
+  if (expr->name == "addr") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range,
+                       "addr expects 1 argument, got " + std::to_string(expr->arguments.size()));
+    }
+    const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_ref_model_type(ref)) {
+      throw Diagnostic(expr->arguments[0]->range, "addr expects a Ref[T] argument");
+    }
+    return Type{TypeKind::I64, "i64", {}};
+  }
+
+  if (expr->name == "same_ref" || expr->name == "disjoint") {
+    if (expr->arguments.size() != 2) {
+      throw Diagnostic(expr->range, expr->name + " expects 2 arguments, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    for (const auto& argument : expr->arguments) {
+      const auto ref = infer_expr(argument, symbols, structs, context);
+      if (!is_ref_model_type(ref)) {
+        throw Diagnostic(argument->range, expr->name + " expects Ref[T] arguments");
+      }
+    }
+    return Type{TypeKind::Bool, "bool", {}};
   }
 
   throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
@@ -344,7 +416,7 @@ Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const StructT
   if (found == context.functions.end()) {
     const auto theorem_found = context.theorems.find(expr->name);
     if (theorem_found == context.theorems.end()) {
-      if (expr->name == "len" || expr->name == "at") {
+      if (is_model_intrinsic_name(expr->name)) {
         return infer_model_intrinsic_expr(expr, symbols, structs, context);
       }
       throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
@@ -728,7 +800,7 @@ void validate_struct(const StructDecl& decl, const StructTable& structs,
       throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
                                         "' cannot use void as a value type");
     }
-    if (is_model_container_type(field.type)) {
+    if (is_model_type(field.type)) {
       throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
                                         "' cannot use model type '" + field.type.display() +
                                         "' until aggregate model fields are supported");

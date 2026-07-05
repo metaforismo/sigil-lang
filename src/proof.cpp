@@ -424,6 +424,10 @@ bool is_model_container_type(const Type& type) {
          type.arguments.size() == 1;
 }
 
+bool is_ref_model_type(const Type& type) {
+  return type.kind == TypeKind::Unknown && type.spelling == "Ref" && type.arguments.size() == 1;
+}
+
 Type model_data_type(const Type& container_type) {
   return Type{TypeKind::Unknown, "__sigil_model_data", {container_type.arguments.front()}};
 }
@@ -434,6 +438,18 @@ std::string model_len_symbol(const std::string& symbol) {
 
 std::string model_data_symbol(const std::string& symbol) {
   return symbol + ".data";
+}
+
+std::string ref_addr_symbol(const std::string& symbol) {
+  return symbol + ".addr";
+}
+
+std::string ref_valid_symbol(const std::string& symbol) {
+  return symbol + ".valid";
+}
+
+std::string ref_value_symbol(const std::string& symbol) {
+  return symbol + ".value";
 }
 
 Type substitute_type(const Type& type, const TypeSubstitutions& substitutions) {
@@ -483,6 +499,25 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
         std::string(kModelSelectCall),
         {make_identifier(model_data_symbol(arguments[0]->name), arguments[0]->range), arguments[1]},
         range);
+  }
+  if (name == "load" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(ref_value_symbol(arguments[0]->name), range);
+  }
+  if (name == "is_valid" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(ref_valid_symbol(arguments[0]->name), range);
+  }
+  if (name == "addr" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(ref_addr_symbol(arguments[0]->name), range);
+  }
+  if ((name == "same_ref" || name == "disjoint") && arguments.size() == 2 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
+      arguments[1]->kind == ExprNode::Kind::Identifier) {
+    auto lhs = make_identifier(ref_addr_symbol(arguments[0]->name), arguments[0]->range);
+    auto rhs = make_identifier(ref_addr_symbol(arguments[1]->name), arguments[1]->range);
+    return make_binary(name == "same_ref" ? BinaryOp::Equal : BinaryOp::NotEqual, lhs, rhs, range);
   }
   return make_call(std::move(name), std::move(arguments), range);
 }
@@ -667,6 +702,30 @@ ProofObligation make_index_bounds_obligation(const FunctionDecl& fn, int safety_
   return obligation;
 }
 
+ProofObligation make_memory_valid_obligation(const FunctionDecl& fn, int safety_index,
+                                             const Expr& access, const ProofContext& context) {
+  if (!access || access->arguments.size() != 1) {
+    throw Diagnostic(access ? access->range : SourceRange{}, "load requires a reference");
+  }
+
+  const auto ref = rewrite_expr(access->arguments[0], context.bindings);
+  if (!ref || ref->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(access->arguments[0]->range, "load requires a materialized Ref value");
+  }
+
+  auto goal = make_identifier(ref_valid_symbol(ref->name), access->arguments[0]->range);
+
+  ProofObligation obligation;
+  obligation.name =
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".memory_valid";
+  obligation.location = access->arguments[0]->location;
+  obligation.range = access->range;
+  obligation.assumptions = context.active;
+  obligation.goal = NamedPredicate{"memory_valid", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& fn,
                                           const ProofContext& context, int& safety_index,
                                           std::vector<ProofObligation>& obligations) {
@@ -681,6 +740,10 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     if (expr->name == "at") {
       ++safety_index;
       obligations.push_back(make_index_bounds_obligation(fn, safety_index, expr, context));
+    }
+    if (expr->name == "load") {
+      ++safety_index;
+      obligations.push_back(make_memory_valid_obligation(fn, safety_index, expr, context));
     }
     return;
   }
@@ -818,7 +881,9 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
                                           structs, functions, theorems, obligations);
   }
 
-  if (expr->name == "len" || expr->name == "at") {
+  if (expr->name == "len" || expr->name == "at" || expr->name == "load" ||
+      expr->name == "is_valid" || expr->name == "addr" || expr->name == "same_ref" ||
+      expr->name == "disjoint") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1469,6 +1534,13 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.active.push_back(
         NamedPredicate{"model_" + sanitize_symbol(symbol) + "_len_non_negative", len_non_negative,
                        SourceLocation{}, SourceRange{}});
+    return;
+  }
+
+  if (is_ref_model_type(type)) {
+    context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
+    context.symbols[ref_value_symbol(symbol)] = type.arguments.front();
     return;
   }
 

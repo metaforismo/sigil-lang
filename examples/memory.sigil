@@ -1,0 +1,27 @@
+module memory;
+
+fn read_ref(ptr: Ref[i64]) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn read_flag(ptr: Ref[bool]) -> bool
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn refs_are_disjoint(left: Ref[i64], right: Ref[i64]) -> bool
+ensures exact: result == disjoint(left, right);
+{
+  return disjoint(left, right);
+}
+
+fn refs_are_same(left: Ref[i64], right: Ref[i64]) -> bool
+ensures exact: result == same_ref(left, right);
+{
+  return same_ref(left, right);
+}

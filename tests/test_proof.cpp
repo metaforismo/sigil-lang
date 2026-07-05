@@ -369,6 +369,66 @@ ensures exact: result == at(flags, index);
   expect(slice_model_results[5].status == sigil::VerificationStatus::Proven,
          "array ensure proven from return binding");
 
+  const char* ref_model_source = R"(
+module ref_model;
+
+fn read_ref(ptr: Ref[i64]) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn read_flag(ptr: Ref[bool]) -> bool
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn refs_are_disjoint(left: Ref[i64], right: Ref[i64]) -> bool
+ensures exact: result == disjoint(left, right);
+{
+  return disjoint(left, right);
+}
+)";
+
+  const auto ref_model_module = sigil::parse_source(ref_model_source, "ref-model.sigil");
+  const auto ref_model_obligations = sigil::build_obligations(ref_model_module);
+  expect(ref_model_obligations.size() == 7, "ref model obligations");
+  expect(ref_model_obligations[0].name == "fn.read_ref.safety.1.memory_valid",
+         "ref return load validity obligation");
+  expect(ref_model_obligations[1].name == "fn.read_ref.safety.2.memory_valid",
+         "ref ensure load validity obligation");
+  expect(ref_model_obligations[2].name == "fn.read_ref.ensures.1.exact", "ref ensure obligation");
+  expect(ref_model_obligations[6].name == "fn.refs_are_disjoint.ensures.1.exact",
+         "ref disjoint ensure obligation");
+  const auto ref_safety_smt = sigil::emit_smt_lib(ref_model_obligations[0]);
+  expect(ref_safety_smt.find("(declare-const ptr_valid Bool)") != std::string::npos,
+         "ref validity is declared");
+  expect(ref_safety_smt.find("(declare-const ptr_value Int)") != std::string::npos,
+         "ref i64 value is declared");
+  expect(ref_safety_smt.find("(assert (not ptr_valid))") != std::string::npos,
+         "ref validity goal is emitted");
+  const auto bool_ref_ensure_smt = sigil::emit_smt_lib(ref_model_obligations[5]);
+  expect(bool_ref_ensure_smt.find("(declare-const ptr_value Bool)") != std::string::npos,
+         "ref bool value is declared");
+  const auto disjoint_smt = sigil::emit_smt_lib(ref_model_obligations[6]);
+  expect(disjoint_smt.find("(declare-const left_addr Int)") != std::string::npos,
+         "left ref address is declared");
+  expect(disjoint_smt.find("(assert (= result (distinct left_addr right_addr)))") !=
+             std::string::npos,
+         "disjoint lowers to address inequality");
+  const auto ref_model_results = sigil::verify_obligations(ref_model_obligations, false);
+  expect(ref_model_results[0].status == sigil::VerificationStatus::Proven,
+         "ref load validity proven from precondition");
+  expect(ref_model_results[2].status == sigil::VerificationStatus::Proven,
+         "ref ensure proven from return binding");
+  expect(ref_model_results[3].status == sigil::VerificationStatus::Proven,
+         "bool ref load validity proven from precondition");
+  expect(ref_model_results[6].status == sigil::VerificationStatus::Proven,
+         "ref disjoint ensure proven from return binding");
+
   const char* conditional_source = R"(
 module conditional;
 
