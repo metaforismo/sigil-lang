@@ -15,7 +15,8 @@ declarations can now carry array, slice, and reference model fields. Array and
 slice models also have immutable proof-level `store` facts, and reference
 models have immutable proof-level store facts for validity-preserving value
 updates, explicit proof-level epoch tokens, and same-snapshot alias consistency
-for valid references. The next compiler work is to turn those abstract facts
+for valid references. Reference stores now also have an explicit proof-level
+write-permission gate. The next compiler work is to turn those abstract facts
 into a real memory model: ownership, allocation, lifetime, provenance, richer
 state transitions, and function-boundary semantics.
 
@@ -77,6 +78,7 @@ state transitions, and function-boundary semantics.
 - [x] Add immutable proof-level `store` facts for reference models.
 - [x] Add same-snapshot alias consistency for valid same-address references.
 - [x] Add proof-level reference epoch tokens and store epoch advancement.
+- [x] Add proof-level reference write-permission facts and store write gates.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -132,6 +134,7 @@ state transitions, and function-boundary semantics.
 - [x] Add immutable array and slice update facts through SMT array `store`.
 - [x] Add reference address and disjointness facts.
 - [x] Add same-snapshot alias consistency for valid references.
+- [x] Add reference write-permission facts and store write gates.
 - [ ] Add array and slice alias facts beyond modeled reference addresses.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
@@ -176,6 +179,7 @@ state transitions, and function-boundary semantics.
 - [x] Add proof-level `Ref[T]` store facts that preserve validity and address.
 - [x] Add same-snapshot alias consistency for valid same-address references.
 - [x] Add proof-level reference epoch tokens and store epoch advancement.
+- [x] Add proof-level reference write-permission facts and store write gates.
 - [ ] Model allocation, lifetime, ownership, borrowing, and alias propagation as
       explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and

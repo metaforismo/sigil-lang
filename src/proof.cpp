@@ -472,6 +472,10 @@ std::string ref_value_symbol(const std::string& symbol) {
   return symbol + ".value";
 }
 
+std::string ref_write_symbol(const std::string& symbol) {
+  return symbol + ".write";
+}
+
 std::string ref_epoch_symbol(const std::string& symbol) {
   return symbol + ".epoch";
 }
@@ -543,6 +547,10 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   if (name == "epoch" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
     return make_identifier(ref_epoch_symbol(arguments[0]->name), range);
+  }
+  if (name == "can_write" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(ref_write_symbol(arguments[0]->name), range);
   }
   if ((name == "same_ref" || name == "disjoint") && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -760,6 +768,31 @@ ProofObligation make_memory_valid_obligation(const FunctionDecl& fn, int safety_
   return obligation;
 }
 
+ProofObligation make_memory_write_obligation(const FunctionDecl& fn, int safety_index,
+                                             const Expr& access, const ProofContext& context) {
+  const auto operation = access && !access->name.empty() ? access->name : std::string("ref");
+  if (!access || access->arguments.empty()) {
+    throw Diagnostic(access ? access->range : SourceRange{}, operation + " requires a reference");
+  }
+
+  const auto ref = rewrite_expr(access->arguments[0], context.bindings);
+  if (!ref || ref->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(access->arguments[0]->range, operation + " requires a materialized Ref value");
+  }
+
+  auto goal = make_identifier(ref_write_symbol(ref->name), access->arguments[0]->range);
+
+  ProofObligation obligation;
+  obligation.name =
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".memory_write";
+  obligation.location = access->arguments[0]->location;
+  obligation.range = access->range;
+  obligation.assumptions = context.active;
+  obligation.goal = NamedPredicate{"memory_write", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& fn,
                                           const ProofContext& context, int& safety_index,
                                           std::vector<ProofObligation>& obligations) {
@@ -778,6 +811,10 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     if (expr->name == "load" || (expr->name == "store" && expr->arguments.size() == 2)) {
       ++safety_index;
       obligations.push_back(make_memory_valid_obligation(fn, safety_index, expr, context));
+    }
+    if (expr->name == "store" && expr->arguments.size() == 2) {
+      ++safety_index;
+      obligations.push_back(make_memory_write_obligation(fn, safety_index, expr, context));
     }
     return;
   }
@@ -917,7 +954,7 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
 
   if (expr->name == "len" || expr->name == "at" || expr->name == "load" ||
       expr->name == "is_valid" || expr->name == "addr" || expr->name == "epoch" ||
-      expr->name == "same_ref" || expr->name == "disjoint") {
+      expr->name == "can_write" || expr->name == "same_ref" || expr->name == "disjoint") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1057,21 +1094,26 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto target_addr = ref_addr_symbol(target_symbol);
     const auto target_valid = ref_valid_symbol(target_symbol);
     const auto target_value = ref_value_symbol(target_symbol);
+    const auto target_write = ref_write_symbol(target_symbol);
     const auto target_epoch = ref_epoch_symbol(target_symbol);
     const auto source_addr = ref_addr_symbol(source_expr->name);
     const auto source_valid = ref_valid_symbol(source_expr->name);
     const auto source_value = ref_value_symbol(source_expr->name);
+    const auto source_write = ref_write_symbol(source_expr->name);
     const auto source_epoch = ref_epoch_symbol(source_expr->name);
     context.ref_symbols[target_symbol] = type;
     context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_value] = type.arguments.front();
+    context.symbols[target_write] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("field_" + target_addr, target_addr, source_addr, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_valid, target_valid, source_valid, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_value, target_value, source_value, range, location,
+                             context);
+    add_symbol_equality_fact("field_" + target_write, target_write, source_write, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_epoch, target_epoch, source_epoch, range, location,
                              context);
@@ -1162,20 +1204,25 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   const auto target_addr = ref_addr_symbol(target_symbol);
   const auto target_valid = ref_valid_symbol(target_symbol);
   const auto target_value = ref_value_symbol(target_symbol);
+  const auto target_write = ref_write_symbol(target_symbol);
   const auto target_epoch = ref_epoch_symbol(target_symbol);
   const auto source_addr = ref_addr_symbol(source->name);
   const auto source_valid = ref_valid_symbol(source->name);
+  const auto source_write = ref_write_symbol(source->name);
   const auto source_epoch = ref_epoch_symbol(source->name);
 
   context.ref_symbols[target_symbol] = type;
   context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
   context.symbols[target_value] = type.arguments.front();
+  context.symbols[target_write] = Type{TypeKind::Bool, "bool", {}};
   context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
 
   add_symbol_equality_fact("store_" + target_addr, target_addr, source_addr, expr->range,
                            expr->location, context);
   add_symbol_equality_fact("store_" + target_valid, target_valid, source_valid, expr->range,
+                           expr->location, context);
+  add_symbol_equality_fact("store_" + target_write, target_write, source_write, expr->range,
                            expr->location, context);
 
   auto value_equality =
@@ -1836,6 +1883,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[ref_value_symbol(symbol)] = type.arguments.front();
+    context.symbols[ref_write_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     const auto epoch_symbol = ref_epoch_symbol(symbol);
     context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("ref_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,

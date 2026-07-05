@@ -238,12 +238,13 @@ ensures exact: result == load(ptr);
 }
 ```
 
-`is_valid(ptr)` exposes the modeled validity bit. `load(ptr)` returns the
-referenced scalar value and emits a `memory_valid` safety obligation proving
-that `is_valid(ptr)` holds at the access site. `addr(ptr)` returns the modeled
-integer address. `epoch(ptr)` returns the modeled memory-snapshot token for the
-reference. Function-entry references share an internal entry epoch, and model
-aliases preserve the source epoch. `same_ref(left, right)` and
+`is_valid(ptr)` exposes the modeled validity bit. `can_write(ptr)` exposes the
+modeled write-permission bit. `load(ptr)` returns the referenced scalar value
+and emits a `memory_valid` safety obligation proving that `is_valid(ptr)` holds
+at the access site. `addr(ptr)` returns the modeled integer address.
+`epoch(ptr)` returns the modeled memory-snapshot token for the reference.
+Function-entry references share an internal entry epoch, and model aliases
+preserve the source epoch and write permission. `same_ref(left, right)` and
 `disjoint(left, right)` compare modeled addresses.
 
 When two `Ref[T]` snapshots with the same element type are both valid and have
@@ -263,17 +264,20 @@ ensures exact: result == load(right);
 ```
 
 `store(ptr, value)` is an immutable proof-level reference update. It returns
-the same `Ref[T]` model type, emits a `memory_valid` obligation for the write
-site, preserves the modeled address and validity, and replaces the modeled
-referenced value. It also advances the modeled epoch by one:
+the same `Ref[T]` model type, emits `memory_valid` and `memory_write`
+obligations for the write site, preserves the modeled address, validity, and
+write permission, and replaces the modeled referenced value. It also advances
+the modeled epoch by one:
 
 ```sigil
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[i64] = store(ptr, value);
   assert still_valid: is_valid(updated);
+  assert still_writable: can_write(updated);
   assert same_address: addr(updated) == addr(ptr);
   assert next_epoch: epoch(updated) == epoch(ptr) + 1;
   return load(updated);
@@ -283,12 +287,14 @@ ensures exact: result == value;
 As with array and slice stores, reference stores must currently be materialized
 in a `let` binding or container field before later facts use them.
 
-`Ref[T]` is a verification scaffold. It does not allocate memory, track
-lifetimes, prove pointer provenance, propagate stores through old aliases, model
-ownership, mutate native memory, or define a native layout. Epochs are proof
-tokens for snapshots, not a runtime memory representation. Like array and slice
-models, reference values are allowed as function and theorem parameters and as
-container model fields, but not as ordinary struct fields or return values yet.
+`Ref[T]` is a verification scaffold. The `can_write` bit is an explicit proof
+fact for write-site checks; it is not yet an ownership or borrowing discipline.
+Sigil does not allocate memory, track lifetimes, prove pointer provenance,
+propagate stores through old aliases, model ownership, mutate native memory, or
+define a native layout. Epochs are proof tokens for snapshots, not a runtime
+memory representation. Like array and slice models, reference values are
+allowed as function and theorem parameters and as container model fields, but
+not as ordinary struct fields or return values yet.
 
 ## Function Contracts
 
@@ -430,8 +436,9 @@ Supported expression forms:
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
 - model intrinsics: `len(xs)`, `at(xs, index)`,
   `store(xs, index, value)`
-- reference intrinsics: `is_valid(ptr)`, `load(ptr)`, `addr(ptr)`,
-  `store(ptr, value)`, `same_ref(left, right)`, `disjoint(left, right)`
+- reference intrinsics: `is_valid(ptr)`, `can_write(ptr)`, `load(ptr)`,
+  `addr(ptr)`, `store(ptr, value)`, `same_ref(left, right)`,
+  `disjoint(left, right)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`

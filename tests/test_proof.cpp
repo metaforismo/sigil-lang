@@ -554,16 +554,19 @@ module ref_updates;
 
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[i64] = store(ptr, value);
   assert still_valid: is_valid(updated);
+  assert still_writable: can_write(updated);
   assert same_address: addr(updated) == addr(ptr);
   return load(updated);
 }
 
 fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[bool] = store(ptr, value);
@@ -573,26 +576,41 @@ ensures exact: result == value;
 
   const auto ref_update_module = sigil::parse_source(ref_update_source, "ref-updates.sigil");
   const auto ref_update_obligations = sigil::build_obligations(ref_update_module);
-  expect(ref_update_obligations.size() == 8, "ref store obligations");
+  expect(ref_update_obligations.size() == 11, "ref store obligations");
   expect(ref_update_obligations[0].name == "fn.write_then_load.safety.1.memory_valid",
          "ref store write validity obligation");
-  expect(ref_update_obligations[1].name == "fn.write_then_load.assert.1.still_valid",
+  expect(ref_update_obligations[1].name == "fn.write_then_load.safety.2.memory_write",
+         "ref store write permission obligation");
+  expect(ref_update_obligations[2].name == "fn.write_then_load.assert.1.still_valid",
          "ref store validity assertion obligation");
-  expect(ref_update_obligations[2].name == "fn.write_then_load.assert.2.same_address",
+  expect(ref_update_obligations[3].name == "fn.write_then_load.assert.2.still_writable",
+         "ref store write permission assertion obligation");
+  expect(ref_update_obligations[4].name == "fn.write_then_load.assert.3.same_address",
          "ref store address assertion obligation");
-  expect(ref_update_obligations[3].name == "fn.write_then_load.safety.2.memory_valid",
+  expect(ref_update_obligations[5].name == "fn.write_then_load.safety.3.memory_valid",
          "ref store read validity obligation");
-  expect(ref_update_obligations[4].name == "fn.write_then_load.ensures.1.exact",
+  expect(ref_update_obligations[6].name == "fn.write_then_load.ensures.1.exact",
          "ref store scalar ensure obligation");
-  expect(ref_update_obligations[7].name == "fn.update_flag_ref.ensures.1.exact",
+  expect(ref_update_obligations[10].name == "fn.update_flag_ref.ensures.1.exact",
          "ref store bool ensure obligation");
-  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[4]);
+  const auto ref_write_smt = sigil::emit_smt_lib(ref_update_obligations[1]);
+  expect(ref_write_smt.find("(declare-const ptr_write Bool)") != std::string::npos,
+         "ref store write permission is declared");
+  expect(ref_write_smt.find("(assert ptr_write)") != std::string::npos,
+         "ref store write permission precondition is active");
+  expect(ref_write_smt.find("(assert (not ptr_write))") != std::string::npos,
+         "ref store write permission goal is emitted");
+  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[6]);
   expect(ref_store_smt.find("(declare-const updated_addr Int)") != std::string::npos,
          "ref store updated address is declared");
   expect(ref_store_smt.find("(declare-const updated_valid Bool)") != std::string::npos,
          "ref store updated validity is declared");
   expect(ref_store_smt.find("(declare-const updated_value Int)") != std::string::npos,
          "ref store updated value is declared");
+  expect(ref_store_smt.find("(declare-const ptr_write Bool)") != std::string::npos,
+         "ref store source write permission is declared");
+  expect(ref_store_smt.find("(declare-const updated_write Bool)") != std::string::npos,
+         "ref store updated write permission is declared");
   expect(ref_store_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
          "ref store source epoch is declared");
   expect(ref_store_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
@@ -601,6 +619,8 @@ ensures exact: result == value;
          "ref store preserves address");
   expect(ref_store_smt.find("(assert (= updated_valid ptr_valid))") != std::string::npos,
          "ref store preserves validity");
+  expect(ref_store_smt.find("(assert (= updated_write ptr_write))") != std::string::npos,
+         "ref store preserves write permission");
   expect(ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
          "ref store updates value");
   expect(ref_store_smt.find("(assert (= updated_epoch (+ ptr_epoch 1)))") != std::string::npos,
@@ -612,7 +632,7 @@ ensures exact: result == value;
          "ref store read binds result to updated value");
   expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "ref store ensure checks write then load");
-  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[7]);
+  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[10]);
   expect(bool_ref_store_smt.find("(declare-const updated_value Bool)") != std::string::npos,
          "ref store bool value is declared");
   expect(bool_ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
@@ -621,13 +641,73 @@ ensures exact: result == value;
   expect(ref_update_results[0].status == sigil::VerificationStatus::Proven,
          "ref store validity proven from precondition");
   expect(ref_update_results[1].status == sigil::VerificationStatus::Proven,
-         "ref store validity assertion proven locally");
+         "ref store write permission proven from precondition");
   expect(ref_update_results[2].status == sigil::VerificationStatus::Proven,
-         "ref store address assertion proven locally");
+         "ref store validity assertion proven locally");
   expect(ref_update_results[3].status == sigil::VerificationStatus::Proven,
-         "ref store read validity proven locally");
+         "ref store write permission assertion proven locally");
   expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
+         "ref store address assertion proven locally");
+  expect(ref_update_results[5].status == sigil::VerificationStatus::Proven,
+         "ref store read validity proven locally");
+  expect(ref_update_results[6].status == sigil::VerificationStatus::Proven,
          "ref store write then load proven locally");
+
+  const char* ref_permission_source = R"(
+module ref_permissions;
+
+fn expose_write_permission(ptr: Ref[i64]) -> bool
+ensures exact: result == can_write(ptr);
+{
+  return can_write(ptr);
+}
+
+fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == can_write(ptr);
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return can_write(updated);
+}
+)";
+
+  const auto ref_permission_module =
+      sigil::parse_source(ref_permission_source, "ref-permissions.sigil");
+  const auto ref_permission_obligations = sigil::build_obligations(ref_permission_module);
+  expect(ref_permission_obligations.size() == 4, "ref permission obligations");
+  expect(ref_permission_obligations[0].name == "fn.expose_write_permission.ensures.1.exact",
+         "ref write permission ensure obligation");
+  expect(ref_permission_obligations[1].name ==
+             "fn.store_preserves_write_permission.safety.1.memory_valid",
+         "ref permission store validity obligation");
+  expect(ref_permission_obligations[2].name ==
+             "fn.store_preserves_write_permission.safety.2.memory_write",
+         "ref permission store write obligation");
+  expect(ref_permission_obligations[3].name ==
+             "fn.store_preserves_write_permission.ensures.1.exact",
+         "ref permission preserve ensure obligation");
+  const auto expose_write_smt = sigil::emit_smt_lib(ref_permission_obligations[0]);
+  expect(expose_write_smt.find("(declare-const ptr_write Bool)") != std::string::npos,
+         "ref write permission symbol is declared");
+  expect(expose_write_smt.find("(assert (= result ptr_write))") != std::string::npos,
+         "can_write lowers to write permission symbol");
+  const auto preserve_write_smt = sigil::emit_smt_lib(ref_permission_obligations[3]);
+  expect(preserve_write_smt.find("(declare-const updated_write Bool)") != std::string::npos,
+         "updated write permission symbol is declared");
+  expect(preserve_write_smt.find("(assert (= updated_write ptr_write))") != std::string::npos,
+         "ref store preserves write permission");
+  expect(preserve_write_smt.find("(assert (= result updated_write))") != std::string::npos,
+         "return binds result to updated write permission");
+  const auto ref_permission_results = sigil::verify_obligations(ref_permission_obligations, false);
+  expect(ref_permission_results[0].status == sigil::VerificationStatus::Proven,
+         "ref write permission exposure proven locally");
+  expect(ref_permission_results[1].status == sigil::VerificationStatus::Proven,
+         "ref permission store validity proven locally");
+  expect(ref_permission_results[2].status == sigil::VerificationStatus::Proven,
+         "ref permission store write proven locally");
+  expect(ref_permission_results[3].status == sigil::VerificationStatus::Proven,
+         "ref store write permission preservation proven locally");
 
   const char* ref_epoch_source = R"(
 module ref_epochs;
@@ -640,6 +720,7 @@ ensures same_entry_epoch: epoch(left) == epoch(right);
 
 fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures next_epoch: result == epoch(ptr) + 1;
 {
   let updated: Ref[i64] = store(ptr, value);
@@ -649,12 +730,14 @@ ensures next_epoch: result == epoch(ptr) + 1;
 
   const auto ref_epoch_module = sigil::parse_source(ref_epoch_source, "ref-epochs.sigil");
   const auto ref_epoch_obligations = sigil::build_obligations(ref_epoch_module);
-  expect(ref_epoch_obligations.size() == 3, "ref epoch obligations");
+  expect(ref_epoch_obligations.size() == 4, "ref epoch obligations");
   expect(ref_epoch_obligations[0].name == "fn.entry_epochs_match.ensures.1.same_entry_epoch",
          "entry ref epoch ensure obligation");
   expect(ref_epoch_obligations[1].name == "fn.store_advances_epoch.safety.1.memory_valid",
          "ref epoch store validity obligation");
-  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.ensures.1.next_epoch",
+  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.safety.2.memory_write",
+         "ref epoch store write obligation");
+  expect(ref_epoch_obligations[3].name == "fn.store_advances_epoch.ensures.1.next_epoch",
          "ref epoch store advance obligation");
   const auto entry_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[0]);
   expect(entry_epoch_smt.find("(declare-const __sigil_entry_epoch Int)") != std::string::npos,
@@ -669,7 +752,7 @@ ensures next_epoch: result == epoch(ptr) + 1;
          "right ref is bound to entry epoch");
   expect(entry_epoch_smt.find("(assert (not (= left_epoch right_epoch)))") != std::string::npos,
          "entry epoch ensure compares ref epochs");
-  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[2]);
+  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[3]);
   expect(store_epoch_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
          "store source epoch is declared");
   expect(store_epoch_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
@@ -688,6 +771,8 @@ ensures next_epoch: result == epoch(ptr) + 1;
   expect(ref_epoch_results[1].status == sigil::VerificationStatus::Proven,
          "ref epoch store validity is proven locally");
   expect(ref_epoch_results[2].status == sigil::VerificationStatus::Proven,
+         "ref epoch store write is proven locally");
+  expect(ref_epoch_results[3].status == sigil::VerificationStatus::Proven,
          "ref epoch store advance is proven locally");
 
   const char* ref_alias_source = R"(
