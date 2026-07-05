@@ -22,6 +22,8 @@ postconditions become assumptions for later obligations in that proof context.
 Generic struct instantiations use the same proof artifact flow: concrete fields
 are visible in SMT under materialized names such as `box.value`, and invariant
 obligations are named from the function, local binding, and invariant label.
+Array and slice model accesses add `index_in_bounds` safety obligations and
+emit SMT array `select` terms for `at(model, index)`.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -51,6 +53,12 @@ Example with generic structs and a theorem-backed invariant:
 
 ```sh
 sigil check examples/generics.sigil --strict --solver-timeout-ms 250 --save-smt build/generic-smt
+```
+
+Example with proof-level array and slice bounds:
+
+```sh
+sigil check examples/slices.sigil --strict --solver-timeout-ms 250 --save-smt build/slice-smt
 ```
 
 Exit codes:

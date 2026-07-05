@@ -42,11 +42,19 @@ bool is_reserved_value_name(const std::string& name) {
 }
 
 bool is_builtin_type_name(const std::string& name) {
-  return name == "i64" || name == "bool" || name == "void";
+  return name == "i64" || name == "bool" || name == "void" || name == "Array" || name == "Slice";
 }
 
 bool is_declared_struct_type(const Type& type, const StructTable& structs) {
   return type.kind == TypeKind::Unknown && structs.find(type.spelling) != structs.end();
+}
+
+bool is_model_container_name(const std::string& name) {
+  return name == "Array" || name == "Slice";
+}
+
+bool is_model_container_type(const Type& type) {
+  return type.kind == TypeKind::Unknown && is_model_container_name(type.spelling);
 }
 
 bool is_type_parameter_reference(const Type& type, const TypeParamSet& type_params) {
@@ -55,7 +63,11 @@ bool is_type_parameter_reference(const Type& type, const TypeParamSet& type_para
 }
 
 bool is_aggregate_type(const Type& type, const StructTable& structs) {
-  return is_declared_struct_type(type, structs);
+  return is_declared_struct_type(type, structs) || is_model_container_type(type);
+}
+
+bool is_scalar_type(const Type& type) {
+  return type.kind == TypeKind::I64 || type.kind == TypeKind::Bool;
 }
 
 void require_known_type(const Type& type, const StructTable& structs,
@@ -80,6 +92,24 @@ void require_known_type(const Type& type, const StructTable& structs,
   if (type.kind != TypeKind::Unknown) {
     if (type.has_arguments()) {
       throw Diagnostic(range, "type '" + type.spelling + "' cannot take type arguments");
+    }
+    return;
+  }
+
+  if (is_model_container_name(type.spelling)) {
+    const auto actual = type.arguments.size();
+    if (actual != 1) {
+      throw Diagnostic(range, "model type '" + type.spelling +
+                                  "' expects 1 type argument(s), got " + std::to_string(actual));
+    }
+
+    const auto& element = type.arguments.front();
+    require_type_argument(element, structs, type_params, range,
+                          "type argument for '" + type.display() + "'");
+    if (!is_type_parameter_reference(element, type_params) && !is_scalar_type(element)) {
+      throw Diagnostic(range, "model type '" + type.spelling +
+                                  "' element type cannot be aggregate type '" + element.display() +
+                                  "'");
     }
     return;
   }
@@ -120,10 +150,10 @@ void require_value_type(const Type& type, const StructTable& structs, const Sour
   }
 }
 
-void require_scalar_value_type(const Type& type, const StructTable& structs,
-                               const SourceRange& range, const std::string& owner) {
+void require_function_parameter_type(const Type& type, const StructTable& structs,
+                                     const SourceRange& range, const std::string& owner) {
   require_value_type(type, structs, range, owner);
-  if (is_aggregate_type(type, structs)) {
+  if (is_declared_struct_type(type, structs)) {
     throw Diagnostic(range, owner + " cannot use aggregate type '" + type.display() +
                                 "' until aggregate function boundaries are supported");
   }
@@ -209,6 +239,39 @@ CallableContext with_theorem_calls_allowed(const CallableContext& context) {
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
                 const CallableContext& context);
 
+Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
+                  const CallableContext& calls, TypeKind expected, const std::string& context);
+
+Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
+                                const StructTable& structs, const CallableContext& context) {
+  if (expr->name == "len") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range,
+                       "len expects 1 argument, got " + std::to_string(expr->arguments.size()));
+    }
+    const auto container = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_container_type(container)) {
+      throw Diagnostic(expr->arguments[0]->range, "len expects an Array[T] or Slice[T] argument");
+    }
+    return Type{TypeKind::I64, "i64", {}};
+  }
+
+  if (expr->name == "at") {
+    if (expr->arguments.size() != 2) {
+      throw Diagnostic(expr->range,
+                       "at expects 2 arguments, got " + std::to_string(expr->arguments.size()));
+    }
+    const auto container = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_container_type(container)) {
+      throw Diagnostic(expr->arguments[0]->range, "at expects an Array[T] or Slice[T] argument");
+    }
+    require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64, "at index");
+    return container.arguments.front();
+  }
+
+  throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
+}
+
 void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symbols,
                         const StructTable& structs, const CallableContext& context,
                         const std::string& owner);
@@ -281,6 +344,9 @@ Type infer_call_expr(const Expr& expr, const SymbolTable& symbols, const StructT
   if (found == context.functions.end()) {
     const auto theorem_found = context.theorems.find(expr->name);
     if (theorem_found == context.theorems.end()) {
+      if (expr->name == "len" || expr->name == "at") {
+        return infer_model_intrinsic_expr(expr, symbols, structs, context);
+      }
       throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
     }
     if (!context.allow_theorem_calls) {
@@ -662,6 +728,11 @@ void validate_struct(const StructDecl& decl, const StructTable& structs,
       throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
                                         "' cannot use void as a value type");
     }
+    if (is_model_container_type(field.type)) {
+      throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
+                                        "' cannot use model type '" + field.type.display() +
+                                        "' until aggregate model fields are supported");
+    }
     insert_symbol(fields, field.name, field.type, field.range, "field");
   }
 
@@ -724,8 +795,8 @@ void validate_function(const FunctionDecl& decl, const StructTable& structs,
   for (const auto& param : decl.params) {
     require_unreserved_value_name(param.name, param.range,
                                   "parameter '" + decl.name + "." + param.name + "'");
-    require_scalar_value_type(param.type, structs, param.range,
-                              "parameter '" + decl.name + "." + param.name + "'");
+    require_function_parameter_type(param.type, structs, param.range,
+                                    "parameter '" + decl.name + "." + param.name + "'");
     insert_symbol(params, param.name, param.type, param.range, "parameter");
   }
   require_function_return_type(decl.return_type, structs, decl.range,
@@ -783,8 +854,8 @@ void validate_theorem(const TheoremDecl& decl, const StructTable& structs,
   for (const auto& param : decl.params) {
     require_unreserved_value_name(param.name, param.range,
                                   "parameter '" + decl.name + "." + param.name + "'");
-    require_scalar_value_type(param.type, structs, param.range,
-                              "parameter '" + decl.name + "." + param.name + "'");
+    require_function_parameter_type(param.type, structs, param.range,
+                                    "parameter '" + decl.name + "." + param.name + "'");
     insert_symbol(params, param.name, param.type, param.range, "parameter");
   }
 

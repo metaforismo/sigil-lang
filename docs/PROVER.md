@@ -89,6 +89,26 @@ that obligation's symbol table. Generic invariants are emitted only after this
 substitution step, so theorem calls and arithmetic predicates see the concrete
 field types selected by the struct literal.
 
+Array and slice model parameters are materialized as two proof symbols:
+`value.len` and `value.data`. The length symbol is an `Int`; the data symbol is
+an SMT array from integer indices to the concrete element sort. For example,
+`Slice[i64]` creates `(Array Int Int)` data, while `Array[bool]` creates
+`(Array Int Bool)` data. `len(xs)` lowers to `xs.len`, and `at(xs, i)` lowers to
+`(select xs.data i)`.
+
+Every `at(container, index)` expression emits an `index_in_bounds` safety
+obligation at the access site. The goal is:
+
+```sigil
+index >= 0 && index < len(container)
+```
+
+This mirrors division and modulo safety obligations: bounds are not assumed
+silently, and callers must prove them from preconditions, invariants, branch
+guards, or earlier facts. The model currently gives every array and slice a
+non-negative length axiom. It does not model aliasing, element mutation,
+allocation, or pointer provenance yet.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 

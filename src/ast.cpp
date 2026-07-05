@@ -110,6 +110,9 @@ std::string Type::display() const {
 }
 
 std::string Type::smt_sort() const {
+  if (kind == TypeKind::Unknown && spelling == "__sigil_model_data" && arguments.size() == 1) {
+    return "(Array Int " + arguments[0].smt_sort() + ")";
+  }
   if (kind == TypeKind::Bool) {
     return "Bool";
   }
@@ -354,6 +357,9 @@ std::string display_expr(const Expr& expr) {
   case ExprNode::Kind::Identifier:
     return expr->name;
   case ExprNode::Kind::Call:
+    if (expr->name == "__sigil_select" && expr->arguments.size() == 2) {
+      return "select(" + display_arguments(expr->arguments) + ")";
+    }
     return expr->name + "(" + display_arguments(expr->arguments) + ")";
   case ExprNode::Kind::StructLiteral:
     return expr->literal_type.display() + " { " +
@@ -384,6 +390,10 @@ std::string emit_smt_expr(const Expr& expr) {
   case ExprNode::Kind::Identifier:
     return sanitize_symbol(expr->name);
   case ExprNode::Kind::Call:
+    if (expr->name == "__sigil_select" && expr->arguments.size() == 2) {
+      return "(select " + emit_smt_expr(expr->arguments[0]) + " " +
+             emit_smt_expr(expr->arguments[1]) + ")";
+    }
     throw std::runtime_error("cannot emit unresolved call expression '" + expr->name + "'");
   case ExprNode::Kind::StructLiteral:
     throw std::runtime_error("cannot emit unresolved struct literal '" +

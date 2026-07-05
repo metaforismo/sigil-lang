@@ -316,6 +316,59 @@ ensures exact: result == true;
   expect(generic_invariant_results[1].status == sigil::VerificationStatus::Proven,
          "generic bool ensure proven");
 
+  const char* slice_model_source = R"(
+module slice_model;
+
+fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+
+fn read_array(flags: Array[bool], index: i64) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == at(flags, index);
+{
+  return at(flags, index);
+}
+)";
+
+  const auto slice_model_module = sigil::parse_source(slice_model_source, "slice-model.sigil");
+  const auto slice_model_obligations = sigil::build_obligations(slice_model_module);
+  expect(slice_model_obligations.size() == 6, "array and slice model obligations");
+  expect(slice_model_obligations[0].name == "fn.read_slice.safety.1.index_in_bounds",
+         "slice return access bounds obligation");
+  expect(slice_model_obligations[1].name == "fn.read_slice.safety.2.index_in_bounds",
+         "slice ensure access bounds obligation");
+  expect(slice_model_obligations[2].name == "fn.read_slice.ensures.1.exact",
+         "slice ensure obligation");
+  expect(slice_model_obligations[3].name == "fn.read_array.safety.1.index_in_bounds",
+         "array return access bounds obligation");
+  const auto slice_safety_smt = sigil::emit_smt_lib(slice_model_obligations[0]);
+  expect(slice_safety_smt.find("(declare-const xs_len Int)") != std::string::npos,
+         "slice length is declared");
+  expect(slice_safety_smt.find("(declare-const xs_data (Array Int Int))") != std::string::npos,
+         "slice i64 data model is declared");
+  expect(slice_safety_smt.find("(assert (not (and (>= index 0) (< index xs_len))))") !=
+             std::string::npos,
+         "slice bounds goal uses len");
+  const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[5]);
+  expect(array_ensure_smt.find("(declare-const flags_data (Array Int Bool))") != std::string::npos,
+         "array bool data model is declared");
+  expect(array_ensure_smt.find("(assert (= result (select flags_data index)))") !=
+             std::string::npos,
+         "array ensure assumes selected element");
+  const auto slice_model_results = sigil::verify_obligations(slice_model_obligations, false);
+  expect(slice_model_results[0].status == sigil::VerificationStatus::Proven,
+         "slice bounds proven from precondition");
+  expect(slice_model_results[2].status == sigil::VerificationStatus::Proven,
+         "slice ensure proven from return binding");
+  expect(slice_model_results[3].status == sigil::VerificationStatus::Proven,
+         "array bounds proven from precondition");
+  expect(slice_model_results[5].status == sigil::VerificationStatus::Proven,
+         "array ensure proven from return binding");
+
   const char* conditional_source = R"(
 module conditional;
 

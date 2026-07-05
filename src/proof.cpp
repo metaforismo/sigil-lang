@@ -396,6 +396,7 @@ using StructTable = std::unordered_map<std::string, const StructDecl*>;
 using TypeSubstitutions = std::unordered_map<std::string, Type>;
 
 constexpr std::string_view kTheoremProofPrefix = "theorem.";
+constexpr std::string_view kModelSelectCall = "__sigil_select";
 
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
   return fn.name.rfind(std::string(kTheoremProofPrefix), 0) == 0;
@@ -416,6 +417,23 @@ std::string scoped_symbol(const std::string& name, const SourceLocation& locatio
 
 bool is_struct_type(const Type& type, const StructTable& structs) {
   return type.kind == TypeKind::Unknown && structs.find(type.spelling) != structs.end();
+}
+
+bool is_model_container_type(const Type& type) {
+  return type.kind == TypeKind::Unknown && (type.spelling == "Array" || type.spelling == "Slice") &&
+         type.arguments.size() == 1;
+}
+
+Type model_data_type(const Type& container_type) {
+  return Type{TypeKind::Unknown, "__sigil_model_data", {container_type.arguments.front()}};
+}
+
+std::string model_len_symbol(const std::string& symbol) {
+  return symbol + ".len";
+}
+
+std::string model_data_symbol(const std::string& symbol) {
+  return symbol + ".data";
 }
 
 Type substitute_type(const Type& type, const TypeSubstitutions& substitutions) {
@@ -453,6 +471,22 @@ std::string field_symbol(const std::string& base_symbol, const std::string& fiel
   return base_symbol + "." + field_name;
 }
 
+Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
+                                const SourceRange& range) {
+  if (name == "len" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(model_len_symbol(arguments[0]->name), range);
+  }
+  if (name == "at" && arguments.size() == 2 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_call(
+        std::string(kModelSelectCall),
+        {make_identifier(model_data_symbol(arguments[0]->name), arguments[0]->range), arguments[1]},
+        range);
+  }
+  return make_call(std::move(name), std::move(arguments), range);
+}
+
 Expr rewrite_expr(const Expr& expr, const std::unordered_map<std::string, std::string>& bindings) {
   if (!expr) {
     return expr;
@@ -473,7 +507,7 @@ Expr rewrite_expr(const Expr& expr, const std::unordered_map<std::string, std::s
     for (const auto& argument : expr->arguments) {
       arguments.push_back(rewrite_expr(argument, bindings));
     }
-    return make_call(expr->name, std::move(arguments), expr->range);
+    return lower_model_intrinsic_call(expr->name, std::move(arguments), expr->range);
   }
   case ExprNode::Kind::StructLiteral: {
     std::vector<FieldInitializer> fields;
@@ -602,6 +636,37 @@ ProofObligation make_safety_obligation(const FunctionDecl& fn, int safety_index,
   return obligation;
 }
 
+ProofObligation make_index_bounds_obligation(const FunctionDecl& fn, int safety_index,
+                                             const Expr& access, const ProofContext& context) {
+  if (!access || access->arguments.size() != 2) {
+    throw Diagnostic(access ? access->range : SourceRange{},
+                     "at access requires a container and an index");
+  }
+
+  const auto container = rewrite_expr(access->arguments[0], context.bindings);
+  if (!container || container->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(access->arguments[0]->range,
+                     "at access requires a materialized Array or Slice value");
+  }
+
+  const auto index = rewrite_expr(access->arguments[1], context.bindings);
+  const auto len = make_identifier(model_len_symbol(container->name), access->arguments[0]->range);
+  auto zero = make_integer(0, access->arguments[1]->range);
+  auto lower = make_binary(BinaryOp::GreaterEqual, index, zero, access->arguments[1]->range);
+  auto upper = make_binary(BinaryOp::Less, index, len, access->arguments[1]->range);
+  auto goal = make_binary(BinaryOp::And, lower, upper, access->range);
+
+  ProofObligation obligation;
+  obligation.name =
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".index_in_bounds";
+  obligation.location = access->arguments[1]->location;
+  obligation.range = access->range;
+  obligation.assumptions = context.active;
+  obligation.goal = NamedPredicate{"index_in_bounds", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& fn,
                                           const ProofContext& context, int& safety_index,
                                           std::vector<ProofObligation>& obligations) {
@@ -612,6 +677,10 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
   if (expr->kind == ExprNode::Kind::Call) {
     for (const auto& argument : expr->arguments) {
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
+    }
+    if (expr->name == "at") {
+      ++safety_index;
+      obligations.push_back(make_index_bounds_obligation(fn, safety_index, expr, context));
     }
     return;
   }
@@ -747,6 +816,16 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   if (theorem_found != theorems.end()) {
     return materialize_resolved_call_expr(expr, fn, *theorem_found->second, context, call_index,
                                           structs, functions, theorems, obligations);
+  }
+
+  if (expr->name == "len" || expr->name == "at") {
+    std::vector<Expr> arguments;
+    arguments.reserve(expr->arguments.size());
+    for (const auto& argument : expr->arguments) {
+      arguments.push_back(materialize_expr(argument, fn, context, call_index, structs, functions,
+                                           theorems, obligations));
+    }
+    return lower_model_intrinsic_call(expr->name, std::move(arguments), expr->range);
   }
 
   throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
@@ -1379,6 +1458,20 @@ StructTable build_struct_table(const Module& module) {
 
 void register_struct_value(const std::string& symbol, const Type& type, const StructTable& structs,
                            ProofContext& context) {
+  if (is_model_container_type(type)) {
+    const auto len_symbol = model_len_symbol(symbol);
+    context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[model_data_symbol(symbol)] = model_data_type(type);
+
+    auto len_non_negative =
+        make_binary(BinaryOp::GreaterEqual, make_identifier(len_symbol, SourceLocation{}),
+                    make_integer(0, SourceLocation{}), SourceLocation{});
+    context.active.push_back(
+        NamedPredicate{"model_" + sanitize_symbol(symbol) + "_len_non_negative", len_non_negative,
+                       SourceLocation{}, SourceRange{}});
+    return;
+  }
+
   if (!is_struct_type(type, structs)) {
     context.symbols[symbol] = type;
     return;

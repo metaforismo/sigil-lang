@@ -7,12 +7,12 @@ tests, and docs are in the repo.
 
 Bridge the original source-level invariant idea to the working compiler by
 building the smallest useful path from reusable lemmas to generic
-data-structure specifications. Proof-only theorem declarations and lemma reuse
-are now in place. The current step is the generic struct foundation: users can
-declare type parameters, instantiate concrete struct types, and have field and
-invariant proof obligations generated after concrete type substitution. This
-keeps the language surface simple while preparing the path for real containers,
-arrays, slices, a memory model, and eventually an agentic SMT loop.
+data-structure specifications. Proof-only theorem declarations, lemma reuse,
+generic struct instantiation, and proof-level array/slice bounds are now in
+place. The current step is to turn those abstract container facts into a memory
+model: aliasing, ownership, mutation, allocation, and function-boundary
+semantics. This keeps the language surface simple while preparing the path for
+low-level data structures and eventually an agentic SMT loop.
 
 ## Completed
 
@@ -57,6 +57,9 @@ arrays, slices, a memory model, and eventually an agentic SMT loop.
 - [x] Reuse theorem calls as lemma facts in proof-only expressions.
 - [x] Add generic struct declarations with concrete type-argument validation.
 - [x] Instantiate generic struct fields and invariants before proof emission.
+- [x] Add proof-level `Array[T]` and `Slice[T]` model types.
+- [x] Emit `index_in_bounds` safety obligations for `at(container, index)`.
+- [x] Lower array and slice reads to SMT `select` over abstract backing arrays.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -87,7 +90,7 @@ arrays, slices, a memory model, and eventually an agentic SMT loop.
 
 - [ ] Add first-class container declarations on top of generic struct
       instantiation.
-- [ ] Add array and slice models with length, bounds, and aliasing facts.
+- [ ] Add aliasing and mutation facts for array and slice models.
 - [ ] Define a memory model for references, ownership, mutation, and low-level
       data-structure invariants.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
@@ -109,8 +112,9 @@ arrays, slices, a memory model, and eventually an agentic SMT loop.
 - [ ] Define monomorphized runtime layout rules for generic aggregates.
 - [ ] Add first-class container declarations after generic instantiation is
       explicit.
-- [ ] Add arrays and slices with explicit length, bounds, element, and alias
+- [x] Add arrays and slices with explicit length, bounds, and element read
       facts.
+- [ ] Add array and slice alias facts.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
