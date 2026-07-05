@@ -241,13 +241,15 @@ ensures exact: result == load(ptr);
 `is_valid(ptr)` exposes the modeled validity bit. `load(ptr)` returns the
 referenced scalar value and emits a `memory_valid` safety obligation proving
 that `is_valid(ptr)` holds at the access site. `addr(ptr)` returns the modeled
-integer address. `same_ref(left, right)` and `disjoint(left, right)` compare
-modeled addresses.
+integer address. `epoch(ptr)` returns the modeled memory-snapshot token for the
+reference. Function-entry references share an internal entry epoch, and model
+aliases preserve the source epoch. `same_ref(left, right)` and
+`disjoint(left, right)` compare modeled addresses.
 
 When two `Ref[T]` snapshots with the same element type are both valid and have
-the same modeled address in one proof context, Sigil assumes their modeled
-loaded values are equal. This lets ordinary contracts prove source-level alias
-facts without a separate annotation language:
+the same modeled epoch and address in one proof context, Sigil assumes their
+modeled loaded values are equal. This lets ordinary contracts prove
+source-level alias facts without a separate annotation language:
 
 ```sigil
 fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
@@ -263,7 +265,7 @@ ensures exact: result == load(right);
 `store(ptr, value)` is an immutable proof-level reference update. It returns
 the same `Ref[T]` model type, emits a `memory_valid` obligation for the write
 site, preserves the modeled address and validity, and replaces the modeled
-referenced value:
+referenced value. It also advances the modeled epoch by one:
 
 ```sigil
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
@@ -273,6 +275,7 @@ ensures exact: result == value;
   let updated: Ref[i64] = store(ptr, value);
   assert still_valid: is_valid(updated);
   assert same_address: addr(updated) == addr(ptr);
+  assert next_epoch: epoch(updated) == epoch(ptr) + 1;
   return load(updated);
 }
 ```
@@ -281,9 +284,10 @@ As with array and slice stores, reference stores must currently be materialized
 in a `let` binding or container field before later facts use them.
 
 `Ref[T]` is a verification scaffold. It does not allocate memory, track
-lifetimes, prove pointer provenance, propagate stores through old aliases,
-mutate native memory, or define a native layout. Like array and slice models,
-reference values are allowed as function and theorem parameters and as
+lifetimes, prove pointer provenance, propagate stores through old aliases, model
+ownership, mutate native memory, or define a native layout. Epochs are proof
+tokens for snapshots, not a runtime memory representation. Like array and slice
+models, reference values are allowed as function and theorem parameters and as
 container model fields, but not as ordinary struct fields or return values yet.
 
 ## Function Contracts

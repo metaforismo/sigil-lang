@@ -593,15 +593,21 @@ ensures exact: result == value;
          "ref store updated validity is declared");
   expect(ref_store_smt.find("(declare-const updated_value Int)") != std::string::npos,
          "ref store updated value is declared");
+  expect(ref_store_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
+         "ref store source epoch is declared");
+  expect(ref_store_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
+         "ref store updated epoch is declared");
   expect(ref_store_smt.find("(assert (= updated_addr ptr_addr))") != std::string::npos,
          "ref store preserves address");
   expect(ref_store_smt.find("(assert (= updated_valid ptr_valid))") != std::string::npos,
          "ref store preserves validity");
   expect(ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
          "ref store updates value");
-  expect(ref_store_smt.find("(= ptr_value updated_value)") == std::string::npos &&
-             ref_store_smt.find("(= updated_value ptr_value)") == std::string::npos,
-         "ref store does not rewrite stale snapshots through implicit aliases");
+  expect(ref_store_smt.find("(assert (= updated_epoch (+ ptr_epoch 1)))") != std::string::npos,
+         "ref store advances epoch");
+  expect(ref_store_smt.find("(assert (= ptr_value updated_value))") == std::string::npos &&
+             ref_store_smt.find("(assert (= updated_value ptr_value))") == std::string::npos,
+         "ref store does not emit unguarded stale snapshot equality");
   expect(ref_store_smt.find("(assert (= result updated_value))") != std::string::npos,
          "ref store read binds result to updated value");
   expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
@@ -622,6 +628,67 @@ ensures exact: result == value;
          "ref store read validity proven locally");
   expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
          "ref store write then load proven locally");
+
+  const char* ref_epoch_source = R"(
+module ref_epochs;
+
+fn entry_epochs_match(left: Ref[i64], right: Ref[bool]) -> i64
+ensures same_entry_epoch: epoch(left) == epoch(right);
+{
+  return 0;
+}
+
+fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
+requires valid: is_valid(ptr);
+ensures next_epoch: result == epoch(ptr) + 1;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return epoch(updated);
+}
+)";
+
+  const auto ref_epoch_module = sigil::parse_source(ref_epoch_source, "ref-epochs.sigil");
+  const auto ref_epoch_obligations = sigil::build_obligations(ref_epoch_module);
+  expect(ref_epoch_obligations.size() == 3, "ref epoch obligations");
+  expect(ref_epoch_obligations[0].name == "fn.entry_epochs_match.ensures.1.same_entry_epoch",
+         "entry ref epoch ensure obligation");
+  expect(ref_epoch_obligations[1].name == "fn.store_advances_epoch.safety.1.memory_valid",
+         "ref epoch store validity obligation");
+  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.ensures.1.next_epoch",
+         "ref epoch store advance obligation");
+  const auto entry_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[0]);
+  expect(entry_epoch_smt.find("(declare-const __sigil_entry_epoch Int)") != std::string::npos,
+         "entry epoch token is declared");
+  expect(entry_epoch_smt.find("(declare-const left_epoch Int)") != std::string::npos,
+         "left entry epoch is declared");
+  expect(entry_epoch_smt.find("(declare-const right_epoch Int)") != std::string::npos,
+         "right entry epoch is declared");
+  expect(entry_epoch_smt.find("(assert (= left_epoch __sigil_entry_epoch))") != std::string::npos,
+         "left ref is bound to entry epoch");
+  expect(entry_epoch_smt.find("(assert (= right_epoch __sigil_entry_epoch))") != std::string::npos,
+         "right ref is bound to entry epoch");
+  expect(entry_epoch_smt.find("(assert (not (= left_epoch right_epoch)))") != std::string::npos,
+         "entry epoch ensure compares ref epochs");
+  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[2]);
+  expect(store_epoch_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
+         "store source epoch is declared");
+  expect(store_epoch_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
+         "store updated epoch is declared");
+  expect(store_epoch_smt.find("(assert (= ptr_epoch __sigil_entry_epoch))") != std::string::npos,
+         "store source starts from entry epoch");
+  expect(store_epoch_smt.find("(assert (= updated_epoch (+ ptr_epoch 1)))") != std::string::npos,
+         "store epoch advances by one");
+  expect(store_epoch_smt.find("(assert (= result updated_epoch))") != std::string::npos,
+         "return binds result to updated epoch");
+  expect(store_epoch_smt.find("(assert (not (= result (+ ptr_epoch 1))))") != std::string::npos,
+         "store epoch ensure checks successor");
+  const auto ref_epoch_results = sigil::verify_obligations(ref_epoch_obligations, false);
+  expect(ref_epoch_results[0].status == sigil::VerificationStatus::Proven,
+         "entry ref epochs are proven equal locally");
+  expect(ref_epoch_results[1].status == sigil::VerificationStatus::Proven,
+         "ref epoch store validity is proven locally");
+  expect(ref_epoch_results[2].status == sigil::VerificationStatus::Proven,
+         "ref epoch store advance is proven locally");
 
   const char* ref_alias_source = R"(
 module ref_aliases;
@@ -661,10 +728,19 @@ ensures exact: result == load(right);
          "ref alias left scalar value is declared");
   expect(ref_alias_smt.find("(declare-const right_value Int)") != std::string::npos,
          "ref alias right scalar value is declared");
-  expect(ref_alias_smt.find("(assert (or (or (not left_valid) (not right_valid)) "
+  expect(ref_alias_smt.find("(declare-const left_epoch Int)") != std::string::npos,
+         "ref alias left epoch is declared");
+  expect(ref_alias_smt.find("(declare-const right_epoch Int)") != std::string::npos,
+         "ref alias right epoch is declared");
+  expect(ref_alias_smt.find("(assert (= left_epoch __sigil_entry_epoch))") != std::string::npos,
+         "ref alias left starts from entry epoch");
+  expect(ref_alias_smt.find("(assert (= right_epoch __sigil_entry_epoch))") != std::string::npos,
+         "ref alias right starts from entry epoch");
+  expect(ref_alias_smt.find("(assert (or (or (or (not left_valid) (not right_valid)) "
+                            "(distinct left_epoch right_epoch)) "
                             "(or (distinct left_addr right_addr) (= left_value right_value))))") !=
              std::string::npos,
-         "valid same-address refs share the same scalar snapshot value");
+         "valid same-epoch same-address refs share the same scalar snapshot value");
   expect(ref_alias_smt.find("(assert (= result left_value))") != std::string::npos,
          "ref alias return binds result to left value");
   expect(ref_alias_smt.find("(assert (not (= result right_value)))") != std::string::npos,
@@ -675,10 +751,11 @@ ensures exact: result == load(right);
   expect(bool_ref_alias_smt.find("(declare-const right_value Bool)") != std::string::npos,
          "ref alias right bool value is declared");
   expect(bool_ref_alias_smt.find(
-             "(assert (or (or (not left_valid) (not right_valid)) "
+             "(assert (or (or (or (not left_valid) (not right_valid)) "
+             "(distinct left_epoch right_epoch)) "
              "(or (distinct left_addr right_addr) (= left_value right_value))))") !=
              std::string::npos,
-         "valid same-address refs share the same bool snapshot value");
+         "valid same-epoch same-address refs share the same bool snapshot value");
   const auto ref_alias_results = sigil::verify_obligations(ref_alias_obligations, false);
   expect(ref_alias_results[0].status == sigil::VerificationStatus::Proven,
          "ref alias left load validity proven from precondition");

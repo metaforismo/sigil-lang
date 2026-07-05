@@ -137,11 +137,14 @@ can prove standard array-theory facts such as reading the same index that was
 just written. This is still not runtime mutation: Sigil does not model aliasing,
 allocation, slice origins, pointer provenance, or native memory effects yet.
 
-Reference model parameters are materialized as `ref.addr`, `ref.valid`, and
-`ref.value`. `addr(ref)` lowers to the address symbol, `is_valid(ref)` lowers to
-the validity symbol, and `load(ref)` lowers to the value symbol. Every `load`
-also emits a `memory_valid` safety obligation whose goal is `is_valid(ref)` at
-the access site. Address predicates are purely modeled facts today:
+Reference model parameters are materialized as `ref.addr`, `ref.valid`,
+`ref.value`, and `ref.epoch`. `addr(ref)` lowers to the address symbol,
+`is_valid(ref)` lowers to the validity symbol, `load(ref)` lowers to the value
+symbol, and `epoch(ref)` lowers to the epoch symbol. Every `load` also emits a
+`memory_valid` safety obligation whose goal is `is_valid(ref)` at the access
+site. Function-entry references share an internal `__sigil_entry_epoch`, and
+model aliases preserve the source epoch. Address predicates are purely modeled
+facts today:
 `same_ref(a, b)` lowers to `addr(a) == addr(b)`, and `disjoint(a, b)` lowers to
 `addr(a) != addr(b)`.
 
@@ -149,12 +152,16 @@ For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:
 
 ```sigil
-!left.valid || !right.valid || left.addr != right.addr || left.value == right.value
+!left.valid || !right.valid ||
+left.epoch != right.epoch ||
+left.addr != right.addr ||
+left.value == right.value
 ```
 
 This is a snapshot fact, not a complete memory-state rule. It proves that two
-valid `Ref[T]` values with the same modeled address load the same modeled value,
-but it does not propagate a later `store(ref, value)` through older aliases.
+valid `Ref[T]` values with the same modeled epoch and address load the same
+modeled value, but it does not propagate a later `store(ref, value)` through
+older aliases.
 
 `store(ref, value)` is modeled as an immutable reference update. When a store is
 bound to a model local or model container field, the planner creates component
@@ -164,6 +171,7 @@ facts for the new reference:
 updated.addr == ref.addr
 updated.valid == ref.valid
 updated.value == value
+updated.epoch == ref.epoch + 1
 ```
 
 The write emits a `memory_valid` safety obligation at the store site. Loading
@@ -173,9 +181,9 @@ weakest-precondition substitution can prove straight-line facts such as
 
 The reference model is intentionally not a full memory semantics. It has no
 allocation, lifetime, borrow, aliasing, field projection, byte layout, native
-memory mutation, memory-state token, or native-code provenance model yet. Those
-pieces must be added before Sigil can claim low-level memory safety beyond
-explicit validity obligations and same-snapshot alias consistency.
+memory mutation, ownership, or native-code provenance model yet. Those pieces
+must be added before Sigil can claim low-level memory safety beyond explicit
+validity obligations, epoch ordering, and same-snapshot alias consistency.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.

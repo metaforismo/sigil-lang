@@ -269,6 +269,20 @@ ensures exact: result == value;
   return load(updated);
 }
 
+fn entry_epochs_match(left: Ref[i64], right: Ref[bool]) -> i64
+ensures same_entry_epoch: epoch(left) == epoch(right);
+{
+  return 0;
+}
+
+fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
+requires valid: is_valid(ptr);
+ensures next_epoch: result == epoch(ptr) + 1;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return epoch(updated);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -535,6 +549,15 @@ fn load_scalar(x: i64) -> i64
 }
 )",
                     "load expects a Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn epoch_scalar(x: i64) -> i64
+{
+  return epoch(x);
+}
+)",
+                    "epoch expects a Ref[T] argument");
 
   expect_diagnostic(R"(
 module bad;
