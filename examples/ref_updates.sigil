@@ -2,16 +2,19 @@ module ref_updates;
 
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[i64] = store(ptr, value);
   assert still_valid: is_valid(updated);
+  assert still_writable: can_write(updated);
   assert same_address: addr(updated) == addr(ptr);
   return load(updated);
 }
 
 fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[bool] = store(ptr, value);

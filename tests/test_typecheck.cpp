@@ -253,16 +253,19 @@ ensures exact: result == disjoint(left, right);
 
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[i64] = store(ptr, value);
   assert still_valid: is_valid(updated);
+  assert still_writable: can_write(updated);
   assert same_address: addr(updated) == addr(ptr);
   return load(updated);
 }
 
 fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures exact: result == value;
 {
   let updated: Ref[bool] = store(ptr, value);
@@ -277,10 +280,26 @@ ensures same_entry_epoch: epoch(left) == epoch(right);
 
 fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
 requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
 ensures next_epoch: result == epoch(ptr) + 1;
 {
   let updated: Ref[i64] = store(ptr, value);
   return epoch(updated);
+}
+
+fn expose_write_permission(ptr: Ref[i64]) -> bool
+ensures exact: result == can_write(ptr);
+{
+  return can_write(ptr);
+}
+
+fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == can_write(ptr);
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return can_write(updated);
 }
 
 fn proof_only_lemma_use(x: i64) -> i64
@@ -558,6 +577,15 @@ fn epoch_scalar(x: i64) -> i64
 }
 )",
                     "epoch expects a Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn can_write_scalar(x: i64) -> bool
+{
+  return can_write(x);
+}
+)",
+                    "can_write expects a Ref[T] argument");
 
   expect_diagnostic(R"(
 module bad;

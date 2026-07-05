@@ -50,8 +50,8 @@ system:
 - function contract labels must be unique across `requires`, `ensures`, and
   explicit body proof labels;
 - identifiers must be declared in the active scope;
-- function parameters can be scalar values or proof-level array/slice models;
-  ordinary struct parameters and aggregate returns are rejected until
+- function parameters can be scalar values or proof-level array/slice/reference
+  models; ordinary struct parameters and aggregate returns are rejected until
   function-boundary layout and proof semantics are explicit;
 - function calls must resolve to a module function, use the declared arity and
   argument types, return a value when used as an expression, and avoid direct or
@@ -62,9 +62,9 @@ system:
   built-in array/slice model intrinsics; `len` returns `i64`, `at` returns the
   model element type, and `store` returns the same model type after checking
   the stored value type;
-- `is_valid(ref)`, `addr(ref)`, `load(ref)`, `store(ref, value)`,
-  `same_ref(left, right)`, and `disjoint(left, right)` are built-in reference
-  model intrinsics;
+- `is_valid(ref)`, `can_write(ref)`, `addr(ref)`, `load(ref)`,
+  `store(ref, value)`, `epoch(ref)`, `same_ref(left, right)`, and
+  `disjoint(left, right)` are built-in reference model intrinsics;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -72,9 +72,9 @@ system:
   ordinary struct fields still reject model types;
 - local `let` bindings cannot shadow parameters or earlier locals;
 - aggregate-typed locals must be initialized directly from aggregate literals,
-  except proof model locals may be initialized from model aliases, and array or
-  slice model locals may be initialized from materialized proof-level `store`
-  updates;
+  except proof model locals may be initialized from model aliases, and array,
+  slice, or reference model locals may be initialized from materialized
+  proof-level `store` updates;
 - assignments can only target declared local bindings and must preserve the
   local type; struct assignment is rejected until aggregate copy semantics are
   defined;
@@ -123,7 +123,8 @@ The planner walks each function and builds proof obligations:
   declared on the constructed type after generic substitution;
 - container literal construction emits the same invariant obligations, and
   model fields are materialized by component facts such as `value.len`,
-  `value.data`, `value.addr`, `value.valid`, and `value.value`;
+  `value.data`, `value.addr`, `value.valid`, `value.write`, `value.value`, and
+  `value.epoch`;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
@@ -138,14 +139,17 @@ The planner walks each function and builds proof obligations:
   the updated data fact to SMT array `store`;
 - reference `load(ref)` expressions create `memory_valid` safety obligations
   and lower to the modeled referenced value;
+- reference `can_write(ref)` expressions lower to deterministic proof-level
+  write-permission symbols;
 - reference `epoch(ref)` expressions lower to deterministic proof-level memory
   snapshot tokens;
 - same-type reference snapshots gain deterministic alias-consistency
   assumptions so valid refs with equal modeled epochs and addresses have equal
   modeled values in the same proof context;
-- reference `store(ref, value)` bindings create `memory_valid` safety
-  obligations, preserve modeled address and validity, replace the modeled
-  referenced value, and advance the modeled epoch;
+- reference `store(ref, value)` bindings create `memory_valid` and
+  `memory_write` safety obligations, preserve modeled address, validity, and
+  write permission, replace the modeled referenced value, and advance the
+  modeled epoch;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

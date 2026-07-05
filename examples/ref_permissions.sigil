@@ -1,0 +1,16 @@
+module ref_permissions;
+
+fn expose_write_permission(ptr: Ref[i64]) -> bool
+ensures exact: result == can_write(ptr);
+{
+  return can_write(ptr);
+}
+
+fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == can_write(ptr);
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return can_write(updated);
+}
