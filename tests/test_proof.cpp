@@ -316,6 +316,61 @@ ensures exact: result == true;
   expect(generic_invariant_results[1].status == sigil::VerificationStatus::Proven,
          "generic bool ensure proven");
 
+  const char* container_source = R"(
+module containers;
+
+container Window[T] {
+  items: Slice[T];
+  index: i64;
+
+  invariant index_non_negative: index >= 0;
+  invariant index_within_items: index < len(items);
+}
+
+fn read_window(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  let window: Window[i64] = Window[i64] { items: xs, index: index };
+  assert len_visible: len(window.items) == len(xs);
+  assert index_visible: window.index == index;
+  return at(xs, index);
+}
+)";
+
+  const auto container_module = sigil::parse_source(container_source, "containers.sigil");
+  const auto container_obligations = sigil::build_obligations(container_module);
+  expect(container_obligations.size() == 7, "container invariants, field asserts, safety, ensure");
+  expect(container_obligations[0].name ==
+             "fn.read_window.container.window.invariant.1.index_non_negative",
+         "container first invariant obligation name");
+  expect(container_obligations[1].name ==
+             "fn.read_window.container.window.invariant.2.index_within_items",
+         "container second invariant obligation name");
+  expect(container_obligations[2].name == "fn.read_window.assert.1.len_visible",
+         "container model field length assertion name");
+  expect(container_obligations[3].name == "fn.read_window.assert.2.index_visible",
+         "container scalar field assertion name");
+  const auto container_len_smt = sigil::emit_smt_lib(container_obligations[2]);
+  expect(container_len_smt.find("(declare-const window_items_len Int)") != std::string::npos,
+         "container model field length symbol");
+  expect(container_len_smt.find("(declare-const window_items_data (Array Int Int))") !=
+             std::string::npos,
+         "container model field data symbol");
+  expect(container_len_smt.find("(assert (= window_items_len xs_len))") != std::string::npos,
+         "container model field length aliases initializer");
+  expect(container_len_smt.find("(assert (= window_items_data xs_data))") != std::string::npos,
+         "container model field data aliases initializer");
+  const auto container_invariant_smt = sigil::emit_smt_lib(container_obligations[1]);
+  expect(container_invariant_smt.find("(assert (not (< window_index window_items_len)))") !=
+             std::string::npos,
+         "container invariant uses materialized model field length");
+  const auto container_results = sigil::verify_obligations(container_obligations, false);
+  expect(container_results[2].status == sigil::VerificationStatus::Proven,
+         "container model field assertion proven locally");
+  expect(container_results[3].status == sigil::VerificationStatus::Proven,
+         "container scalar field assertion proven locally");
+
   const char* slice_model_source = R"(
 module slice_model;
 

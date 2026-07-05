@@ -181,6 +181,7 @@ Token Lexer::identifier(std::size_t start, SourceLocation location) {
   static const std::unordered_map<std::string, TokenKind> keywords = {
       {"module", TokenKind::Module},
       {"struct", TokenKind::Struct},
+      {"container", TokenKind::Container},
       {"invariant", TokenKind::Invariant},
       {"fn", TokenKind::Fn},
       {"theorem", TokenKind::Theorem},
@@ -274,6 +275,8 @@ const char* token_name(TokenKind kind) {
     return "'module'";
   case TokenKind::Struct:
     return "'struct'";
+  case TokenKind::Container:
+    return "'container'";
   case TokenKind::Invariant:
     return "'invariant'";
   case TokenKind::Fn:

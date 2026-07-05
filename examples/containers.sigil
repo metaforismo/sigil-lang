@@ -1,0 +1,19 @@
+module containers;
+
+container Window[T] {
+  items: Slice[T];
+  index: i64;
+
+  invariant index_non_negative: index >= 0;
+  invariant index_within_items: index < len(items);
+}
+
+fn read_window(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  let window: Window[i64] = Window[i64] { items: xs, index: index };
+  assert len_visible: len(window.items) == len(xs);
+  assert index_visible: window.index == index;
+  return at(xs, index);
+}

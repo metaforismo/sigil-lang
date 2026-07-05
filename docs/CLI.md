@@ -15,14 +15,18 @@ the local checker cannot prove. Each proof result includes the source range of
 the `assert` or `ensures` clause that produced it. Single-line ranges are
 printed as `file:line:start-end`.
 
-The summary reports struct, theorem, and function counts. Proof-only theorem
-obligations use stable names such as `theorem.add_one_gt.ensures.1.advanced`.
+The summary reports struct, container, theorem, and function counts. Proof-only
+theorem obligations use stable names such as
+`theorem.add_one_gt.ensures.1.advanced`.
 When a function calls a theorem in a proof-only expression, the usual call-site
 `requires` obligations are emitted under the caller, and the theorem's
 postconditions become assumptions for later obligations in that proof context.
 Generic struct instantiations use the same proof artifact flow: concrete fields
 are visible in SMT under materialized names such as `box.value`, and invariant
 obligations are named from the function, local binding, and invariant label.
+Container instantiations use the same flow, but their model fields also expose
+SMT facts such as `window.items.len == xs.len` and
+`window.items.data == xs.data`.
 Array and slice model accesses add `index_in_bounds` safety obligations and
 emit SMT array `select` terms for `at(model, index)`.
 Reference model loads add `memory_valid` safety obligations and expose modeled
@@ -61,6 +65,12 @@ Example with generic structs and a theorem-backed invariant:
 
 ```sh
 sigil check examples/generics.sigil --strict --solver-timeout-ms 250 --save-smt build/generic-smt
+```
+
+Example with proof-level container model fields:
+
+```sh
+sigil check examples/containers.sigil --strict --solver-timeout-ms 250 --save-smt build/container-smt
 ```
 
 Example with proof-level array and slice bounds:
@@ -109,8 +119,9 @@ the usual proof obligations, and checks them with the local prover and optional
 Z3.
 
 The accepted candidate surface is proof-only: runtime `fn` declarations are
-reported and rejected. Struct and generic struct declarations are allowed so a
-candidate can define proof-level shapes needed by its theorem declarations.
+reported and rejected. Struct, container, and generic aggregate declarations are
+allowed so a candidate can define proof-level shapes needed by its theorem
+declarations.
 
 Options match the proof-related subset of `sigil check`:
 

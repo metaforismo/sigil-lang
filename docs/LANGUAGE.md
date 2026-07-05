@@ -12,13 +12,13 @@ module cache;
 
 Every file starts with one module declaration.
 
-Top-level struct, theorem, and function names share one declaration namespace.
-Built-in type names (`i64`, `bool`, and `void`) are reserved and cannot be
-reused as top-level declarations.
+Top-level struct, container, theorem, and function names share one declaration
+namespace. Built-in type names (`i64`, `bool`, `void`, `Array`, `Slice`, and
+`Ref`) are reserved and cannot be reused as top-level declarations.
 
 Value names are also reserved where they would become source-level proof
-symbols. Parameters, local bindings, and struct fields cannot be named
-`result`, `i64`, `bool`, or `void`.
+symbols. Parameters, local bindings, and aggregate fields cannot be named
+`result`, `i64`, `bool`, `void`, `Array`, `Slice`, or `Ref`.
 
 ## Types
 
@@ -28,8 +28,8 @@ The initial scalar types are:
 - `bool`
 - `void`
 
-User-defined struct types can be named directly, and generic struct
-instantiations use square-bracket type arguments:
+User-defined struct and container types can be named directly, and generic
+aggregate instantiations use square-bracket type arguments:
 
 ```sigil
 Box[i64]
@@ -137,6 +137,42 @@ Generic structs are a proof-instantiation foundation, not a complete container
 or monomorphized runtime system yet. Native lowering still skips aggregate
 values until layout and ABI rules are explicit.
 
+## Container Declarations
+
+```sigil
+container Window[T] {
+  items: Slice[T];
+  index: i64;
+
+  invariant index_non_negative: index >= 0;
+  invariant index_within_items: index < len(items);
+}
+```
+
+Containers are proof-level aggregate declarations for data-structure models.
+They share generic type arguments, named field initializers, field access, and
+invariant checking with structs, but they may also contain proof model fields:
+`Array[T]`, `Slice[T]`, and `Ref[T]`. Ordinary structs still reject those model
+fields until aggregate model semantics are explicit.
+
+When a container literal is constructed, scalar fields materialize as ordinary
+SMT symbols, while model fields materialize by their proof components. For
+example:
+
+```sigil
+let window: Window[i64] = Window[i64] { items: xs, index: index };
+assert len_visible: len(window.items) == len(xs);
+```
+
+The proof planner records facts such as `window.items.len == xs.len`,
+`window.items.data == xs.data`, and `window.index == index`. It then emits one
+obligation for each declared container invariant and assumes the instantiated
+invariants for later proof steps.
+
+Containers do not define runtime layout, allocation, aliasing, mutation,
+ownership, or ABI passing yet. Native lowering skips functions that manipulate
+container values until those semantics are designed.
+
 ## Array And Slice Models
 
 `Array[T]` and `Slice[T]` are built-in proof model types. They can be used as
@@ -188,7 +224,8 @@ modeled addresses.
 `Ref[T]` is a verification scaffold. It does not allocate memory, mutate
 through references, track lifetimes, prove pointer provenance, or define a
 native layout. Like array and slice models, reference values are allowed as
-function and theorem parameters, but not as struct fields or return values yet.
+function and theorem parameters and as container model fields, but not as
+ordinary struct fields or return values yet.
 
 ## Function Contracts
 
@@ -331,7 +368,7 @@ Supported expression forms:
 - model intrinsics: `len(xs)`, `at(xs, index)`
 - reference intrinsics: `is_valid(ptr)`, `load(ptr)`, `addr(ptr)`,
   `same_ref(left, right)`, `disjoint(left, right)`
-- struct literals: `TypeName { field: value }` and
+- aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
 - parentheses

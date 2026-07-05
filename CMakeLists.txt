@@ -178,6 +178,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/generics")
 
 add_test(
+  NAME sigil_cli_containers_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_containers.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/containers.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/containers")
+
+add_test(
   NAME sigil_cli_slices_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_slices.sh"
           "$<TARGET_FILE:sigil>"
@@ -309,6 +316,14 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_generics
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/generics.sigil" --strict)
   set_tests_properties(sigil_z3_generics PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_containers
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_containers_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/containers.sigil")
+  set_tests_properties(sigil_z3_containers PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

@@ -83,6 +83,14 @@ bool is_aggregate_type(const Type& type, const StructTable& structs) {
   return is_declared_struct_type(type, structs) || is_model_type(type);
 }
 
+const char* aggregate_kind(const StructDecl& decl) {
+  return decl.is_container ? "container" : "struct";
+}
+
+std::string aggregate_type_label(const StructDecl& decl) {
+  return std::string(aggregate_kind(decl)) + " '" + decl.name + "'";
+}
+
 bool is_scalar_type(const Type& type) {
   return type.kind == TypeKind::I64 || type.kind == TypeKind::Bool;
 }
@@ -139,11 +147,12 @@ void require_known_type(const Type& type, const StructTable& structs,
   const auto expected = found->second->type_params.size();
   const auto actual = type.arguments.size();
   if (expected != actual) {
+    const auto* kind = aggregate_kind(*found->second);
     if (expected == 0) {
-      throw Diagnostic(range, "struct '" + type.spelling + "' expects 0 type argument(s), got " +
-                                  std::to_string(actual));
+      throw Diagnostic(range, std::string(kind) + " '" + type.spelling +
+                                  "' expects 0 type argument(s), got " + std::to_string(actual));
     }
-    throw Diagnostic(range, "generic struct '" + type.spelling + "' expects " +
+    throw Diagnostic(range, "generic " + std::string(kind) + " '" + type.spelling + "' expects " +
                                 std::to_string(expected) + " type argument(s), got " +
                                 std::to_string(actual));
   }
@@ -493,11 +502,12 @@ Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
                                const StructTable& structs, const CallableContext& context) {
   const auto found = structs.find(expr->literal_type.spelling);
   if (found == structs.end()) {
-    throw Diagnostic(expr->range, "unknown struct '" + expr->literal_type.spelling + "'");
+    throw Diagnostic(expr->range, "unknown aggregate '" + expr->literal_type.spelling + "'");
   }
   const StructDecl& decl = *found->second;
   require_known_type(expr->literal_type, structs, expr->range,
-                     "struct literal '" + expr->literal_type.display() + "'");
+                     std::string(aggregate_kind(decl)) + " literal '" +
+                         expr->literal_type.display() + "'");
   const auto type_substitutions = build_type_substitutions(decl, expr->literal_type);
 
   std::unordered_set<std::string> initialized;
@@ -505,7 +515,7 @@ Type infer_struct_literal_expr(const Expr& expr, const SymbolTable& symbols,
     const auto* field = find_field(decl, initializer.name);
     if (!field) {
       throw Diagnostic(initializer.range,
-                       "struct '" + decl.name + "' has no field '" + initializer.name + "'");
+                       aggregate_type_label(decl) + " has no field '" + initializer.name + "'");
     }
     if (!initialized.insert(initializer.name).second) {
       throw Diagnostic(initializer.range,
@@ -543,13 +553,14 @@ Type infer_field_access_expr(const Expr& expr, const SymbolTable& symbols,
   const auto base_type = infer_expr(expr->lhs, symbols, structs, context);
   if (!is_declared_struct_type(base_type, structs)) {
     throw Diagnostic(expr->range,
-                     "field access requires a struct value, found " + base_type.display());
+                     "field access requires an aggregate value, found " + base_type.display());
   }
 
   const StructDecl& decl = *structs.at(base_type.spelling);
   const auto* field = find_field(decl, expr->name);
   if (!field) {
-    throw Diagnostic(expr->range, "struct '" + decl.name + "' has no field '" + expr->name + "'");
+    throw Diagnostic(expr->range,
+                     aggregate_type_label(decl) + " has no field '" + expr->name + "'");
   }
   return substitute_type(field->type, build_type_substitutions(decl, base_type));
 }
@@ -800,7 +811,7 @@ void validate_struct(const StructDecl& decl, const StructTable& structs,
       throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
                                         "' cannot use void as a value type");
     }
-    if (is_model_type(field.type)) {
+    if (!decl.is_container && is_model_type(field.type)) {
       throw Diagnostic(field.range, "field '" + decl.name + "." + field.name +
                                         "' cannot use model type '" + field.type.display() +
                                         "' until aggregate model fields are supported");
@@ -1082,9 +1093,9 @@ void validate_module(const Module& module) {
   std::unordered_set<std::string> struct_names;
   StructTable structs;
   for (const auto& decl : module.structs) {
-    require_unreserved_declaration_name(decl.name, decl.range, "struct '" + decl.name + "'");
+    require_unreserved_declaration_name(decl.name, decl.range, aggregate_type_label(decl));
     if (!struct_names.insert(decl.name).second) {
-      throw Diagnostic(decl.range, "duplicate struct '" + decl.name + "'");
+      throw Diagnostic(decl.range, "duplicate aggregate declaration '" + decl.name + "'");
     }
     if (!declaration_names.insert(decl.name).second) {
       throw Diagnostic(decl.range, "duplicate top-level declaration '" + decl.name + "'");

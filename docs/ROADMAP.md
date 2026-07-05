@@ -9,13 +9,12 @@ Bridge the original source-level invariant idea to the working compiler by
 building the smallest useful path from reusable lemmas to generic
 data-structure specifications. Proof-only theorem declarations, lemma reuse,
 generic struct instantiation, proof-level array/slice bounds, and a proof-level
-reference scaffold are now in place. This slice closes the first deterministic
-agentic SMT acceptance gate without expanding the trust boundary: saved agent
-requests can produce proof-only theorem candidates, and `sigil agent-check`
-validates those candidates as ordinary Sigil source before anyone treats them as
-reusable lemmas. The next compiler work is to turn the abstract aggregate facts
-into a real memory model: ownership, mutation, allocation, lifetime, provenance,
-and function-boundary semantics.
+reference scaffold are now in place. Deterministic agent-candidate validation
+also exists through `sigil agent-check`, and first-class proof-level container
+declarations can now carry array, slice, and reference model fields. The next
+compiler work is to turn those abstract aggregate facts into a real memory
+model: mutation, ownership, allocation, lifetime, provenance, and
+function-boundary semantics.
 
 ## Completed
 
@@ -64,6 +63,7 @@ and function-boundary semantics.
 - [x] Reuse theorem calls as lemma facts in proof-only expressions.
 - [x] Add generic struct declarations with concrete type-argument validation.
 - [x] Instantiate generic struct fields and invariants before proof emission.
+- [x] Add first-class proof-level container declarations with model fields.
 - [x] Add proof-level `Array[T]` and `Slice[T]` model types.
 - [x] Emit `index_in_bounds` safety obligations for `at(container, index)`.
 - [x] Lower array and slice reads to SMT `select` over abstract backing arrays.
@@ -98,8 +98,6 @@ and function-boundary semantics.
 
 ## Immediate Queue
 
-- [ ] Add first-class container declarations on top of generic struct
-      instantiation.
 - [ ] Add mutation facts for array, slice, and reference models.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
@@ -119,7 +117,7 @@ and function-boundary semantics.
 - [x] Reject recursive by-value struct definitions until references exist.
 - [x] Add generic struct declarations with clear proof-instantiation rules.
 - [ ] Define monomorphized runtime layout rules for generic aggregates.
-- [ ] Add first-class container declarations after generic instantiation is
+- [x] Add first-class container declarations after generic instantiation is
       explicit.
 - [x] Add arrays and slices with explicit length, bounds, and element read
       facts.
@@ -143,6 +141,7 @@ and function-boundary semantics.
 - [x] Treat invariants as obligations on struct literal construction.
 - [x] Reuse proof-only theorems as lemmas inside invariant and contract proofs.
 - [x] Instantiate generic struct invariants over concrete field types.
+- [x] Treat container invariants as obligations over scalar and model fields.
 - [ ] Treat invariants as obligations on mutation and public exits.
 - [ ] Add ownership and aliasing rules for low-level memory.
 - [ ] Support user-defined lemmas for data-structure correctness.
