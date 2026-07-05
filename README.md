@@ -76,6 +76,9 @@ production verifier yet.
 - Deterministic proof-search hint artifacts for obligations that are not proven.
 - Deterministic agent handoff artifacts with theorem-candidate skeletons for
   unproven obligations.
+- Deterministic `agent-check` validation for theorem-candidate files: candidates
+  are parsed, typechecked, planned, and proven as ordinary proof-only Sigil
+  modules before they can be treated as accepted lemmas.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using function calls, `let`,
   assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
@@ -146,6 +149,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
+./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
@@ -227,7 +231,8 @@ The next hard pieces are, in order:
 - mutation rules for arrays, slices, and refs;
 - aggregate ownership, layout, copy, aliasing, and function-boundary semantics;
 - a memory model for references, mutation, and low-level data structures;
-- a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
+- an external proof-assistant loop that proposes candidates and feeds them
+  through `sigil agent-check`;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).

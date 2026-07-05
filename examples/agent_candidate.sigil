@@ -1,0 +1,7 @@
+module agent_candidate;
+
+theorem truth for ()
+ensures always: true;
+{
+  return true;
+}

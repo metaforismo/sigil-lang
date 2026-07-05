@@ -9,13 +9,13 @@ Bridge the original source-level invariant idea to the working compiler by
 building the smallest useful path from reusable lemmas to generic
 data-structure specifications. Proof-only theorem declarations, lemma reuse,
 generic struct instantiation, proof-level array/slice bounds, and a proof-level
-reference scaffold are now in place. The current step is to turn those abstract
-facts into a real memory model: ownership, mutation, allocation, lifetime,
-provenance, and function-boundary semantics. This keeps the language surface
-simple while preparing the path for low-level data structures and eventually an
-agentic SMT loop. The first durable agent handoff artifacts now exist, but
-agents still cannot affect compilation unless their suggestions become checked
-Sigil source.
+reference scaffold are now in place. This slice closes the first deterministic
+agentic SMT acceptance gate without expanding the trust boundary: saved agent
+requests can produce proof-only theorem candidates, and `sigil agent-check`
+validates those candidates as ordinary Sigil source before anyone treats them as
+reusable lemmas. The next compiler work is to turn the abstract aggregate facts
+into a real memory model: ownership, mutation, allocation, lifetime, provenance,
+and function-boundary semantics.
 
 ## Completed
 
@@ -32,6 +32,8 @@ Sigil source.
 - [x] Save deterministic proof-search hints for unproven obligations.
 - [x] Save deterministic agent requests and theorem-candidate skeletons for
       unproven obligations.
+- [x] Validate theorem-candidate files through a deterministic proof-only
+      `sigil agent-check` acceptance gate.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.
 - [x] Render Z3 counterexamples in Sigil source terms.
 - [x] Support typed local `let` bindings in proof obligations.
@@ -103,7 +105,7 @@ Sigil source.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [ ] Execute an external agent loop that proposes candidate lemmas from saved
-      requests.
+      requests and feeds them through `sigil agent-check`.
 
 ## Core Language
 
@@ -151,10 +153,10 @@ Sigil source.
 - [x] Save deterministic proof-search hints for unproven obligations.
 - [x] Represent reusable source-level lemmas as checked `theorem` declarations.
 - [x] Save agent request artifacts with checked-theorem candidate skeletons.
+- [x] Feed candidate theorem declarations through the ordinary Sigil parser,
+      typechecker, proof planner, and checker before accepting them.
 - [ ] Let an LLM propose lemmas, splits, and candidate invariants.
 - [ ] Validate every proposal with Z3 or another deterministic checker.
-- [ ] Feed candidate theorem declarations back through the ordinary Sigil parser,
-      typechecker, and proof planner before accepting them.
 - [ ] Save proof traces as reproducible artifacts.
 - [ ] Add budgets, timeouts, and failure modes that are visible to users.
 

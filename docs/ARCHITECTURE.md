@@ -174,6 +174,13 @@ can read a request, propose Sigil theorem declarations or source changes, and
 then hand those changes back to the normal parser, typechecker, proof planner,
 and Z3 path. The compiler does not trust or ingest agent output directly.
 
+`sigil agent-check` makes that boundary scriptable. It runs a theorem-candidate
+file through the same frontend and proof planner, saves optional SMT artifacts,
+and reports `accepted` only when the proof-only candidate surface is respected
+and the selected verification policy accepts every obligation. It is a
+validation command, not an import command: accepted candidates must still be
+reviewed and wired into source explicitly.
+
 ## GCC JIT Backend
 
 CMake detects `libgccjit` and compiles the native backend when available. The

@@ -159,6 +159,12 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/agent-requests")
 
 add_test(
+  NAME sigil_cli_agent_check_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_check.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_BINARY_DIR}/agent-check")
+
+add_test(
   NAME sigil_cli_theorem_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_theorems.sh"
           "$<TARGET_FILE:sigil>"
@@ -333,6 +339,14 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_division_safety
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/division.sigil" --strict)
   set_tests_properties(sigil_z3_division_safety PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_agent_check
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_check_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_BINARY_DIR}/agent-check-z3")
+  set_tests_properties(sigil_z3_agent_check PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(
