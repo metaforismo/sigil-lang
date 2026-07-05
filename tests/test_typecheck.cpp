@@ -189,6 +189,20 @@ fn read_pair_box(x: i64, flag: bool) -> i64
   }
 }
 
+fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+
+fn read_array(flags: Array[bool], index: i64) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == at(flags, index);
+{
+  return at(flags, index);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -310,6 +324,64 @@ fn invalid_invariant_instantiation(flag: bool) -> bool
 }
 )",
                     "comparison operator requires i64 operands");
+
+  expect_diagnostic(R"(
+module bad;
+fn missing_model_type_arg(xs: Slice) -> i64
+{
+  return 0;
+}
+)",
+                    "model type 'Slice' expects 1 type argument(s), got 0");
+
+  expect_diagnostic(R"(
+module bad;
+fn bad_model_element(xs: Slice[void]) -> i64
+{
+  return 0;
+}
+)",
+                    "type argument for 'Slice[void]' cannot use void as a type argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn len_on_scalar(x: i64) -> i64
+{
+  return len(x);
+}
+)",
+                    "len expects an Array[T] or Slice[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn at_index_type(xs: Slice[i64], flag: bool) -> i64
+{
+  return at(xs, flag);
+}
+)",
+                    "at index must be i64");
+
+  expect_diagnostic(R"(
+module bad;
+struct Pair {
+  value: i64;
+}
+
+fn bad_model_element(xs: Slice[Pair]) -> i64
+{
+  return 0;
+}
+)",
+                    "model type 'Slice' element type cannot be aggregate type 'Pair'");
+
+  expect_diagnostic(R"(
+module bad;
+struct Window {
+  items: Slice[i64];
+}
+)",
+                    "field 'Window.items' cannot use model type 'Slice[i64]' until aggregate model "
+                    "fields are supported");
 
   expect_diagnostic(R"(
 module bad;

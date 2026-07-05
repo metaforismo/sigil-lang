@@ -41,6 +41,10 @@ production verifier yet.
 - Generic struct invariant obligations are emitted over instantiated field
   symbols, so `Box[bool].value` reaches SMT as `Bool`, not as an opaque type
   parameter.
+- Proof-level `Array[T]` and `Slice[T]` model types with `len(value)` and
+  `at(value, index)` intrinsics.
+- `at` emits index-in-bounds proof obligations and lowers to SMT `select` over
+  an abstract backing array whose element sort comes from `T`.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -132,6 +136,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/cache.sigil --strict --solver-timeout-ms 250 --save-smt build/smt
 ./build/sigil check examples/theorems.sigil --no-z3 --save-smt build/theorem-smt
 ./build/sigil check examples/generics.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/slices.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
@@ -211,7 +216,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are, in order:
 
 - first-class container declarations on top of the generic struct foundation;
-- array and slice models with length, bounds, and aliasing facts;
+- aliasing facts and mutation rules for array and slice models;
 - aggregate ownership, layout, copy, and function-boundary semantics;
 - a memory model for references, mutation, and low-level data structures;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;

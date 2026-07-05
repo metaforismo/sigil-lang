@@ -1,0 +1,21 @@
+module slices;
+
+fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+
+fn read_flags(flags: Array[bool], index: i64) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == at(flags, index);
+{
+  return at(flags, index);
+}
+
+fn length_is_non_negative(xs: Slice[i64]) -> i64
+ensures non_negative: result >= 0;
+{
+  return len(xs);
+}

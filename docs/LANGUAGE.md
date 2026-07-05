@@ -137,6 +137,35 @@ Generic structs are a proof-instantiation foundation, not a complete container
 or monomorphized runtime system yet. Native lowering still skips aggregate
 values until layout and ABI rules are explicit.
 
+## Array And Slice Models
+
+`Array[T]` and `Slice[T]` are built-in proof model types. They can be used as
+function and theorem parameters when `T` is `i64` or `bool`:
+
+```sigil
+fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+```
+
+`len(value)` returns an `i64` length. Sigil treats model lengths as
+non-negative proof facts. `at(value, index)` returns the element type `T` and
+creates a compile-time `index_in_bounds` proof obligation:
+
+```sigil
+index >= 0 && index < len(value)
+```
+
+The SMT model uses an abstract backing array and lowers `at(xs, i)` to a
+solver-level `select`. This is intentionally a proof model, not a runtime
+memory model. It does not define allocation, aliasing, mutation, pointer
+provenance, slice origins, or native layout yet. Aggregate returns are still
+rejected, and native lowering skips functions that take array or slice model
+parameters.
+
 ## Function Contracts
 
 ```sigil
@@ -275,6 +304,7 @@ Supported expression forms:
 - conditionals: `if condition { then_expr } else { else_expr }`
 - function calls: `callee(arg1, arg2)`
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
+- model intrinsics: `len(xs)`, `at(xs, index)`
 - struct literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
