@@ -244,6 +244,22 @@ that `is_valid(ptr)` holds at the access site. `addr(ptr)` returns the modeled
 integer address. `same_ref(left, right)` and `disjoint(left, right)` compare
 modeled addresses.
 
+When two `Ref[T]` snapshots with the same element type are both valid and have
+the same modeled address in one proof context, Sigil assumes their modeled
+loaded values are equal. This lets ordinary contracts prove source-level alias
+facts without a separate annotation language:
+
+```sigil
+fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
+requires left_valid: is_valid(left);
+requires right_valid: is_valid(right);
+requires same: same_ref(left, right);
+ensures exact: result == load(right);
+{
+  return load(left);
+}
+```
+
 `store(ptr, value)` is an immutable proof-level reference update. It returns
 the same `Ref[T]` model type, emits a `memory_valid` obligation for the write
 site, preserves the modeled address and validity, and replaces the modeled
@@ -265,10 +281,10 @@ As with array and slice stores, reference stores must currently be materialized
 in a `let` binding or container field before later facts use them.
 
 `Ref[T]` is a verification scaffold. It does not allocate memory, track
-lifetimes, prove pointer provenance, model aliases, mutate native memory, or
-define a native layout. Like array and slice models, reference values are
-allowed as function and theorem parameters and as container model fields, but
-not as ordinary struct fields or return values yet.
+lifetimes, prove pointer provenance, propagate stores through old aliases,
+mutate native memory, or define a native layout. Like array and slice models,
+reference values are allowed as function and theorem parameters and as
+container model fields, but not as ordinary struct fields or return values yet.
 
 ## Function Contracts
 

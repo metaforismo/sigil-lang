@@ -35,6 +35,12 @@ grep "(declare-const updated_value Int)" "$write_store" >/dev/null
 grep "(assert (= updated_addr ptr_addr))" "$write_store" >/dev/null
 grep "(assert (= updated_valid ptr_valid))" "$write_store" >/dev/null
 grep "(assert (= updated_value value))" "$write_store" >/dev/null
+if grep "(= ptr_value updated_value)" "$write_store" >/dev/null; then
+  exit 1
+fi
+if grep "(= updated_value ptr_value)" "$write_store" >/dev/null; then
+  exit 1
+fi
 grep "(assert (= result updated_value))" "$write_store" >/dev/null
 grep "(assert (not (= result value)))" "$write_store" >/dev/null
 grep "(assert (not ptr_valid))" "$write_valid" >/dev/null

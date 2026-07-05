@@ -55,6 +55,8 @@ production verifier yet.
   `load(ref)`, `same_ref(left, right)`, and `disjoint(left, right)` intrinsics.
 - `load` emits memory-valid proof obligations before exposing the modeled
   referenced value.
+- Valid same-address `Ref[T]` snapshots of the same element type imply equal
+  modeled loaded values in SMT.
 - Immutable proof-level `store(ref, value)` facts for `Ref[T]`: stores require
   reference validity, preserve modeled address and validity, and update the
   modeled referenced value.
@@ -159,6 +161,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/model_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/ref_updates.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/ref_aliases.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt
@@ -241,7 +244,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- aliasing, ownership, allocation, lifetime, and provenance for model updates;
+- ownership, allocation, lifetime, provenance, and memory-state tokens for model
+  updates;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;
