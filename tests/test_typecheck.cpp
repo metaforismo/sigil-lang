@@ -221,6 +221,23 @@ ensures exact: result == at(xs, index);
   return at(xs, index);
 }
 
+fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == value;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  assert length_preserved: len(updated) == len(xs);
+  return at(updated, index);
+}
+
+fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == value;
+{
+  let updated: Array[bool] = store(flags, index, value);
+  return at(updated, index);
+}
+
 fn read_ref(ptr: Ref[i64]) -> i64
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
@@ -391,6 +408,46 @@ fn at_index_type(xs: Slice[i64], flag: bool) -> i64
 }
 )",
                     "at index must be i64");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_arity(xs: Slice[i64], index: i64, value: i64) -> i64
+{
+  let updated: Slice[i64] = store(xs, index);
+  return at(updated, index);
+}
+)",
+                    "store expects 3 arguments, got 2");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_scalar(x: i64, index: i64, value: i64) -> i64
+{
+  let updated: i64 = store(x, index, value);
+  return updated;
+}
+)",
+                    "store expects an Array[T] or Slice[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_index_type(xs: Slice[i64], flag: bool, value: i64) -> i64
+{
+  let updated: Slice[i64] = store(xs, flag, value);
+  return at(updated, 0);
+}
+)",
+                    "store index must be i64");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_value_type(xs: Slice[i64], index: i64, flag: bool) -> i64
+{
+  let updated: Slice[i64] = store(xs, index, flag);
+  return at(updated, index);
+}
+)",
+                    "store value type mismatch: expected i64, found bool");
 
   expect_diagnostic(R"(
 module bad;

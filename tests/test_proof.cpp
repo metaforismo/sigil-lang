@@ -424,6 +424,71 @@ ensures exact: result == at(flags, index);
   expect(slice_model_results[5].status == sigil::VerificationStatus::Proven,
          "array ensure proven from return binding");
 
+  const char* model_update_source = R"(
+module model_updates;
+
+fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == value;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  assert length_preserved: len(updated) == len(xs);
+  return at(updated, index);
+}
+
+fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
+requires in_bounds: index >= 0 && index < len(flags);
+ensures exact: result == value;
+{
+  let updated: Array[bool] = store(flags, index, value);
+  return at(updated, index);
+}
+)";
+
+  const auto model_update_module = sigil::parse_source(model_update_source, "model-updates.sigil");
+  const auto model_update_obligations = sigil::build_obligations(model_update_module);
+  expect(model_update_obligations.size() == 7, "array and slice store obligations");
+  expect(model_update_obligations[0].name == "fn.write_then_read.safety.1.index_in_bounds",
+         "store write bounds obligation");
+  expect(model_update_obligations[1].name == "fn.write_then_read.assert.1.length_preserved",
+         "store length assertion obligation");
+  expect(model_update_obligations[2].name == "fn.write_then_read.safety.2.index_in_bounds",
+         "store read bounds obligation");
+  expect(model_update_obligations[3].name == "fn.write_then_read.ensures.1.exact",
+         "store scalar ensure obligation");
+  expect(model_update_obligations[6].name == "fn.update_flag.ensures.1.exact",
+         "store bool ensure obligation");
+  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[3]);
+  expect(write_store_smt.find("(declare-const updated_len Int)") != std::string::npos,
+         "store local length is declared");
+  expect(write_store_smt.find("(declare-const updated_data (Array Int Int))") != std::string::npos,
+         "store local data is declared");
+  expect(write_store_smt.find("(assert (= updated_len xs_len))") != std::string::npos,
+         "store preserves length");
+  expect(write_store_smt.find("(assert (= updated_data (store xs_data index value)))") !=
+             std::string::npos,
+         "store updates SMT array data");
+  expect(write_store_smt.find("(assert (= result (select updated_data index)))") !=
+             std::string::npos,
+         "store read binds result to updated select");
+  expect(write_store_smt.find("(assert (not (= result value)))") != std::string::npos,
+         "store ensure checks write then read");
+  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[6]);
+  expect(flag_store_smt.find("(declare-const updated_data (Array Int Bool))") != std::string::npos,
+         "store bool array data is declared");
+  expect(flag_store_smt.find("(assert (= updated_data (store flags_data index value)))") !=
+             std::string::npos,
+         "store bool array data is updated");
+  const auto model_update_results = sigil::verify_obligations(model_update_obligations, false);
+  expect(model_update_results[0].status == sigil::VerificationStatus::Proven,
+         "store write bounds proven from precondition");
+  expect(model_update_results[1].status == sigil::VerificationStatus::Proven,
+         "store length assertion proven locally");
+  expect(model_update_results[2].status == sigil::VerificationStatus::Proven,
+         "store read bounds proven from store length fact");
+  expect(model_update_results[3].status == sigil::VerificationStatus::Unknown,
+         "store write then read needs array theory");
+
   const char* ref_model_source = R"(
 module ref_model;
 

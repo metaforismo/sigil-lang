@@ -11,9 +11,10 @@ data-structure specifications. Proof-only theorem declarations, lemma reuse,
 generic struct instantiation, proof-level array/slice bounds, and a proof-level
 reference scaffold are now in place. Deterministic agent-candidate validation
 also exists through `sigil agent-check`, and first-class proof-level container
-declarations can now carry array, slice, and reference model fields. The next
-compiler work is to turn those abstract aggregate facts into a real memory
-model: mutation, ownership, allocation, lifetime, provenance, and
+declarations can now carry array, slice, and reference model fields. Array and
+slice models also have immutable proof-level `store` facts. The next compiler
+work is to turn those abstract aggregate facts into a real memory model:
+reference mutation, ownership, allocation, lifetime, provenance, and
 function-boundary semantics.
 
 ## Completed
@@ -67,6 +68,7 @@ function-boundary semantics.
 - [x] Add proof-level `Array[T]` and `Slice[T]` model types.
 - [x] Emit `index_in_bounds` safety obligations for `at(container, index)`.
 - [x] Lower array and slice reads to SMT `select` over abstract backing arrays.
+- [x] Add immutable proof-level `store` facts for array and slice models.
 - [x] Add proof-level `Ref[T]` model types.
 - [x] Emit `memory_valid` safety obligations for `load(ref)`.
 - [x] Add modeled address, same-reference, and disjoint-reference predicates.
@@ -98,7 +100,8 @@ function-boundary semantics.
 
 ## Immediate Queue
 
-- [ ] Add mutation facts for array, slice, and reference models.
+- [ ] Add reference mutation facts and connect array/slice updates to aliasing
+      and ownership rules.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
@@ -121,6 +124,7 @@ function-boundary semantics.
       explicit.
 - [x] Add arrays and slices with explicit length, bounds, and element read
       facts.
+- [x] Add immutable array and slice update facts through SMT array `store`.
 - [x] Add reference address and disjointness facts.
 - [ ] Add array and slice alias facts beyond modeled reference addresses.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into

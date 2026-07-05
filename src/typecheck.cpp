@@ -263,8 +263,8 @@ CallableContext with_theorem_calls_allowed(const CallableContext& context) {
 }
 
 bool is_model_intrinsic_name(const std::string& name) {
-  return name == "len" || name == "at" || name == "load" || name == "is_valid" || name == "addr" ||
-         name == "same_ref" || name == "disjoint";
+  return name == "len" || name == "at" || name == "store" || name == "load" || name == "is_valid" ||
+         name == "addr" || name == "same_ref" || name == "disjoint";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -298,6 +298,26 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
     }
     require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64, "at index");
     return container.arguments.front();
+  }
+
+  if (expr->name == "store") {
+    if (expr->arguments.size() != 3) {
+      throw Diagnostic(expr->range,
+                       "store expects 3 arguments, got " + std::to_string(expr->arguments.size()));
+    }
+    const auto container = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_container_type(container)) {
+      throw Diagnostic(expr->arguments[0]->range, "store expects an Array[T] or Slice[T] argument");
+    }
+    require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64, "store index");
+    const auto value = infer_expr(expr->arguments[2], symbols, structs, context);
+    const auto expected = container.arguments.front();
+    if (!same_type(value, expected)) {
+      throw Diagnostic(expr->arguments[2]->range, "store value type mismatch: expected " +
+                                                      expected.display() + ", found " +
+                                                      value.display());
+    }
+    return container;
   }
 
   if (expr->name == "load") {
@@ -723,7 +743,7 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       throw Diagnostic(statement.range, "let type mismatch: expected " + statement.type.display() +
                                             ", found " + actual.display());
     }
-    if (is_aggregate_type(statement.type, structs) &&
+    if (is_declared_struct_type(statement.type, structs) &&
         statement.expr->kind != ExprNode::Kind::StructLiteral) {
       throw Diagnostic(statement.range, "struct local '" + decl.name + "." + statement.name +
                                             "' must be initialized with a struct literal");

@@ -192,6 +192,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/slices")
 
 add_test(
+  NAME sigil_cli_model_updates_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_model_updates.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/model_updates.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/model-updates")
+
+add_test(
   NAME sigil_cli_memory_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_memory.sh"
           "$<TARGET_FILE:sigil>"
@@ -330,6 +337,14 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_slices
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/slices.sigil" --strict)
   set_tests_properties(sigil_z3_slices PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_model_updates
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_model_updates_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/model_updates.sigil")
+  set_tests_properties(sigil_z3_model_updates PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(
