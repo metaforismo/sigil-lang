@@ -22,11 +22,11 @@ change while the language is still being designed. Parser output is a typed AST
 containing structs, fields, invariants, proof-only theorems, functions,
 contracts, and body statements. Struct declarations may carry generic type
 parameters, and type nodes preserve nested type arguments such as
-`PairBox[i64, bool]`, `Slice[i64]`, and `Array[bool]`. Numeric literal tokens
-are converted to exact `i64` AST values at parse time, and out-of-range
-literals are rejected with source ranges before type checking or proof
-generation. Unterminated struct and statement blocks report the missing closing
-brace at EOF instead of falling through to a generic field or statement
+`PairBox[i64, bool]`, `Slice[i64]`, `Array[bool]`, and `Ref[i64]`. Numeric
+literal tokens are converted to exact `i64` AST values at parse time, and
+out-of-range literals are rejected with source ranges before type checking or
+proof generation. Unterminated struct and statement blocks report the missing
+closing brace at EOF instead of falling through to a generic field or statement
 diagnostic.
 
 ## Static Validation
@@ -38,8 +38,9 @@ system:
   and cannot reuse built-in type names;
 - generic struct type parameter names must be unique and cannot reuse built-in
   type names;
-- `Array` and `Slice` are reserved proof model type names;
-- `Array[T]` and `Slice[T]` must have one scalar element type argument;
+- `Array`, `Slice`, and `Ref` are reserved proof model type names;
+- `Array[T]`, `Slice[T]`, and `Ref[T]` must have one scalar element type
+  argument;
 - parameter, local, and field names cannot reuse built-in type names or the
   compiler-generated `result` symbol;
 - non-generic struct invariant expressions must be `bool`;
@@ -59,6 +60,8 @@ system:
   argument types, and appear only in proof-only expressions;
 - `len(model)` and `at(model, index)` are built-in array/slice model
   intrinsics; `len` returns `i64`, and `at` returns the model element type;
+- `is_valid(ref)`, `addr(ref)`, `load(ref)`, `same_ref(left, right)`, and
+  `disjoint(left, right)` are built-in reference model intrinsics;
 - struct literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on a struct-typed
   expression;
@@ -119,6 +122,8 @@ The planner walks each function and builds proof obligations:
   guards reflected in the active assumptions;
 - array and slice `at(container, index)` expressions create `index_in_bounds`
   safety obligations and lower to SMT `select` over an abstract backing array;
+- reference `load(ref)` expressions create `memory_valid` safety obligations
+  and lower to the modeled referenced value;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

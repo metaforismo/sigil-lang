@@ -45,6 +45,10 @@ production verifier yet.
   `at(value, index)` intrinsics.
 - `at` emits index-in-bounds proof obligations and lowers to SMT `select` over
   an abstract backing array whose element sort comes from `T`.
+- Proof-level `Ref[T]` model types with `is_valid(ref)`, `addr(ref)`,
+  `load(ref)`, `same_ref(left, right)`, and `disjoint(left, right)` intrinsics.
+- `load` emits memory-valid proof obligations before exposing the modeled
+  referenced value.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -137,6 +141,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/theorems.sigil --no-z3 --save-smt build/theorem-smt
 ./build/sigil check examples/generics.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/slices.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
@@ -216,8 +221,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are, in order:
 
 - first-class container declarations on top of the generic struct foundation;
-- aliasing facts and mutation rules for array and slice models;
-- aggregate ownership, layout, copy, and function-boundary semantics;
+- mutation rules for arrays, slices, and refs;
+- aggregate ownership, layout, copy, aliasing, and function-boundary semantics;
 - a memory model for references, mutation, and low-level data structures;
 - a proof-assistant loop where LLMs propose lemmas and Z3 validates them;
 - binary-level proof experiments for bounded runtime and crash-safety claims.

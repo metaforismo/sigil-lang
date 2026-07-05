@@ -8,11 +8,12 @@ tests, and docs are in the repo.
 Bridge the original source-level invariant idea to the working compiler by
 building the smallest useful path from reusable lemmas to generic
 data-structure specifications. Proof-only theorem declarations, lemma reuse,
-generic struct instantiation, and proof-level array/slice bounds are now in
-place. The current step is to turn those abstract container facts into a memory
-model: aliasing, ownership, mutation, allocation, and function-boundary
-semantics. This keeps the language surface simple while preparing the path for
-low-level data structures and eventually an agentic SMT loop.
+generic struct instantiation, proof-level array/slice bounds, and a proof-level
+reference scaffold are now in place. The current step is to turn those abstract
+facts into a real memory model: ownership, mutation, allocation, lifetime,
+provenance, and function-boundary semantics. This keeps the language surface
+simple while preparing the path for low-level data structures and eventually an
+agentic SMT loop.
 
 ## Completed
 
@@ -60,6 +61,9 @@ low-level data structures and eventually an agentic SMT loop.
 - [x] Add proof-level `Array[T]` and `Slice[T]` model types.
 - [x] Emit `index_in_bounds` safety obligations for `at(container, index)`.
 - [x] Lower array and slice reads to SMT `select` over abstract backing arrays.
+- [x] Add proof-level `Ref[T]` model types.
+- [x] Emit `memory_valid` safety obligations for `load(ref)`.
+- [x] Add modeled address, same-reference, and disjoint-reference predicates.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -90,9 +94,8 @@ low-level data structures and eventually an agentic SMT loop.
 
 - [ ] Add first-class container declarations on top of generic struct
       instantiation.
-- [ ] Add aliasing and mutation facts for array and slice models.
-- [ ] Define a memory model for references, ownership, mutation, and low-level
-      data-structure invariants.
+- [ ] Add mutation facts for array, slice, and reference models.
+- [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [ ] Build the first agentic SMT loop around saved proof hints and checked
@@ -114,7 +117,8 @@ low-level data structures and eventually an agentic SMT loop.
       explicit.
 - [x] Add arrays and slices with explicit length, bounds, and element read
       facts.
-- [ ] Add array and slice alias facts.
+- [x] Add reference address and disjointness facts.
+- [ ] Add array and slice alias facts beyond modeled reference addresses.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
@@ -152,6 +156,7 @@ low-level data structures and eventually an agentic SMT loop.
 ## Memory Model
 
 - [ ] Define reference and pointer types separately from by-value structs.
+- [x] Add proof-level `Ref[T]` validity, address, and load facts.
 - [ ] Model allocation, lifetime, ownership, borrowing, and aliasing as explicit
       proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and

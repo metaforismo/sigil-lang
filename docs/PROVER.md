@@ -109,6 +109,19 @@ guards, or earlier facts. The model currently gives every array and slice a
 non-negative length axiom. It does not model aliasing, element mutation,
 allocation, or pointer provenance yet.
 
+Reference model parameters are materialized as `ref.addr`, `ref.valid`, and
+`ref.value`. `addr(ref)` lowers to the address symbol, `is_valid(ref)` lowers to
+the validity symbol, and `load(ref)` lowers to the value symbol. Every `load`
+also emits a `memory_valid` safety obligation whose goal is `is_valid(ref)` at
+the access site. Address predicates are purely modeled facts today:
+`same_ref(a, b)` lowers to `addr(a) == addr(b)`, and `disjoint(a, b)` lowers to
+`addr(a) != addr(b)`.
+
+The reference model is intentionally not a full memory semantics. It has no
+allocation, lifetime, borrow, mutation, field projection, byte layout, or
+native-code provenance model yet. Those pieces must be added before Sigil can
+claim low-level memory safety beyond explicit validity obligations.
+
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
 

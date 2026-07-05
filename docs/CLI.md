@@ -24,6 +24,8 @@ are visible in SMT under materialized names such as `box.value`, and invariant
 obligations are named from the function, local binding, and invariant label.
 Array and slice model accesses add `index_in_bounds` safety obligations and
 emit SMT array `select` terms for `at(model, index)`.
+Reference model loads add `memory_valid` safety obligations and expose modeled
+address, validity, and value symbols in SMT.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -59,6 +61,12 @@ Example with proof-level array and slice bounds:
 
 ```sh
 sigil check examples/slices.sigil --strict --solver-timeout-ms 250 --save-smt build/slice-smt
+```
+
+Example with proof-level reference validity and alias predicates:
+
+```sh
+sigil check examples/memory.sigil --strict --solver-timeout-ms 250 --save-smt build/memory-smt
 ```
 
 Exit codes:

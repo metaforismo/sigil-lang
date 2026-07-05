@@ -166,6 +166,30 @@ provenance, slice origins, or native layout yet. Aggregate returns are still
 rejected, and native lowering skips functions that take array or slice model
 parameters.
 
+## Reference Model
+
+`Ref[T]` is a built-in proof model for scalar references:
+
+```sigil
+fn read_ref(ptr: Ref[i64]) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+```
+
+`is_valid(ptr)` exposes the modeled validity bit. `load(ptr)` returns the
+referenced scalar value and emits a `memory_valid` safety obligation proving
+that `is_valid(ptr)` holds at the access site. `addr(ptr)` returns the modeled
+integer address. `same_ref(left, right)` and `disjoint(left, right)` compare
+modeled addresses.
+
+`Ref[T]` is a verification scaffold. It does not allocate memory, mutate
+through references, track lifetimes, prove pointer provenance, or define a
+native layout. Like array and slice models, reference values are allowed as
+function and theorem parameters, but not as struct fields or return values yet.
+
 ## Function Contracts
 
 ```sigil
@@ -305,6 +329,8 @@ Supported expression forms:
 - function calls: `callee(arg1, arg2)`
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
 - model intrinsics: `len(xs)`, `at(xs, index)`
+- reference intrinsics: `is_valid(ptr)`, `load(ptr)`, `addr(ptr)`,
+  `same_ref(left, right)`, `disjoint(left, right)`
 - struct literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
