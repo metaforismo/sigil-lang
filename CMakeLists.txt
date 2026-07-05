@@ -206,6 +206,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/memory")
 
 add_test(
+  NAME sigil_cli_ref_updates_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ref_updates.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_updates.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/ref-updates")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -351,6 +358,14 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_memory
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/memory.sigil" --strict)
   set_tests_properties(sigil_z3_memory PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_ref_updates
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ref_updates_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_updates.sigil")
+  set_tests_properties(sigil_z3_ref_updates PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

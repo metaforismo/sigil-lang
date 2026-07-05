@@ -62,8 +62,9 @@ system:
   built-in array/slice model intrinsics; `len` returns `i64`, `at` returns the
   model element type, and `store` returns the same model type after checking
   the stored value type;
-- `is_valid(ref)`, `addr(ref)`, `load(ref)`, `same_ref(left, right)`, and
-  `disjoint(left, right)` are built-in reference model intrinsics;
+- `is_valid(ref)`, `addr(ref)`, `load(ref)`, `store(ref, value)`,
+  `same_ref(left, right)`, and `disjoint(left, right)` are built-in reference
+  model intrinsics;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -137,6 +138,9 @@ The planner walks each function and builds proof obligations:
   the updated data fact to SMT array `store`;
 - reference `load(ref)` expressions create `memory_valid` safety obligations
   and lower to the modeled referenced value;
+- reference `store(ref, value)` bindings create `memory_valid` safety
+  obligations, preserve modeled address and validity, and replace the modeled
+  referenced value;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

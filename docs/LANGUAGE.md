@@ -244,11 +244,31 @@ that `is_valid(ptr)` holds at the access site. `addr(ptr)` returns the modeled
 integer address. `same_ref(left, right)` and `disjoint(left, right)` compare
 modeled addresses.
 
-`Ref[T]` is a verification scaffold. It does not allocate memory, mutate
-through references, track lifetimes, prove pointer provenance, or define a
-native layout. Like array and slice models, reference values are allowed as
-function and theorem parameters and as container model fields, but not as
-ordinary struct fields or return values yet.
+`store(ptr, value)` is an immutable proof-level reference update. It returns
+the same `Ref[T]` model type, emits a `memory_valid` obligation for the write
+site, preserves the modeled address and validity, and replaces the modeled
+referenced value:
+
+```sigil
+fn write_then_load(ptr: Ref[i64], value: i64) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  assert still_valid: is_valid(updated);
+  assert same_address: addr(updated) == addr(ptr);
+  return load(updated);
+}
+```
+
+As with array and slice stores, reference stores must currently be materialized
+in a `let` binding or container field before later facts use them.
+
+`Ref[T]` is a verification scaffold. It does not allocate memory, track
+lifetimes, prove pointer provenance, model aliases, mutate native memory, or
+define a native layout. Like array and slice models, reference values are
+allowed as function and theorem parameters and as container model fields, but
+not as ordinary struct fields or return values yet.
 
 ## Function Contracts
 
@@ -391,7 +411,7 @@ Supported expression forms:
 - model intrinsics: `len(xs)`, `at(xs, index)`,
   `store(xs, index, value)`
 - reference intrinsics: `is_valid(ptr)`, `load(ptr)`, `addr(ptr)`,
-  `same_ref(left, right)`, `disjoint(left, right)`
+  `store(ptr, value)`, `same_ref(left, right)`, `disjoint(left, right)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`

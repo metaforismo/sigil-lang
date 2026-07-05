@@ -12,9 +12,10 @@ generic struct instantiation, proof-level array/slice bounds, and a proof-level
 reference scaffold are now in place. Deterministic agent-candidate validation
 also exists through `sigil agent-check`, and first-class proof-level container
 declarations can now carry array, slice, and reference model fields. Array and
-slice models also have immutable proof-level `store` facts. The next compiler
-work is to turn those abstract aggregate facts into a real memory model:
-reference mutation, ownership, allocation, lifetime, provenance, and
+slice models also have immutable proof-level `store` facts, and reference
+models have immutable proof-level store facts for validity-preserving value
+updates. The next compiler work is to turn those abstract facts into a real
+memory model: aliasing, ownership, allocation, lifetime, provenance, and
 function-boundary semantics.
 
 ## Completed
@@ -72,6 +73,7 @@ function-boundary semantics.
 - [x] Add proof-level `Ref[T]` model types.
 - [x] Emit `memory_valid` safety obligations for `load(ref)`.
 - [x] Add modeled address, same-reference, and disjoint-reference predicates.
+- [x] Add immutable proof-level `store` facts for reference models.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -100,8 +102,7 @@ function-boundary semantics.
 
 ## Immediate Queue
 
-- [ ] Add reference mutation facts and connect array/slice updates to aliasing
-      and ownership rules.
+- [ ] Connect array/slice/reference updates to aliasing and ownership rules.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
@@ -167,6 +168,7 @@ function-boundary semantics.
 
 - [ ] Define reference and pointer types separately from by-value structs.
 - [x] Add proof-level `Ref[T]` validity, address, and load facts.
+- [x] Add proof-level `Ref[T]` store facts that preserve validity and address.
 - [ ] Model allocation, lifetime, ownership, borrowing, and aliasing as explicit
       proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and

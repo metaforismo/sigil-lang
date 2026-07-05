@@ -549,6 +549,77 @@ ensures exact: result == disjoint(left, right);
   expect(ref_model_results[6].status == sigil::VerificationStatus::Proven,
          "ref disjoint ensure proven from return binding");
 
+  const char* ref_update_source = R"(
+module ref_updates;
+
+fn write_then_load(ptr: Ref[i64], value: i64) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  assert still_valid: is_valid(updated);
+  assert same_address: addr(updated) == addr(ptr);
+  return load(updated);
+}
+
+fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
+requires valid: is_valid(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[bool] = store(ptr, value);
+  return load(updated);
+}
+)";
+
+  const auto ref_update_module = sigil::parse_source(ref_update_source, "ref-updates.sigil");
+  const auto ref_update_obligations = sigil::build_obligations(ref_update_module);
+  expect(ref_update_obligations.size() == 8, "ref store obligations");
+  expect(ref_update_obligations[0].name == "fn.write_then_load.safety.1.memory_valid",
+         "ref store write validity obligation");
+  expect(ref_update_obligations[1].name == "fn.write_then_load.assert.1.still_valid",
+         "ref store validity assertion obligation");
+  expect(ref_update_obligations[2].name == "fn.write_then_load.assert.2.same_address",
+         "ref store address assertion obligation");
+  expect(ref_update_obligations[3].name == "fn.write_then_load.safety.2.memory_valid",
+         "ref store read validity obligation");
+  expect(ref_update_obligations[4].name == "fn.write_then_load.ensures.1.exact",
+         "ref store scalar ensure obligation");
+  expect(ref_update_obligations[7].name == "fn.update_flag_ref.ensures.1.exact",
+         "ref store bool ensure obligation");
+  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[4]);
+  expect(ref_store_smt.find("(declare-const updated_addr Int)") != std::string::npos,
+         "ref store updated address is declared");
+  expect(ref_store_smt.find("(declare-const updated_valid Bool)") != std::string::npos,
+         "ref store updated validity is declared");
+  expect(ref_store_smt.find("(declare-const updated_value Int)") != std::string::npos,
+         "ref store updated value is declared");
+  expect(ref_store_smt.find("(assert (= updated_addr ptr_addr))") != std::string::npos,
+         "ref store preserves address");
+  expect(ref_store_smt.find("(assert (= updated_valid ptr_valid))") != std::string::npos,
+         "ref store preserves validity");
+  expect(ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
+         "ref store updates value");
+  expect(ref_store_smt.find("(assert (= result updated_value))") != std::string::npos,
+         "ref store read binds result to updated value");
+  expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
+         "ref store ensure checks write then load");
+  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[7]);
+  expect(bool_ref_store_smt.find("(declare-const updated_value Bool)") != std::string::npos,
+         "ref store bool value is declared");
+  expect(bool_ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
+         "ref store bool value is updated");
+  const auto ref_update_results = sigil::verify_obligations(ref_update_obligations, false);
+  expect(ref_update_results[0].status == sigil::VerificationStatus::Proven,
+         "ref store validity proven from precondition");
+  expect(ref_update_results[1].status == sigil::VerificationStatus::Proven,
+         "ref store validity assertion proven locally");
+  expect(ref_update_results[2].status == sigil::VerificationStatus::Proven,
+         "ref store address assertion proven locally");
+  expect(ref_update_results[3].status == sigil::VerificationStatus::Proven,
+         "ref store read validity proven locally");
+  expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
+         "ref store write then load proven locally");
+
   const char* conditional_source = R"(
 module conditional;
 

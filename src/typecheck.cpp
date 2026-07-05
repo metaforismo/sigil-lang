@@ -301,6 +301,24 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
   }
 
   if (expr->name == "store") {
+    if (expr->arguments.size() == 2) {
+      const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
+      if (is_model_container_type(ref)) {
+        throw Diagnostic(expr->range, "store expects 3 arguments, got 2");
+      }
+      if (!is_ref_model_type(ref)) {
+        throw Diagnostic(expr->arguments[0]->range, "store expects a Ref[T] argument");
+      }
+      const auto value = infer_expr(expr->arguments[1], symbols, structs, context);
+      const auto expected = ref.arguments.front();
+      if (!same_type(value, expected)) {
+        throw Diagnostic(expr->arguments[1]->range, "store value type mismatch: expected " +
+                                                        expected.display() + ", found " +
+                                                        value.display());
+      }
+      return ref;
+    }
+
     if (expr->arguments.size() != 3) {
       throw Diagnostic(expr->range,
                        "store expects 3 arguments, got " + std::to_string(expr->arguments.size()));

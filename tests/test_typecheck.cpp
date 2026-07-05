@@ -251,6 +251,24 @@ ensures exact: result == disjoint(left, right);
   return disjoint(left, right);
 }
 
+fn write_then_load(ptr: Ref[i64], value: i64) -> i64
+requires valid: is_valid(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  assert still_valid: is_valid(updated);
+  assert same_address: addr(updated) == addr(ptr);
+  return load(updated);
+}
+
+fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
+requires valid: is_valid(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[bool] = store(ptr, value);
+  return load(updated);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -448,6 +466,36 @@ fn store_value_type(xs: Slice[i64], index: i64, flag: bool) -> i64
 }
 )",
                     "store value type mismatch: expected i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_ref_scalar(x: i64, value: i64) -> i64
+{
+  let updated: i64 = store(x, value);
+  return updated;
+}
+)",
+                    "store expects a Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_ref_value_type(ptr: Ref[i64], flag: bool) -> i64
+{
+  let updated: Ref[i64] = store(ptr, flag);
+  return load(updated);
+}
+)",
+                    "store value type mismatch: expected i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn store_ref_target_type(ptr: Ref[i64], value: i64) -> i64
+{
+  let updated: Ref[bool] = store(ptr, value);
+  return 0;
+}
+)",
+                    "let type mismatch: expected Ref[bool], found Ref[i64]");
 
   expect_diagnostic(R"(
 module bad;
