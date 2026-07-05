@@ -93,6 +93,49 @@ Result statuses:
 - `UNKNOWN`: no checker proved or refuted the obligation.
 - `ERROR`: checking could not complete for that obligation.
 
+## `sigil agent-check`
+
+```sh
+sigil agent-check <candidate.sigil> [--dump-smt] [--save-smt <dir>]
+                  [--show-model] [--solver-timeout-ms <ms>]
+                  [--strict] [--no-z3]
+```
+
+`agent-check` is the deterministic acceptance gate for theorem-candidate files
+written by a human or an external proof-search agent. The command does not trust
+the candidate file as a proof certificate and does not mutate project source. It
+parses the candidate as ordinary Sigil source, runs static validation, builds
+the usual proof obligations, and checks them with the local prover and optional
+Z3.
+
+The accepted candidate surface is proof-only: runtime `fn` declarations are
+reported and rejected. Struct and generic struct declarations are allowed so a
+candidate can define proof-level shapes needed by its theorem declarations.
+
+Options match the proof-related subset of `sigil check`:
+
+- `--dump-smt`: print each emitted SMT-LIB query to stdout.
+- `--save-smt <dir>`: write every emitted SMT-LIB query to `<dir>`.
+- `--show-model`: keep Z3 counterexample models for refuted obligations.
+- `--solver-timeout-ms <ms>`: preserve a per-query timeout in emitted SMT-LIB.
+- `--strict`: reject candidates that leave any obligation `UNKNOWN`.
+- `--no-z3`: skip Z3 and run local checks only.
+
+Example:
+
+```sh
+sigil agent-check examples/agent_candidate.sigil \
+  --strict --no-z3 --save-smt build/agent-candidate-smt
+```
+
+Exit codes:
+
+- `0`: the candidate stayed inside the proof-only surface and all proof results
+  are acceptable under the selected strictness.
+- `1`: command-line, parse, validation, or file-read error.
+- `2`: the candidate used runtime declarations, had a refuted/error result, or
+  `--strict` found an `UNKNOWN` obligation.
+
 ## `sigil backend`
 
 ```sh

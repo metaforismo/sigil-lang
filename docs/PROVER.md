@@ -193,6 +193,14 @@ The compiler never consumes these artifacts as authority. They are a durable
 queue for external agents. Acceptance still means ordinary Sigil source parses,
 typechecks, and proves under the deterministic local checker and Z3.
 
+Use `sigil agent-check <candidate.sigil>` to run that acceptance gate directly
+on a candidate file. The command deliberately accepts only the proof-only
+candidate surface: theorem declarations, plus any struct declarations needed to
+type those theorem declarations. Runtime functions are rejected so an agent
+cannot smuggle executable code through a lemma workflow. Accepted still means
+all obligations are acceptable under the selected checker settings; with
+`--strict`, even one `UNKNOWN` result rejects the candidate.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.

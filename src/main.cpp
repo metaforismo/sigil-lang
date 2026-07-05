@@ -34,6 +34,9 @@ void print_help() {
             << "                          [--save-proof-hints <dir>]\n"
             << "                          [--save-agent-requests <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
+            << "  sigil agent-check <candidate.sigil> [--dump-smt] [--save-smt <dir>]\n"
+            << "                                      [--show-model] [--solver-timeout-ms <ms>]\n"
+            << "                                      [--strict] [--no-z3]\n"
             << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
             << "                            [--dump-binary-facts] [--save-binary-facts <dir>]\n"
             << "  sigil run <file.sigil> <function> [args...]\n"
@@ -229,6 +232,57 @@ write_agent_handoff_artifacts(const std::vector<sigil::AgentHandoffArtifact>& ar
   return paths;
 }
 
+std::size_t count_struct_invariants(const sigil::Module& module) {
+  std::size_t invariant_count = 0;
+  for (const auto& decl : module.structs) {
+    invariant_count += decl.invariants.size();
+  }
+  return invariant_count;
+}
+
+struct VerificationSummary {
+  bool has_failure = false;
+  bool has_unknown = false;
+};
+
+VerificationSummary
+summarize_verification_results(const std::vector<sigil::VerificationResult>& results) {
+  VerificationSummary summary;
+  for (const auto& result : results) {
+    summary.has_failure = summary.has_failure ||
+                          result.status == sigil::VerificationStatus::Refuted ||
+                          result.status == sigil::VerificationStatus::Error;
+    summary.has_unknown =
+        summary.has_unknown || result.status == sigil::VerificationStatus::Unknown;
+  }
+  return summary;
+}
+
+void print_verification_results(const std::vector<sigil::VerificationResult>& results,
+                                bool dump_smt) {
+  for (const auto& result : results) {
+    std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name << " - "
+              << result.details << "\n";
+    std::cout << "  at: " << result.range.display() << "\n";
+    if (!result.smt_path.empty()) {
+      std::cout << "  smt: " << result.smt_path << "\n";
+    }
+    if (!result.counterexample.empty()) {
+      std::cout << "  counterexample:\n" << indent_block(result.counterexample, "    ");
+    }
+    if (!result.model.empty()) {
+      std::cout << "  model:\n" << indent_block(result.model, "    ");
+    }
+    if (dump_smt) {
+      std::cout << result.smt_lib << "\n";
+    }
+  }
+}
+
+bool proofs_rejected(const VerificationSummary& summary, bool strict) {
+  return summary.has_failure || (strict && summary.has_unknown);
+}
+
 int check_command(const std::vector<std::string>& args) {
   if (args.empty()) {
     print_help();
@@ -297,40 +351,15 @@ int check_command(const std::vector<std::string>& args) {
         sigil::build_agent_handoff_artifacts(obligations, results), agent_handoff_output_dir);
   }
 
-  std::size_t invariant_count = 0;
-  for (const auto& decl : module.structs) {
-    invariant_count += decl.invariants.size();
-  }
-
   std::cout << "module " << module.name << "\n";
   std::cout << "  structs: " << module.structs.size() << "\n";
   std::cout << "  theorems: " << module.theorems.size() << "\n";
   std::cout << "  functions: " << module.functions.size() << "\n";
-  std::cout << "  registered struct invariants: " << invariant_count << "\n";
+  std::cout << "  registered struct invariants: " << count_struct_invariants(module) << "\n";
   std::cout << "  proof obligations: " << results.size() << "\n";
 
-  bool has_failure = false;
-  bool has_unknown = false;
-  for (const auto& result : results) {
-    std::cout << "[" << sigil::status_name(result.status) << "] " << result.obligation_name << " - "
-              << result.details << "\n";
-    std::cout << "  at: " << result.range.display() << "\n";
-    if (!result.smt_path.empty()) {
-      std::cout << "  smt: " << result.smt_path << "\n";
-    }
-    if (!result.counterexample.empty()) {
-      std::cout << "  counterexample:\n" << indent_block(result.counterexample, "    ");
-    }
-    if (!result.model.empty()) {
-      std::cout << "  model:\n" << indent_block(result.model, "    ");
-    }
-    if (dump_smt) {
-      std::cout << result.smt_lib << "\n";
-    }
-    has_failure = has_failure || result.status == sigil::VerificationStatus::Refuted ||
-                  result.status == sigil::VerificationStatus::Error;
-    has_unknown = has_unknown || result.status == sigil::VerificationStatus::Unknown;
-  }
+  const auto summary = summarize_verification_results(results);
+  print_verification_results(results, dump_smt);
   for (const auto& proof_hint_path : proof_hint_paths) {
     std::cout << "  proof-hint: " << proof_hint_path << "\n";
   }
@@ -338,10 +367,74 @@ int check_command(const std::vector<std::string>& args) {
     std::cout << "  " << artifact.label << ": " << artifact.path << "\n";
   }
 
-  if (has_failure || (strict && has_unknown)) {
+  if (proofs_rejected(summary, strict)) {
     return 2;
   }
   return 0;
+}
+
+int agent_check_command(const std::vector<std::string>& args) {
+  if (args.empty()) {
+    print_help();
+    return 1;
+  }
+
+  std::string path;
+  bool dump_smt = false;
+  bool strict = false;
+  sigil::ProofOptions proof_options;
+  for (std::size_t index = 0; index < args.size(); ++index) {
+    const auto& arg = args[index];
+    if (arg == "--dump-smt") {
+      dump_smt = true;
+    } else if (arg == "--save-smt") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-smt requires an output directory");
+      }
+      proof_options.smt_output_dir = args[++index];
+    } else if (arg == "--show-model") {
+      proof_options.include_models = true;
+    } else if (arg == "--solver-timeout-ms") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--solver-timeout-ms requires a positive integer");
+      }
+      proof_options.solver_timeout_ms = parse_positive_int(args[++index], "--solver-timeout-ms");
+    } else if (arg == "--strict") {
+      strict = true;
+    } else if (arg == "--no-z3") {
+      proof_options.use_z3 = false;
+    } else if (path.empty()) {
+      path = arg;
+    } else {
+      throw std::runtime_error("unknown argument: " + arg);
+    }
+  }
+  if (path.empty()) {
+    throw std::runtime_error("agent-check requires <candidate.sigil>");
+  }
+
+  const auto source = read_file(path);
+  const auto module = sigil::parse_source(source, path);
+  sigil::validate_module(module);
+  const auto obligations = sigil::build_obligations(module);
+  const auto results = sigil::verify_obligations(obligations, proof_options);
+  const auto summary = summarize_verification_results(results);
+  const bool surface_rejected = !module.functions.empty();
+  const bool rejected = surface_rejected || proofs_rejected(summary, strict);
+
+  std::cout << "agent-candidate " << module.name << "\n";
+  std::cout << "  structs: " << module.structs.size() << "\n";
+  std::cout << "  theorems: " << module.theorems.size() << "\n";
+  std::cout << "  functions: " << module.functions.size() << "\n";
+  std::cout << "  registered struct invariants: " << count_struct_invariants(module) << "\n";
+  std::cout << "  proof obligations: " << results.size() << "\n";
+  std::cout << "  status: " << (rejected ? "rejected" : "accepted") << "\n";
+  if (surface_rejected) {
+    std::cout << "  reason: runtime functions are outside the proof-only candidate surface\n";
+  }
+  print_verification_results(results, dump_smt);
+
+  return rejected ? 2 : 0;
 }
 
 int backend_command(const std::vector<std::string>& args) {
@@ -511,6 +604,9 @@ int main(int argc, char** argv) {
     args.erase(args.begin());
     if (command == "check") {
       return check_command(args);
+    }
+    if (command == "agent-check") {
+      return agent_check_command(args);
     }
     if (command == "compile") {
       return compile_command(args);
