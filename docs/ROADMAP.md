@@ -14,8 +14,9 @@ also exists through `sigil agent-check`, and first-class proof-level container
 declarations can now carry array, slice, and reference model fields. Array and
 slice models also have immutable proof-level `store` facts, and reference
 models have immutable proof-level store facts for validity-preserving value
-updates. The next compiler work is to turn those abstract facts into a real
-memory model: aliasing, ownership, allocation, lifetime, provenance, and
+updates plus same-snapshot alias consistency for valid references. The next
+compiler work is to turn those abstract facts into a real memory model:
+ownership, allocation, lifetime, provenance, memory-state tokens, and
 function-boundary semantics.
 
 ## Completed
@@ -74,6 +75,7 @@ function-boundary semantics.
 - [x] Emit `memory_valid` safety obligations for `load(ref)`.
 - [x] Add modeled address, same-reference, and disjoint-reference predicates.
 - [x] Add immutable proof-level `store` facts for reference models.
+- [x] Add same-snapshot alias consistency for valid same-address references.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -102,7 +104,8 @@ function-boundary semantics.
 
 ## Immediate Queue
 
-- [ ] Connect array/slice/reference updates to aliasing and ownership rules.
+- [ ] Connect array/slice/reference updates to memory-state and ownership
+      rules.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
@@ -127,6 +130,7 @@ function-boundary semantics.
       facts.
 - [x] Add immutable array and slice update facts through SMT array `store`.
 - [x] Add reference address and disjointness facts.
+- [x] Add same-snapshot alias consistency for valid references.
 - [ ] Add array and slice alias facts beyond modeled reference addresses.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
@@ -169,8 +173,9 @@ function-boundary semantics.
 - [ ] Define reference and pointer types separately from by-value structs.
 - [x] Add proof-level `Ref[T]` validity, address, and load facts.
 - [x] Add proof-level `Ref[T]` store facts that preserve validity and address.
-- [ ] Model allocation, lifetime, ownership, borrowing, and aliasing as explicit
-      proof facts.
+- [x] Add same-snapshot alias consistency for valid same-address references.
+- [ ] Model allocation, lifetime, ownership, borrowing, alias propagation, and
+      memory-state tokens as explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
 - [ ] Connect source-level memory facts to native IR and binary-proof artifacts.

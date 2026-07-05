@@ -376,6 +376,7 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
 
 struct ProofContext {
   SymbolTable symbols;
+  SymbolTable ref_symbols;
   std::unordered_map<std::string, std::string> bindings;
   std::unordered_map<std::string, std::string> struct_types;
   std::vector<NamedPredicate> active;
@@ -431,6 +432,19 @@ bool is_ref_model_type(const Type& type) {
 
 bool is_model_type(const Type& type) {
   return is_model_container_type(type) || is_ref_model_type(type);
+}
+
+bool same_type(const Type& lhs, const Type& rhs) {
+  if (lhs.kind != rhs.kind || lhs.spelling != rhs.spelling ||
+      lhs.arguments.size() != rhs.arguments.size()) {
+    return false;
+  }
+  for (std::size_t index = 0; index < lhs.arguments.size(); ++index) {
+    if (!same_type(lhs.arguments[index], rhs.arguments[index])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Type model_data_type(const Type& container_type) {
@@ -960,6 +974,43 @@ void add_symbol_equality_fact(const std::string& name, const std::string& target
   context.active.push_back(NamedPredicate{name, equality, location, range});
 }
 
+void add_ref_alias_consistency_facts(const std::string& symbol, const Type& type,
+                                     const SourceRange& range, const SourceLocation& location,
+                                     ProofContext& context) {
+  if (!is_ref_model_type(type)) {
+    return;
+  }
+
+  std::vector<std::string> refs;
+  for (const auto& [candidate, candidate_type] : context.ref_symbols) {
+    if (candidate != symbol && is_ref_model_type(candidate_type) &&
+        same_type(candidate_type, type)) {
+      refs.push_back(candidate);
+    }
+  }
+  std::sort(refs.begin(), refs.end());
+
+  for (const auto& existing : refs) {
+    auto existing_invalid =
+        make_unary(UnaryOp::Not, make_identifier(ref_valid_symbol(existing), range), range);
+    auto current_invalid =
+        make_unary(UnaryOp::Not, make_identifier(ref_valid_symbol(symbol), range), range);
+    auto either_invalid = make_binary(BinaryOp::Or, existing_invalid, current_invalid, range);
+    auto addresses_differ =
+        make_binary(BinaryOp::NotEqual, make_identifier(ref_addr_symbol(existing), range),
+                    make_identifier(ref_addr_symbol(symbol), range), range);
+    auto values_match =
+        make_binary(BinaryOp::Equal, make_identifier(ref_value_symbol(existing), range),
+                    make_identifier(ref_value_symbol(symbol), range), range);
+    auto address_or_value = make_binary(BinaryOp::Or, addresses_differ, values_match, range);
+    auto consistency = make_binary(BinaryOp::Or, either_invalid, address_or_value, range);
+
+    context.active.push_back(
+        NamedPredicate{"ref_alias_" + sanitize_symbol(existing) + "_" + sanitize_symbol(symbol),
+                       consistency, location, range});
+  }
+}
+
 void register_model_alias(const std::string& target_symbol, const Type& type,
                           const Expr& source_expr, const SourceRange& range,
                           const SourceLocation& location, ProofContext& context) {
@@ -996,6 +1047,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto source_addr = ref_addr_symbol(source_expr->name);
     const auto source_valid = ref_valid_symbol(source_expr->name);
     const auto source_value = ref_value_symbol(source_expr->name);
+    context.ref_symbols[target_symbol] = type;
     context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_value] = type.arguments.front();
@@ -1005,6 +1057,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              context);
     add_symbol_equality_fact("field_" + target_value, target_value, source_value, range, location,
                              context);
+    add_ref_alias_consistency_facts(target_symbol, type, range, location, context);
   }
 }
 
@@ -1749,9 +1802,11 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
   }
 
   if (is_ref_model_type(type)) {
+    context.ref_symbols[symbol] = type;
     context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[ref_value_symbol(symbol)] = type.arguments.front();
+    add_ref_alias_consistency_facts(symbol, type, SourceRange{}, SourceLocation{}, context);
     return;
   }
 

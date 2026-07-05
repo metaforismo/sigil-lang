@@ -145,6 +145,17 @@ the access site. Address predicates are purely modeled facts today:
 `same_ref(a, b)` lowers to `addr(a) == addr(b)`, and `disjoint(a, b)` lowers to
 `addr(a) != addr(b)`.
 
+For same-type reference snapshots in one proof context, the planner also emits
+deterministic alias-consistency assumptions:
+
+```sigil
+!left.valid || !right.valid || left.addr != right.addr || left.value == right.value
+```
+
+This is a snapshot fact, not a complete memory-state rule. It proves that two
+valid `Ref[T]` values with the same modeled address load the same modeled value,
+but it does not propagate a later `store(ref, value)` through older aliases.
+
 `store(ref, value)` is modeled as an immutable reference update. When a store is
 bound to a model local or model container field, the planner creates component
 facts for the new reference:
@@ -162,9 +173,9 @@ weakest-precondition substitution can prove straight-line facts such as
 
 The reference model is intentionally not a full memory semantics. It has no
 allocation, lifetime, borrow, aliasing, field projection, byte layout, native
-memory mutation, or native-code provenance model yet. Those pieces must be
-added before Sigil can claim low-level memory safety beyond explicit validity
-obligations.
+memory mutation, memory-state token, or native-code provenance model yet. Those
+pieces must be added before Sigil can claim low-level memory safety beyond
+explicit validity obligations and same-snapshot alias consistency.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.

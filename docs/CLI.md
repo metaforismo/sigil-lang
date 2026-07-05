@@ -103,6 +103,12 @@ Example with proof-level reference update facts:
 sigil check examples/ref_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-update-smt
 ```
 
+Example with proof-level reference alias consistency:
+
+```sh
+sigil check examples/ref_aliases.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-alias-smt
+```
+
 Exit codes:
 
 - `0`: parsing, validation, and proof checking completed with no refutations or

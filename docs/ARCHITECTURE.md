@@ -138,6 +138,9 @@ The planner walks each function and builds proof obligations:
   the updated data fact to SMT array `store`;
 - reference `load(ref)` expressions create `memory_valid` safety obligations
   and lower to the modeled referenced value;
+- same-type reference snapshots gain deterministic alias-consistency
+  assumptions so valid refs with equal modeled addresses have equal modeled
+  values in the same proof context;
 - reference `store(ref, value)` bindings create `memory_valid` safety
   obligations, preserve modeled address and validity, and replace the modeled
   referenced value;

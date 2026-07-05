@@ -599,6 +599,9 @@ ensures exact: result == value;
          "ref store preserves validity");
   expect(ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
          "ref store updates value");
+  expect(ref_store_smt.find("(= ptr_value updated_value)") == std::string::npos &&
+             ref_store_smt.find("(= updated_value ptr_value)") == std::string::npos,
+         "ref store does not rewrite stale snapshots through implicit aliases");
   expect(ref_store_smt.find("(assert (= result updated_value))") != std::string::npos,
          "ref store read binds result to updated value");
   expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
@@ -619,6 +622,72 @@ ensures exact: result == value;
          "ref store read validity proven locally");
   expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
          "ref store write then load proven locally");
+
+  const char* ref_alias_source = R"(
+module ref_aliases;
+
+fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
+requires left_valid: is_valid(left);
+requires right_valid: is_valid(right);
+requires same: same_ref(left, right);
+ensures exact: result == load(right);
+{
+  return load(left);
+}
+
+fn same_bool_ref_loads_match(left: Ref[bool], right: Ref[bool]) -> bool
+requires left_valid: is_valid(left);
+requires right_valid: is_valid(right);
+requires same: same_ref(left, right);
+ensures exact: result == load(right);
+{
+  return load(left);
+}
+)";
+
+  const auto ref_alias_module = sigil::parse_source(ref_alias_source, "ref-aliases.sigil");
+  const auto ref_alias_obligations = sigil::build_obligations(ref_alias_module);
+  expect(ref_alias_obligations.size() == 6, "ref alias obligations");
+  expect(ref_alias_obligations[0].name == "fn.same_ref_loads_match.safety.1.memory_valid",
+         "ref alias return load validity obligation");
+  expect(ref_alias_obligations[1].name == "fn.same_ref_loads_match.safety.2.memory_valid",
+         "ref alias ensure load validity obligation");
+  expect(ref_alias_obligations[2].name == "fn.same_ref_loads_match.ensures.1.exact",
+         "ref alias scalar ensure obligation");
+  expect(ref_alias_obligations[5].name == "fn.same_bool_ref_loads_match.ensures.1.exact",
+         "ref alias bool ensure obligation");
+  const auto ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[2]);
+  expect(ref_alias_smt.find("(declare-const left_value Int)") != std::string::npos,
+         "ref alias left scalar value is declared");
+  expect(ref_alias_smt.find("(declare-const right_value Int)") != std::string::npos,
+         "ref alias right scalar value is declared");
+  expect(ref_alias_smt.find("(assert (or (or (not left_valid) (not right_valid)) "
+                            "(or (distinct left_addr right_addr) (= left_value right_value))))") !=
+             std::string::npos,
+         "valid same-address refs share the same scalar snapshot value");
+  expect(ref_alias_smt.find("(assert (= result left_value))") != std::string::npos,
+         "ref alias return binds result to left value");
+  expect(ref_alias_smt.find("(assert (not (= result right_value)))") != std::string::npos,
+         "ref alias ensure checks right value");
+  const auto bool_ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[5]);
+  expect(bool_ref_alias_smt.find("(declare-const left_value Bool)") != std::string::npos,
+         "ref alias left bool value is declared");
+  expect(bool_ref_alias_smt.find("(declare-const right_value Bool)") != std::string::npos,
+         "ref alias right bool value is declared");
+  expect(bool_ref_alias_smt.find(
+             "(assert (or (or (not left_valid) (not right_valid)) "
+             "(or (distinct left_addr right_addr) (= left_value right_value))))") !=
+             std::string::npos,
+         "valid same-address refs share the same bool snapshot value");
+  const auto ref_alias_results = sigil::verify_obligations(ref_alias_obligations, false);
+  expect(ref_alias_results[0].status == sigil::VerificationStatus::Proven,
+         "ref alias left load validity proven from precondition");
+  expect(ref_alias_results[1].status == sigil::VerificationStatus::Proven,
+         "ref alias right load validity proven from precondition");
+  expect(ref_alias_results[2].status == sigil::VerificationStatus::Unknown,
+         "ref alias scalar value consistency needs SMT reasoning");
+  expect(ref_alias_results[5].status == sigil::VerificationStatus::Unknown,
+         "ref alias bool value consistency needs SMT reasoning");
 
   const char* conditional_source = R"(
 module conditional;
