@@ -31,7 +31,8 @@ void print_help() {
   std::cout << "sigil " << SIGIL_VERSION << "\n\n"
             << "Usage:\n"
             << "  sigil check <file.sigil> [--dump-smt] [--save-smt <dir>]\n"
-            << "                          [--save-proof-hints <dir>] [--show-model]\n"
+            << "                          [--save-proof-hints <dir>]\n"
+            << "                          [--save-agent-requests <dir>] [--show-model]\n"
             << "                          [--solver-timeout-ms <ms>] [--strict] [--no-z3]\n"
             << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
             << "                            [--dump-binary-facts] [--save-binary-facts <dir>]\n"
@@ -205,6 +206,29 @@ write_proof_hint_artifacts(const std::vector<sigil::ProofHintArtifact>& artifact
   return paths;
 }
 
+struct WrittenAgentArtifact {
+  std::string label;
+  std::string path;
+};
+
+std::vector<WrittenAgentArtifact>
+write_agent_handoff_artifacts(const std::vector<sigil::AgentHandoffArtifact>& artifacts,
+                              const std::string& output_dir) {
+  std::filesystem::create_directories(output_dir);
+  std::vector<WrittenAgentArtifact> paths;
+  paths.reserve(artifacts.size());
+  for (const auto& artifact : artifacts) {
+    const auto path = std::filesystem::path(output_dir) / artifact.file_name;
+    std::ofstream file(path);
+    if (!file) {
+      throw std::runtime_error("could not write agent handoff artifact: " + path.string());
+    }
+    file << artifact.text;
+    paths.push_back(WrittenAgentArtifact{artifact.label, path.string()});
+  }
+  return paths;
+}
+
 int check_command(const std::vector<std::string>& args) {
   if (args.empty()) {
     print_help();
@@ -215,6 +239,7 @@ int check_command(const std::vector<std::string>& args) {
   bool dump_smt = false;
   bool strict = false;
   std::string proof_hint_output_dir;
+  std::string agent_handoff_output_dir;
   sigil::ProofOptions proof_options;
   for (std::size_t index = 0; index < args.size(); ++index) {
     const auto& arg = args[index];
@@ -230,6 +255,11 @@ int check_command(const std::vector<std::string>& args) {
         throw std::runtime_error("--save-proof-hints requires an output directory");
       }
       proof_hint_output_dir = args[++index];
+    } else if (arg == "--save-agent-requests") {
+      if (index + 1 >= args.size()) {
+        throw std::runtime_error("--save-agent-requests requires an output directory");
+      }
+      agent_handoff_output_dir = args[++index];
     } else if (arg == "--show-model") {
       proof_options.include_models = true;
     } else if (arg == "--solver-timeout-ms") {
@@ -260,6 +290,11 @@ int check_command(const std::vector<std::string>& args) {
   if (!proof_hint_output_dir.empty()) {
     proof_hint_paths = write_proof_hint_artifacts(
         sigil::build_proof_hint_artifacts(obligations, results), proof_hint_output_dir);
+  }
+  std::vector<WrittenAgentArtifact> agent_handoff_paths;
+  if (!agent_handoff_output_dir.empty()) {
+    agent_handoff_paths = write_agent_handoff_artifacts(
+        sigil::build_agent_handoff_artifacts(obligations, results), agent_handoff_output_dir);
   }
 
   std::size_t invariant_count = 0;
@@ -298,6 +333,9 @@ int check_command(const std::vector<std::string>& args) {
   }
   for (const auto& proof_hint_path : proof_hint_paths) {
     std::cout << "  proof-hint: " << proof_hint_path << "\n";
+  }
+  for (const auto& artifact : agent_handoff_paths) {
+    std::cout << "  " << artifact.label << ": " << artifact.path << "\n";
   }
 
   if (has_failure || (strict && has_unknown)) {

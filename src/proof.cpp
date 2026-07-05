@@ -1683,6 +1683,23 @@ std::string proof_hint_file_name_for_obligation(const std::string& obligation_na
   return file_name;
 }
 
+std::string base_file_name_for_obligation(const std::string& obligation_name) {
+  auto file_name = smt_file_name_for_obligation(obligation_name);
+  constexpr std::string_view smt_suffix = ".smt2";
+  if (file_name.size() >= smt_suffix.size()) {
+    file_name.resize(file_name.size() - smt_suffix.size());
+  }
+  return file_name;
+}
+
+std::string agent_request_file_name_for_obligation(const std::string& obligation_name) {
+  return base_file_name_for_obligation(obligation_name) + ".agent-request.txt";
+}
+
+std::string theorem_candidate_file_name_for_obligation(const std::string& obligation_name) {
+  return base_file_name_for_obligation(obligation_name) + ".candidate.sigil";
+}
+
 std::string render_source_counterexample(const ProofObligation& obligation,
                                          const std::string& z3_model) {
   const auto values = parse_model_values(z3_model);
@@ -1712,6 +1729,18 @@ void append_indented_block(std::ostringstream& out, const std::string& block,
   while (std::getline(lines, line)) {
     out << indent << line << "\n";
   }
+}
+
+std::string theorem_candidate_identifier(const std::string& obligation_name) {
+  std::string identifier = "candidate_";
+  for (const char c : obligation_name) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+      identifier += c;
+    } else {
+      identifier += "_";
+    }
+  }
+  return identifier;
 }
 
 std::string render_proof_hint_artifact(const ProofObligation& obligation,
@@ -1773,6 +1802,82 @@ std::string render_proof_hint_artifact(const ProofObligation& obligation,
   return out.str();
 }
 
+std::string render_agent_request_artifact(const ProofObligation& obligation,
+                                          const VerificationResult& result) {
+  std::ostringstream out;
+  out << "sigil-agent-request-v1\n";
+  out << "obligation: " << obligation.name << "\n";
+  out << "status: " << status_name(result.status) << "\n";
+  out << "details: " << result.details << "\n";
+  out << "range: " << obligation.range.display() << "\n";
+  out << "proof-hint-file: " << proof_hint_file_name_for_obligation(obligation.name) << "\n";
+  out << "candidate-file: " << theorem_candidate_file_name_for_obligation(obligation.name) << "\n";
+  out << "\n";
+
+  out << "objective:\n";
+  out << "  Propose one or more Sigil theorem declarations, assumes, or stronger source\n";
+  out << "  preconditions that could discharge this obligation after deterministic\n";
+  out << "  checking. Do not claim success unless Sigil and Z3 prove the edited source.\n";
+  out << "\n";
+
+  out << "acceptance-gate:\n";
+  out << "  - Candidate text must be valid Sigil source or a patch to valid Sigil source.\n";
+  out << "  - Candidate lemmas must be represented as theorem declarations.\n";
+  out << "  - The original module must be rechecked with sigil check --strict.\n";
+  out << "  - This request is not a proof certificate.\n";
+  out << "\n";
+
+  out << "goal:\n";
+  out << "  " << obligation.goal.name << ": " << display_expr(obligation.goal.expr) << "\n";
+  out << "\n";
+
+  out << "assumptions:\n";
+  if (obligation.assumptions.empty()) {
+    out << "  (none)\n";
+  } else {
+    for (const auto& assumption : obligation.assumptions) {
+      out << "  - " << assumption.name << ": " << display_expr(assumption.expr) << "\n";
+    }
+  }
+  out << "\n";
+
+  out << "symbols:\n";
+  bool wrote_symbol = false;
+  for (const auto& name : source_symbol_order(obligation)) {
+    const auto found = obligation.symbols.find(name);
+    if (found == obligation.symbols.end()) {
+      continue;
+    }
+    wrote_symbol = true;
+    out << "  - " << name << ": " << found->second.display() << "\n";
+  }
+  if (!wrote_symbol) {
+    out << "  (none)\n";
+  }
+  out << "\n";
+
+  out << "smt-lib:\n";
+  append_indented_block(out, result.smt_lib, "  ");
+  return out.str();
+}
+
+std::string render_theorem_candidate_artifact(const ProofObligation& obligation) {
+  const auto identifier = theorem_candidate_identifier(obligation.name);
+  std::ostringstream out;
+  out << "// sigil-theorem-candidate-v1\n";
+  out << "// source-obligation: " << obligation.name << "\n";
+  out << "// This file is a scaffold for an agent or human. It is intentionally\n";
+  out << "// not a valid proof of the source obligation until the placeholder\n";
+  out << "// theorem is replaced with a checked lemma and wired back into source.\n";
+  out << "module " << identifier << ";\n\n";
+  out << "theorem " << identifier << " for ()\n";
+  out << "ensures placeholder: false;\n";
+  out << "{\n";
+  out << "  return false;\n";
+  out << "}\n";
+  return out.str();
+}
+
 } // namespace
 
 std::vector<ProofHintArtifact>
@@ -1791,6 +1896,29 @@ build_proof_hint_artifacts(const std::vector<ProofObligation>& obligations,
     artifacts.push_back(
         ProofHintArtifact{proof_hint_file_name_for_obligation(obligations[index].name),
                           render_proof_hint_artifact(obligations[index], result)});
+  }
+  return artifacts;
+}
+
+std::vector<AgentHandoffArtifact>
+build_agent_handoff_artifacts(const std::vector<ProofObligation>& obligations,
+                              const std::vector<VerificationResult>& results) {
+  if (obligations.size() != results.size()) {
+    throw std::invalid_argument("agent handoff artifacts require matching obligations and results");
+  }
+
+  std::vector<AgentHandoffArtifact> artifacts;
+  for (std::size_t index = 0; index < obligations.size(); ++index) {
+    const auto& result = results[index];
+    if (result.status == VerificationStatus::Proven) {
+      continue;
+    }
+    artifacts.push_back(AgentHandoffArtifact{
+        "agent-request", agent_request_file_name_for_obligation(obligations[index].name),
+        render_agent_request_artifact(obligations[index], result)});
+    artifacts.push_back(AgentHandoffArtifact{
+        "theorem-candidate", theorem_candidate_file_name_for_obligation(obligations[index].name),
+        render_theorem_candidate_artifact(obligations[index])});
   }
   return artifacts;
 }

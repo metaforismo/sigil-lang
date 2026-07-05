@@ -13,7 +13,9 @@ reference scaffold are now in place. The current step is to turn those abstract
 facts into a real memory model: ownership, mutation, allocation, lifetime,
 provenance, and function-boundary semantics. This keeps the language surface
 simple while preparing the path for low-level data structures and eventually an
-agentic SMT loop.
+agentic SMT loop. The first durable agent handoff artifacts now exist, but
+agents still cannot affect compilation unless their suggestions become checked
+Sigil source.
 
 ## Completed
 
@@ -28,6 +30,8 @@ agentic SMT loop.
 - [x] Report Z3 refutations with optional counterexample models.
 - [x] Save emitted SMT-LIB queries as reproducible artifacts.
 - [x] Save deterministic proof-search hints for unproven obligations.
+- [x] Save deterministic agent requests and theorem-candidate skeletons for
+      unproven obligations.
 - [x] Preserve solver timeout budgets in emitted SMT-LIB.
 - [x] Render Z3 counterexamples in Sigil source terms.
 - [x] Support typed local `let` bindings in proof obligations.
@@ -98,8 +102,8 @@ agentic SMT loop.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
-- [ ] Build the first agentic SMT loop around saved proof hints and checked
-      theorem candidates.
+- [ ] Execute an external agent loop that proposes candidate lemmas from saved
+      requests.
 
 ## Core Language
 
@@ -146,6 +150,7 @@ agentic SMT loop.
 
 - [x] Save deterministic proof-search hints for unproven obligations.
 - [x] Represent reusable source-level lemmas as checked `theorem` declarations.
+- [x] Save agent request artifacts with checked-theorem candidate skeletons.
 - [ ] Let an LLM propose lemmas, splits, and candidate invariants.
 - [ ] Validate every proposal with Z3 or another deterministic checker.
 - [ ] Feed candidate theorem declarations back through the ordinary Sigil parser,

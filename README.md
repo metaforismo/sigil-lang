@@ -74,6 +74,8 @@ production verifier yet.
 - SMT-LIB emission with optional Z3 execution through `z3` or `SIGIL_Z3`.
 - Source-level counterexample rendering for refuted Z3 models.
 - Deterministic proof-search hint artifacts for obligations that are not proven.
+- Deterministic agent handoff artifacts with theorem-candidate skeletons for
+  unproven obligations.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using function calls, `let`,
   assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
@@ -143,6 +145,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/slices.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
+./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```

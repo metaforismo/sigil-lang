@@ -168,6 +168,12 @@ assumptions, symbols, optional SMT path, embedded SMT-LIB, and the rule that any
 agent proposal must be checked by Sigil and Z3 before it can influence
 compilation.
 
+The CLI can also write agent request artifacts and theorem-candidate skeletons.
+These files form the first durable agentic SMT loop boundary: an external agent
+can read a request, propose Sigil theorem declarations or source changes, and
+then hand those changes back to the normal parser, typechecker, proof planner,
+and Z3 path. The compiler does not trust or ingest agent output directly.
+
 ## GCC JIT Backend
 
 CMake detects `libgccjit` and compiles the native backend when available. The
