@@ -13,6 +13,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(sigil_core
+  src/agent_refinement.cpp
   src/ast.cpp
   src/lexer.cpp
   src/parser.cpp
@@ -163,6 +164,12 @@ add_test(
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_check.sh"
           "$<TARGET_FILE:sigil>"
           "${CMAKE_CURRENT_BINARY_DIR}/agent-check")
+
+add_test(
+  NAME sigil_cli_agent_refine_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_refine.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_BINARY_DIR}/agent-refine")
 
 add_test(
   NAME sigil_cli_theorem_tests
@@ -536,6 +543,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_BINARY_DIR}/agent-check-z3")
   set_tests_properties(sigil_z3_agent_check PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_agent_refine
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_agent_refine_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_BINARY_DIR}/agent-refine-z3")
+  set_tests_properties(sigil_z3_agent_refine PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

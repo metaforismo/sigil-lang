@@ -233,6 +233,42 @@ Exit codes:
 - `2`: the candidate used runtime declarations, had a refuted/error result, or
   `--strict` found an `UNKNOWN` obligation.
 
+## `sigil agent-refine`
+
+```sh
+sigil agent-refine <file.sigil> --agent-command <executable> --save-trace <dir>
+                   [--max-attempts <n>] [--agent-timeout-ms <ms>]
+                   [--solver-timeout-ms <ms>] [--no-z3]
+```
+
+Runs a bounded external proposal loop. The executable receives four positional
+arguments: the current source path, the generated agent-request path, the path
+where it must write a complete candidate module, and the one-based attempt
+number. Sigil invokes it directly without a shell and terminates its entire
+process group when the proposer timeout expires.
+
+The external process runner currently requires a POSIX host. On unsupported
+hosts the attempt is recorded as `launch-failed`; parsing, checking, and the
+existing proof artifact commands remain portable.
+
+Candidates must preserve the module name, structs/containers, runtime function
+signatures, preconditions, postconditions, existing theorem contracts,
+assertions, loop invariants, and the module-wide `assume` surface. New theorem
+declarations and additional checked assertions or loop invariants are allowed,
+but existing proof steps cannot be removed or reordered and new assumptions are
+not allowed. A candidate is accepted only when ordinary validation succeeds and
+every obligation in the complete candidate module is `PROVEN` under strict
+policy.
+
+`--save-trace` is required. The directory contains each request, candidate,
+proposer log, proof-status ledger, and exact SMT query. Defaults are three
+attempts and a 30000 ms proposer timeout. Solver choice and timeout are recorded,
+along with source, executable, and per-attempt artifact paths. The trace is
+atomically updated after every decision so interrupted runs retain the last
+completed step. Existing candidate paths are removed before an attempt,
+preventing stale output from being accepted. Exit code `0` means accepted; `2`
+means the attempt budget was exhausted.
+
 ## `sigil backend`
 
 ```sh

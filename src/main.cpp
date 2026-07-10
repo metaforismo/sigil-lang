@@ -1,3 +1,4 @@
+#include "sigil/agent_refinement.hpp"
 #include "sigil/gccjit_backend.hpp"
 #include "sigil/parser.hpp"
 #include "sigil/proof.hpp"
@@ -37,6 +38,10 @@ void print_help() {
             << "  sigil agent-check <candidate.sigil> [--dump-smt] [--save-smt <dir>]\n"
             << "                                      [--show-model] [--solver-timeout-ms <ms>]\n"
             << "                                      [--strict] [--no-z3]\n"
+            << "  sigil agent-refine <file.sigil> --agent-command <executable>\n"
+            << "                     --save-trace <dir> [--max-attempts <n>]\n"
+            << "                     [--agent-timeout-ms <ms>] [--solver-timeout-ms <ms>]\n"
+            << "                     [--no-z3]\n"
             << "  sigil compile <file.sigil> [--dump-native-ir] [--save-native-ir <dir>]\n"
             << "                            [--dump-binary-facts] [--save-binary-facts <dir>]\n"
             << "  sigil run <file.sigil> <function> [args...]\n"
@@ -459,6 +464,57 @@ int agent_check_command(const std::vector<std::string>& args) {
   return rejected ? 2 : 0;
 }
 
+int agent_refine_command(const std::vector<std::string>& args) {
+  std::string path;
+  sigil::AgentRefinementOptions options;
+  for (std::size_t index = 0; index < args.size(); ++index) {
+    const auto& arg = args[index];
+    if (arg == "--agent-command") {
+      if (++index >= args.size()) {
+        throw std::runtime_error("--agent-command requires an executable path");
+      }
+      options.agent_command = args[index];
+    } else if (arg == "--save-trace") {
+      if (++index >= args.size()) {
+        throw std::runtime_error("--save-trace requires an output directory");
+      }
+      options.trace_output_dir = args[index];
+    } else if (arg == "--max-attempts") {
+      if (++index >= args.size()) {
+        throw std::runtime_error("--max-attempts requires a positive integer");
+      }
+      options.max_attempts = parse_positive_int(args[index], "--max-attempts");
+    } else if (arg == "--agent-timeout-ms") {
+      if (++index >= args.size()) {
+        throw std::runtime_error("--agent-timeout-ms requires a positive integer");
+      }
+      options.agent_timeout_ms = parse_positive_int(args[index], "--agent-timeout-ms");
+    } else if (arg == "--solver-timeout-ms") {
+      if (++index >= args.size()) {
+        throw std::runtime_error("--solver-timeout-ms requires a positive integer");
+      }
+      options.proof.solver_timeout_ms = parse_positive_int(args[index], "--solver-timeout-ms");
+    } else if (arg == "--no-z3") {
+      options.proof.use_z3 = false;
+    } else if (path.empty()) {
+      path = arg;
+    } else {
+      throw std::runtime_error("unknown argument: " + arg);
+    }
+  }
+  if (path.empty() || options.agent_command.empty() || options.trace_output_dir.empty()) {
+    throw std::runtime_error(
+        "agent-refine requires <file.sigil>, --agent-command, and --save-trace");
+  }
+
+  const auto result = sigil::run_agent_refinement(path, options);
+  std::cout << "agent-refinement " << result.module_name << "\n";
+  std::cout << "  status: " << (result.accepted ? "accepted" : "exhausted") << "\n";
+  std::cout << "  attempts-used: " << result.attempts_used << "\n";
+  std::cout << "  trace: " << result.trace_path << "\n";
+  return result.accepted ? 0 : 2;
+}
+
 int backend_command(const std::vector<std::string>& args) {
   if (!args.empty()) {
     throw std::runtime_error("unknown argument: " + args.front());
@@ -629,6 +685,9 @@ int main(int argc, char** argv) {
     }
     if (command == "agent-check") {
       return agent_check_command(args);
+    }
+    if (command == "agent-refine") {
+      return agent_refine_command(args);
     }
     if (command == "compile") {
       return compile_command(args);

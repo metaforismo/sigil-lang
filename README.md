@@ -116,6 +116,9 @@ production verifier yet.
 - Deterministic `agent-check` validation for theorem-candidate files: candidates
   are parsed, typechecked, planned, and proven as ordinary proof-only Sigil
   modules before they can be treated as accepted lemmas.
+- A budgeted `agent-refine` loop for external proposers. It enforces attempt,
+  proposer, and solver budgets; preserves contracts and proof surfaces; rejects
+  new assumptions; and saves replayable candidate, status, and SMT traces.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using function calls, `let`,
   assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
@@ -202,6 +205,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt
+./build/sigil agent-refine path/to/source.sigil --agent-command path/to/proposer --max-attempts 3 --agent-timeout-ms 30000 --solver-timeout-ms 250 --save-trace build/agent-trace
 ./build/sigil compile examples/native.sigil --save-native-ir build/native-ir --save-binary-facts build/binary-facts
 ./build/sigil check examples/refuted.sigil --strict --show-model
 ```
@@ -287,8 +291,8 @@ The next hard pieces are, in order:
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;
-- an external proof-assistant loop that proposes candidates and feeds them
-  through `sigil agent-check`;
+- richer proposer policies and remote model adapters around the deterministic
+  `agent-refine` executable protocol;
 - binary-level proof experiments for bounded runtime and crash-safety claims.
 
 The roadmap is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
