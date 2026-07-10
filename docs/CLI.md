@@ -49,6 +49,8 @@ Borrow/release transition bindings emit ordered liveness, ownership, and
 availability/active obligations before updating a fresh model snapshot.
 Stores preserve active mutable-borrow state until `release_mut` produces a
 later snapshot.
+The local prover also performs bounded control-flow WP reasoning for branch
+joins and loop-summary conjunctions before invoking Z3.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -161,6 +163,12 @@ Example with borrow-checked array, slice, and reference updates:
 
 ```sh
 sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/memory-state-update-smt
+```
+
+Example with branch and loop weakest-precondition reasoning:
+
+```sh
+sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250 --save-smt build/control-flow-wp-smt
 ```
 
 Exit codes:

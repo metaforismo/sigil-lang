@@ -1781,6 +1781,77 @@ ensures exact: result == (x + 1) + 1;
   expect(wp_results[1].details == "proved by weakest-precondition substitution",
          "wp ensure uses local substitution proof rule");
 
+  const char* control_flow_wp_source = R"(
+module control_flow_wp;
+
+fn choose_nonnegative(flag: bool, left: i64, right: i64) -> i64
+requires left_nonnegative: left >= 0;
+requires right_nonnegative: right >= 0;
+ensures nonnegative: result >= 0;
+{
+  let selected: i64 = 0;
+  if flag {
+    selected = left;
+  } else {
+    selected = right;
+  }
+  return selected;
+}
+
+fn summarize_counter(n: i64) -> i64
+requires nonnegative: n >= 0;
+ensures bounded: result >= 0 && result <= n;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}
+)";
+
+  const auto control_flow_wp_module =
+      sigil::parse_source(control_flow_wp_source, "control-flow-wp.sigil");
+  const auto control_flow_wp_obligations = sigil::build_obligations(control_flow_wp_module);
+  expect(control_flow_wp_obligations.size() == 6, "control-flow wp obligations");
+  const auto control_flow_wp_results =
+      sigil::verify_obligations(control_flow_wp_obligations, false);
+  expect(control_flow_wp_results[0].status == sigil::VerificationStatus::Proven,
+         "branch join is proven by path splitting");
+  expect(control_flow_wp_results[5].status == sigil::VerificationStatus::Proven,
+         "loop postcondition is proven from invariant conjunction");
+  expect(control_flow_wp_results[0].details == "proved by control-flow weakest-precondition",
+         "branch join reports control-flow wp");
+  expect(control_flow_wp_results[5].details == "proved by control-flow weakest-precondition",
+         "loop summary reports control-flow wp");
+
+  const char* partial_branch_source = R"(
+module partial_branch;
+
+fn choose(flag: bool, left: i64, right: i64) -> i64
+requires left_nonnegative: left >= 0;
+ensures nonnegative: result >= 0;
+{
+  let selected: i64 = 0;
+  if flag {
+    selected = left;
+  } else {
+    selected = right;
+  }
+  return selected;
+}
+)";
+  const auto partial_branch_module =
+      sigil::parse_source(partial_branch_source, "partial-branch.sigil");
+  const auto partial_branch_results =
+      sigil::verify_obligations(sigil::build_obligations(partial_branch_module), false);
+  expect(partial_branch_results.size() == 1, "partial branch obligation");
+  expect(partial_branch_results[0].status == sigil::VerificationStatus::Unknown,
+         "missing else-branch fact prevents local proof");
+
   const char* hint_source = R"(
 module hints;
 

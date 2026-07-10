@@ -347,6 +347,219 @@ bool is_reflexive_equality(const Expr& expr) {
          display_expr(expr->lhs) == display_expr(expr->rhs);
 }
 
+Expr first_conditional_condition(const Expr& expr) {
+  if (!expr) {
+    return nullptr;
+  }
+  if (expr->kind == ExprNode::Kind::If) {
+    return expr->condition;
+  }
+  if (expr->kind == ExprNode::Kind::Call) {
+    for (const auto& argument : expr->arguments) {
+      if (const auto condition = first_conditional_condition(argument)) {
+        return condition;
+      }
+    }
+    return nullptr;
+  }
+  if (expr->kind == ExprNode::Kind::StructLiteral) {
+    for (const auto& field : expr->field_initializers) {
+      if (const auto condition = first_conditional_condition(field.expr)) {
+        return condition;
+      }
+    }
+    return nullptr;
+  }
+  if (expr->kind == ExprNode::Kind::FieldAccess || expr->kind == ExprNode::Kind::Unary) {
+    return first_conditional_condition(expr->lhs);
+  }
+  if (expr->kind == ExprNode::Kind::Binary) {
+    if (const auto condition = first_conditional_condition(expr->lhs)) {
+      return condition;
+    }
+    return first_conditional_condition(expr->rhs);
+  }
+  return nullptr;
+}
+
+Expr select_conditional_branch(const Expr& expr, const Expr& condition, bool then_branch) {
+  if (!expr) {
+    return expr;
+  }
+  if (expr->kind == ExprNode::Kind::If && expressions_equal(expr->condition, condition)) {
+    return select_conditional_branch(then_branch ? expr->lhs : expr->rhs, condition, then_branch);
+  }
+
+  switch (expr->kind) {
+  case ExprNode::Kind::Integer:
+  case ExprNode::Kind::Boolean:
+  case ExprNode::Kind::Identifier:
+    return expr;
+  case ExprNode::Kind::Call: {
+    std::vector<Expr> arguments;
+    arguments.reserve(expr->arguments.size());
+    for (const auto& argument : expr->arguments) {
+      arguments.push_back(select_conditional_branch(argument, condition, then_branch));
+    }
+    return make_call(expr->name, std::move(arguments), expr->range);
+  }
+  case ExprNode::Kind::StructLiteral: {
+    std::vector<FieldInitializer> fields;
+    fields.reserve(expr->field_initializers.size());
+    for (const auto& field : expr->field_initializers) {
+      fields.push_back(FieldInitializer{
+          field.name, select_conditional_branch(field.expr, condition, then_branch), field.location,
+          field.range});
+    }
+    return make_struct_literal(expr->name, std::move(fields), expr->range);
+  }
+  case ExprNode::Kind::FieldAccess:
+    return make_field_access(select_conditional_branch(expr->lhs, condition, then_branch),
+                             expr->name, expr->range);
+  case ExprNode::Kind::Unary:
+    return make_unary(expr->unary_op, select_conditional_branch(expr->lhs, condition, then_branch),
+                      expr->range);
+  case ExprNode::Kind::Binary:
+    return make_binary(expr->binary_op,
+                       select_conditional_branch(expr->lhs, condition, then_branch),
+                       select_conditional_branch(expr->rhs, condition, then_branch), expr->range);
+  case ExprNode::Kind::If:
+    return make_if(select_conditional_branch(expr->condition, condition, then_branch),
+                   select_conditional_branch(expr->lhs, condition, then_branch),
+                   select_conditional_branch(expr->rhs, condition, then_branch), expr->range);
+  }
+  return expr;
+}
+
+bool is_literal_false(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Boolean && !expr->boolean_value;
+}
+
+Expr specialize_branch_assumption(const Expr& expr, const Expr& condition, bool then_branch) {
+  if (!expr) {
+    return expr;
+  }
+  if (expressions_equal(expr, condition)) {
+    return make_boolean(then_branch, expr->range);
+  }
+  if (expr->kind == ExprNode::Kind::Unary && expr->unary_op == UnaryOp::Not &&
+      expressions_equal(expr->lhs, condition)) {
+    return make_boolean(!then_branch, expr->range);
+  }
+  if (expr->kind == ExprNode::Kind::Unary) {
+    auto operand = specialize_branch_assumption(expr->lhs, condition, then_branch);
+    if (is_literal_true(operand)) {
+      return make_boolean(false, expr->range);
+    }
+    if (is_literal_false(operand)) {
+      return make_boolean(true, expr->range);
+    }
+    return make_unary(expr->unary_op, operand, expr->range);
+  }
+  if (expr->kind == ExprNode::Kind::Binary) {
+    auto lhs = specialize_branch_assumption(expr->lhs, condition, then_branch);
+    auto rhs = specialize_branch_assumption(expr->rhs, condition, then_branch);
+    if (expr->binary_op == BinaryOp::And) {
+      if (is_literal_false(lhs) || is_literal_false(rhs)) {
+        return make_boolean(false, expr->range);
+      }
+      if (is_literal_true(lhs)) {
+        return rhs;
+      }
+      if (is_literal_true(rhs)) {
+        return lhs;
+      }
+    }
+    if (expr->binary_op == BinaryOp::Or) {
+      if (is_literal_true(lhs) || is_literal_true(rhs)) {
+        return make_boolean(true, expr->range);
+      }
+      if (is_literal_false(lhs)) {
+        return rhs;
+      }
+      if (is_literal_false(rhs)) {
+        return lhs;
+      }
+    }
+    return make_binary(expr->binary_op, lhs, rhs, expr->range);
+  }
+  return select_conditional_branch(expr, condition, then_branch);
+}
+
+ExprSubstitutions expression_equalities(const std::vector<Expr>& assumptions) {
+  ExprSubstitutions substitutions;
+  for (const auto& expr : assumptions) {
+    if (expr && expr->kind == ExprNode::Kind::Binary && expr->binary_op == BinaryOp::Equal &&
+        expr->lhs && expr->lhs->kind == ExprNode::Kind::Identifier &&
+        display_expr(expr->lhs) != display_expr(expr->rhs)) {
+      substitutions[expr->lhs->name] = expr->rhs;
+    }
+  }
+  return substitutions;
+}
+
+void apply_branch_equalities(Expr& goal, std::vector<Expr>& assumptions) {
+  const auto substitutions = expression_equalities(assumptions);
+  goal = rewrite_with_equalities(goal, substitutions);
+  for (auto& assumption : assumptions) {
+    assumption = rewrite_with_equalities(assumption, substitutions);
+  }
+}
+
+bool prove_control_flow_goal(const Expr& goal, const std::vector<Expr>& assumptions, int budget) {
+  if (!goal || budget <= 0) {
+    return false;
+  }
+  if (is_literal_true(goal) || is_reflexive_equality(goal)) {
+    return true;
+  }
+  for (const auto& assumption : assumptions) {
+    if (expressions_equal(assumption, goal)) {
+      return true;
+    }
+  }
+
+  if (goal->kind == ExprNode::Kind::Binary && goal->binary_op == BinaryOp::And) {
+    return prove_control_flow_goal(goal->lhs, assumptions, budget - 1) &&
+           prove_control_flow_goal(goal->rhs, assumptions, budget - 1);
+  }
+  if (goal->kind == ExprNode::Kind::Binary && goal->binary_op == BinaryOp::Or) {
+    return prove_control_flow_goal(goal->lhs, assumptions, budget - 1) ||
+           prove_control_flow_goal(goal->rhs, assumptions, budget - 1);
+  }
+
+  auto condition = first_conditional_condition(goal);
+  if (!condition) {
+    for (const auto& assumption : assumptions) {
+      condition = first_conditional_condition(assumption);
+      if (condition) {
+        break;
+      }
+    }
+  }
+  if (!condition) {
+    return false;
+  }
+
+  std::vector<Expr> then_assumptions;
+  std::vector<Expr> else_assumptions;
+  then_assumptions.reserve(assumptions.size() + 1);
+  else_assumptions.reserve(assumptions.size() + 1);
+  for (const auto& assumption : assumptions) {
+    then_assumptions.push_back(specialize_branch_assumption(assumption, condition, true));
+    else_assumptions.push_back(specialize_branch_assumption(assumption, condition, false));
+  }
+  then_assumptions.push_back(condition);
+  else_assumptions.push_back(make_unary(UnaryOp::Not, condition, condition->range));
+
+  auto then_goal = select_conditional_branch(goal, condition, true);
+  auto else_goal = select_conditional_branch(goal, condition, false);
+  apply_branch_equalities(then_goal, then_assumptions);
+  apply_branch_equalities(else_goal, else_assumptions);
+  return prove_control_flow_goal(then_goal, then_assumptions, budget - 1) &&
+         prove_control_flow_goal(else_goal, else_assumptions, budget - 1);
+}
+
 VerificationResult verify_syntactically(const ProofObligation& obligation, const std::string& smt) {
   for (const auto& assumption : obligation.assumptions) {
     if (expressions_equal(assumption.expr, obligation.goal.expr)) {
@@ -370,6 +583,23 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
       return make_result(obligation, VerificationStatus::Proven,
                          "rewritten goal is an active assumption", smt);
     }
+  }
+  std::vector<Expr> rewritten_assumptions;
+  rewritten_assumptions.reserve(obligation.assumptions.size());
+  for (const auto& assumption : obligation.assumptions) {
+    rewritten_assumptions.push_back(rewrite_with_equalities(assumption.expr, substitutions));
+  }
+  const auto has_loop_summary = std::any_of(
+      obligation.assumptions.begin(), obligation.assumptions.end(),
+      [](const auto& assumption) { return assumption.name.rfind("loop_summary.", 0) == 0; });
+  const auto has_conditional_assumption =
+      std::any_of(rewritten_assumptions.begin(), rewritten_assumptions.end(),
+                  [](const auto& expr) { return first_conditional_condition(expr) != nullptr; });
+  if ((first_conditional_condition(rewritten_goal) || has_conditional_assumption ||
+       has_loop_summary) &&
+      prove_control_flow_goal(rewritten_goal, rewritten_assumptions, 16)) {
+    return make_result(obligation, VerificationStatus::Proven,
+                       "proved by control-flow weakest-precondition", smt);
   }
   return make_result(obligation, VerificationStatus::Unknown, "no local proof rule matched", smt);
 }
@@ -2004,7 +2234,9 @@ void process_while_statement(const Statement& statement, const FunctionDecl& fn,
   append_new_returns(body_context, return_start, context.returns);
   rebind_loop_state(statement, context, assigned_names, "loop_exit");
   for (const auto& invariant : statement.loop_invariants) {
-    context.active.push_back(rewrite_predicate(invariant, context.bindings));
+    auto summary = rewrite_predicate(invariant, context.bindings);
+    summary.name = "loop_summary." + invariant.name;
+    context.active.push_back(std::move(summary));
   }
   auto exit_condition = make_unary(UnaryOp::Not,
                                    materialize_expr(statement.expr, fn, context, call_index,

@@ -173,9 +173,13 @@ The planner walks each function and builds proof obligations:
   modeled referenced value, and advance the modeled epoch;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
+- the local control-flow WP pass splits merged `ite` goals, specializes guarded
+  facts per branch, and requires both paths to prove the selected goal;
 - `while` statements create initialization and preservation obligations for
   each user-written invariant, then expose invariant and exit-condition facts at
   the merge point;
+- loop-exit invariants are tagged as summaries so conjunctive postconditions
+  can be decomposed and checked locally against them;
 - `return expr` records a completed return path with its active assumptions and
   `result == expr`;
 - `return;` records a completed void return path without a result binding;
@@ -187,11 +191,11 @@ Every proof obligation carries the source range of the assertion or
 postcondition that produced it. Diagnostics and result reporting keep start
 locations for quick sorting, but print full ranges when available.
 
-The local prover can now run a small weakest-precondition-style rewrite for
-straight-line equality assumptions created by `let` and assignment. That proves
-simple mutation chains without invoking Z3. This is still not a full
-weakest-precondition engine for arbitrary control flow; it is the first
-verifiable spine for contracts written in the language itself.
+The local prover runs weakest-precondition-style rewrites for straight-line
+equalities, bounded branch splitting for merged `ite` values, and conjunction
+decomposition over loop-exit summaries. These rules prove simple control-flow
+contracts without invoking Z3, but deliberately leave arithmetic induction,
+invariant discovery, and unbounded implication search at the solver boundary.
 
 ## Solver Boundary
 

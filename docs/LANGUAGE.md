@@ -465,7 +465,8 @@ condition must be `bool`. The then branch is checked under `condition`, and the
 else branch is checked under `!condition`. Facts that survive the merge are
 guarded by the branch condition, so a fact from only one branch is not treated as
 unconditionally true. Local bindings declared inside a branch are scoped to that
-branch.
+branch. For scalar assignments merged through `ite`, the bounded local WP rule
+specializes each path and requires both selected goals to close.
 
 `while condition` requires one or more `invariant name: predicate;` clauses
 before the body. Sigil proves each invariant before entering the loop and proves
@@ -473,7 +474,9 @@ that one symbolic iteration preserves it. After the loop, the prover assumes the
 invariants and the negated loop condition for the loop-exit state. Locals
 declared inside the loop body are scoped to the body. Loop bodies cannot contain
 `return` statements yet; early loop exits need a real control-flow and
-weakest-precondition model before Sigil can prove them honestly.
+weakest-precondition model before Sigil can prove them honestly. Conjunctive
+postconditions can be composed from separate loop-exit invariant summaries;
+initialization and preservation remain independent obligations.
 
 Function postconditions can mention parameters and `result`, but not body-local
 binding names. This keeps contracts independent from implementation-local
@@ -487,8 +490,9 @@ Callers prove the callee's `requires` clauses at each call site and may use the
 callee's `ensures` clauses as facts about the call result. Theorem calls use the
 same modular proof model, but only in proof-only contexts.
 
-The current body language is deliberately tiny. References and memory operations
-will require proper control-flow and weakest-precondition generation.
+The current body language is deliberately tiny. Aggregate mutation, early loop
+exit, and runtime memory operations still require richer control-flow and
+weakest-precondition generation.
 
 ## Expressions
 

@@ -1,0 +1,29 @@
+module control_flow_wp;
+
+fn choose_nonnegative(flag: bool, left: i64, right: i64) -> i64
+requires left_nonnegative: left >= 0;
+requires right_nonnegative: right >= 0;
+ensures nonnegative: result >= 0;
+{
+  let selected: i64 = 0;
+  if flag {
+    selected = left;
+  } else {
+    selected = right;
+  }
+  return selected;
+}
+
+fn summarize_counter(n: i64) -> i64
+requires nonnegative: n >= 0;
+ensures bounded: result >= 0 && result <= n;
+{
+  let i: i64 = 0;
+  while i < n
+  invariant lower: i >= 0;
+  invariant upper: i <= n;
+  {
+    i = i + 1;
+  }
+  return i;
+}

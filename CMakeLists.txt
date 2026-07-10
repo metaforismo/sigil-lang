@@ -269,6 +269,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/memory-state-updates")
 
 add_test(
+  NAME sigil_cli_control_flow_wp_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_control_flow_wp.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/control_flow_wp.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/control-flow-wp")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -486,6 +493,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/memory_state_updates.sigil")
   set_tests_properties(sigil_z3_memory_state_updates PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_control_flow_wp
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_control_flow_wp_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/control_flow_wp.sigil")
+  set_tests_properties(sigil_z3_control_flow_wp PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

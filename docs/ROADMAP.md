@@ -96,6 +96,8 @@ invalidation, and function-boundary semantics.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
+- [x] Extend bounded local weakest-precondition reasoning across branch joins
+      and loop-exit invariant summaries.
 - [x] Reject aggregate operations whose copy, merge, equality, or function-boundary
       semantics are not defined yet.
 - [x] Reject recursive by-value struct definitions until references exist.
@@ -124,7 +126,7 @@ invalidation, and function-boundary semantics.
 - [x] Connect array/slice/reference updates to memory-state and ownership
       rules.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
-- [ ] Extend weakest-precondition generation beyond straight-line mutation into
+- [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [ ] Execute an external agent loop that proposes candidate lemmas from saved
       requests and feeds them through `sigil agent-check`.
@@ -153,7 +155,7 @@ invalidation, and function-boundary semantics.
       addresses.
 - [ ] Add slice origin, offset, and overlapping-view facts within one
       allocation.
-- [ ] Extend weakest-precondition generation beyond straight-line mutation into
+- [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
 
