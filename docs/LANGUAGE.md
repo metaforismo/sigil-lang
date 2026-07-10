@@ -237,6 +237,14 @@ bounds, validity, or write-permission obligations. Aliases and immutable stores
 preserve liveness. Liveness is intentionally independent from allocation
 identity: knowing an allocation token does not prove that it is live.
 
+Every memory model also exposes allocation-level ownership and borrow state:
+`owner_id(value)` is an integer owner token, `has_owner(value)` reports whether
+an owner exists, `shared_borrows(value)` is the active shared-borrow count, and
+`has_mut_borrow(value)` reports an active mutable borrow. Sigil assumes three
+consistency invariants for every model value: shared counts are nonnegative, a
+mutable borrow excludes shared borrows, and owner presence implies a nonzero
+owner token. Aliases and immutable stores preserve all four facts.
+
 This is intentionally a proof model, not a runtime memory model. It does not
 create or destroy allocations, transition an allocation between live and dead,
 establish ownership, define view ranges, prove non-overlap inside one
@@ -472,6 +480,8 @@ Supported expression forms:
 - cross-model allocation intrinsics: `allocation_id(value)`,
   `is_live(value)`, `same_allocation(left, right)`,
   `disjoint_allocation(left, right)`
+- ownership intrinsics: `owner_id(value)`, `has_owner(value)`,
+  `shared_borrows(value)`, `has_mut_borrow(value)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`

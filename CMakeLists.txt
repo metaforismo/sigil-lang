@@ -248,6 +248,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/allocation-liveness")
 
 add_test(
+  NAME sigil_cli_ownership_state_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ownership_state.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/ownership_state.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/ownership-state")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -441,6 +448,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/allocation_liveness.sigil")
   set_tests_properties(sigil_z3_allocation_liveness PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_ownership_state
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_ownership_state_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/ownership_state.sigil")
+  set_tests_properties(sigil_z3_ownership_state PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

@@ -468,6 +468,22 @@ std::string allocation_live_symbol(const std::string& symbol) {
   return symbol + ".live";
 }
 
+std::string owner_symbol(const std::string& symbol) {
+  return symbol + ".owner";
+}
+
+std::string has_owner_symbol(const std::string& symbol) {
+  return symbol + ".has_owner";
+}
+
+std::string shared_borrows_symbol(const std::string& symbol) {
+  return symbol + ".shared";
+}
+
+std::string mut_borrow_symbol(const std::string& symbol) {
+  return symbol + ".mut_borrow";
+}
+
 std::string ref_addr_symbol(const std::string& symbol) {
   return symbol + ".addr";
 }
@@ -567,6 +583,20 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   if (name == "is_live" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
     return make_identifier(allocation_live_symbol(arguments[0]->name), range);
+  }
+  if (arguments.size() == 1 && arguments[0] && arguments[0]->kind == ExprNode::Kind::Identifier) {
+    if (name == "owner_id") {
+      return make_identifier(owner_symbol(arguments[0]->name), range);
+    }
+    if (name == "has_owner") {
+      return make_identifier(has_owner_symbol(arguments[0]->name), range);
+    }
+    if (name == "shared_borrows") {
+      return make_identifier(shared_borrows_symbol(arguments[0]->name), range);
+    }
+    if (name == "has_mut_borrow") {
+      return make_identifier(mut_borrow_symbol(arguments[0]->name), range);
+    }
   }
   if ((name == "same_allocation" || name == "disjoint_allocation") && arguments.size() == 2 &&
       arguments[0] && arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -1010,7 +1040,9 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
       expr->name == "is_valid" || expr->name == "addr" || expr->name == "epoch" ||
       expr->name == "can_write" || expr->name == "same_ref" || expr->name == "disjoint" ||
       expr->name == "allocation_id" || expr->name == "same_allocation" ||
-      expr->name == "disjoint_allocation" || expr->name == "is_live") {
+      expr->name == "disjoint_allocation" || expr->name == "is_live" || expr->name == "owner_id" ||
+      expr->name == "has_owner" || expr->name == "shared_borrows" ||
+      expr->name == "has_mut_borrow") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1076,6 +1108,45 @@ void add_symbol_equality_fact(const std::string& name, const std::string& target
   context.active.push_back(NamedPredicate{name, equality, location, range});
 }
 
+void register_ownership_state(const std::string& symbol, ProofContext& context) {
+  const auto owner = owner_symbol(symbol);
+  const auto has_owner = has_owner_symbol(symbol);
+  const auto shared = shared_borrows_symbol(symbol);
+  const auto mut_borrow = mut_borrow_symbol(symbol);
+  context.symbols[owner] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[has_owner] = Type{TypeKind::Bool, "bool", {}};
+  context.symbols[shared] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[mut_borrow] = Type{TypeKind::Bool, "bool", {}};
+
+  context.active.push_back(
+      NamedPredicate{"ownership_" + sanitize_symbol(symbol) + "_shared_nonnegative",
+                     make_binary(BinaryOp::GreaterEqual, make_identifier(shared), make_integer(0)),
+                     SourceLocation{}, SourceRange{}});
+  context.active.push_back(NamedPredicate{
+      "ownership_" + sanitize_symbol(symbol) + "_borrow_exclusion",
+      make_binary(BinaryOp::Or, make_unary(UnaryOp::Not, make_identifier(mut_borrow)),
+                  make_binary(BinaryOp::Equal, make_identifier(shared), make_integer(0))),
+      SourceLocation{}, SourceRange{}});
+  context.active.push_back(NamedPredicate{
+      "ownership_" + sanitize_symbol(symbol) + "_owner_consistency",
+      make_binary(BinaryOp::Or, make_unary(UnaryOp::Not, make_identifier(has_owner)),
+                  make_binary(BinaryOp::NotEqual, make_identifier(owner), make_integer(0))),
+      SourceLocation{}, SourceRange{}});
+}
+
+void copy_ownership_state(const std::string& prefix, const std::string& target,
+                          const std::string& source, const SourceRange& range,
+                          const SourceLocation& location, ProofContext& context) {
+  add_symbol_equality_fact(prefix + owner_symbol(target), owner_symbol(target),
+                           owner_symbol(source), range, location, context);
+  add_symbol_equality_fact(prefix + has_owner_symbol(target), has_owner_symbol(target),
+                           has_owner_symbol(source), range, location, context);
+  add_symbol_equality_fact(prefix + shared_borrows_symbol(target), shared_borrows_symbol(target),
+                           shared_borrows_symbol(source), range, location, context);
+  add_symbol_equality_fact(prefix + mut_borrow_symbol(target), mut_borrow_symbol(target),
+                           mut_borrow_symbol(source), range, location, context);
+}
+
 void add_ref_alias_consistency_facts(const std::string& symbol, const Type& type,
                                      const SourceRange& range, const SourceLocation& location,
                                      ProofContext& context) {
@@ -1138,6 +1209,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     context.symbols[target_data] = model_data_type(type);
     context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
+    register_ownership_state(target_symbol, context);
 
     auto len_non_negative =
         make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
@@ -1153,6 +1225,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              range, location, context);
     add_symbol_equality_fact("field_" + target_live, target_live, source_live, range, location,
                              context);
+    copy_ownership_state("field_", target_symbol, source_expr->name, range, location, context);
     return;
   }
 
@@ -1179,6 +1252,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
+    register_ownership_state(target_symbol, context);
     add_symbol_equality_fact("field_" + target_addr, target_addr, source_addr, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_valid, target_valid, source_valid, range, location,
@@ -1193,6 +1267,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              range, location, context);
     add_symbol_equality_fact("field_" + target_live, target_live, source_live, range, location,
                              context);
+    copy_ownership_state("field_", target_symbol, source_expr->name, range, location, context);
     add_ref_alias_consistency_facts(target_symbol, type, range, location, context);
   }
 }
@@ -1245,6 +1320,7 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
   context.symbols[target_data] = model_data_type(type);
   context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
+  register_ownership_state(target_symbol, context);
 
   auto len_non_negative =
       make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
@@ -1258,6 +1334,7 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                            expr->range, expr->location, context);
   add_symbol_equality_fact("store_" + target_live, target_live, source_live, expr->range,
                            expr->location, context);
+  copy_ownership_state("store_", target_symbol, source->name, expr->range, expr->location, context);
 
   auto store_expr = make_call(
       std::string(kModelStoreCall),
@@ -1309,6 +1386,7 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
+  register_ownership_state(target_symbol, context);
 
   add_symbol_equality_fact("store_" + target_addr, target_addr, source_addr, expr->range,
                            expr->location, context);
@@ -1320,6 +1398,7 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
                            expr->range, expr->location, context);
   add_symbol_equality_fact("store_" + target_live, target_live, source_live, expr->range,
                            expr->location, context);
+  copy_ownership_state("store_", target_symbol, source->name, expr->range, expr->location, context);
 
   auto value_equality =
       make_binary(BinaryOp::Equal, make_identifier(target_value, expr->range), value, expr->range);
@@ -1966,6 +2045,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
     context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
+    register_ownership_state(symbol, context);
 
     auto len_non_negative =
         make_binary(BinaryOp::GreaterEqual, make_identifier(len_symbol, SourceLocation{}),
@@ -1984,6 +2064,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[ref_write_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
+    register_ownership_state(symbol, context);
     const auto epoch_symbol = ref_epoch_symbol(symbol);
     context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("ref_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,

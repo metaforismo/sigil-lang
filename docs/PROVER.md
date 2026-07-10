@@ -166,6 +166,20 @@ different element types, because the identity token is deliberately separate
 from the value's typed view. Model aliases and both store forms preserve it and
 the independent liveness bit.
 
+They also share four ownership-state symbols: `.owner` (`Int`), `.has_owner`
+(`Bool`), `.shared` (`Int`), and `.mut_borrow` (`Bool`). The planner adds these
+invariants for every materialized memory model:
+
+```sigil
+shared_borrows(value) >= 0
+!has_mut_borrow(value) || shared_borrows(value) == 0
+!has_owner(value) || owner_id(value) != 0
+```
+
+Aliases and both immutable store forms copy the four symbols unchanged. This
+models allocation state, not linear handle ownership: checked borrow/release
+transitions and move semantics are separate work.
+
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:
 
@@ -191,6 +205,10 @@ updated.valid == ref.valid
 updated.write == ref.write
 updated.alloc == ref.alloc
 updated.live == ref.live
+updated.owner == ref.owner
+updated.has_owner == ref.has_owner
+updated.shared == ref.shared
+updated.mut_borrow == ref.mut_borrow
 updated.value == value
 updated.epoch == ref.epoch + 1
 ```

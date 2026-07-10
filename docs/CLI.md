@@ -41,6 +41,8 @@ validity, write permission, allocation identity, and liveness, update the
 modeled referenced value, and advance the modeled epoch. `allocation_id`,
 `is_live`, `same_allocation`, and `disjoint_allocation` expose common abstract
 allocation facts across array, slice, and reference models.
+`owner_id`, `has_owner`, `shared_borrows`, and `has_mut_borrow` expose common
+ownership state and deterministic consistency constraints.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -135,6 +137,12 @@ Example with allocation-liveness gates and preservation:
 
 ```sh
 sigil check examples/allocation_liveness.sigil --strict --solver-timeout-ms 250 --save-smt build/allocation-liveness-smt
+```
+
+Example with ownership and borrow-state facts:
+
+```sh
+sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250 --save-smt build/ownership-state-smt
 ```
 
 Exit codes:

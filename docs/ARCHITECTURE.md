@@ -70,6 +70,8 @@ system:
   intrinsics for array, slice, and reference proof models;
 - `is_live(value)` is a built-in allocation-liveness intrinsic for every memory
   proof model;
+- `owner_id`, `has_owner`, `shared_borrows`, and `has_mut_borrow` expose common
+  allocation-level ownership state;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -129,6 +131,7 @@ The planner walks each function and builds proof obligations:
 - container literal construction emits the same invariant obligations, and
   model fields are materialized by component facts such as `value.len`,
   `value.data`, `value.alloc`, `value.live`, `value.addr`, `value.valid`, `value.write`,
+  `value.owner`, `value.has_owner`, `value.shared`, `value.mut_borrow`,
   `value.value`, and `value.epoch`;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
@@ -146,6 +149,8 @@ The planner walks each function and builds proof obligations:
   SMT array `store`;
 - allocation intrinsics lower every model's deterministic `.alloc` component
   to identity or inequality facts across arrays, slices, and references;
+- ownership intrinsics lower deterministic owner-presence, owner-ID, shared
+  count, and mutable-borrow components with common consistency invariants;
 - reference `load(ref)` expressions create `memory_live` and `memory_valid`
   safety obligations and lower to the modeled referenced value;
 - reference `can_write(ref)` expressions lower to deterministic proof-level
