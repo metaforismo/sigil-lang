@@ -790,7 +790,7 @@ std::string ref_write_symbol(const std::string& symbol) {
   return symbol + ".write";
 }
 
-std::string ref_epoch_symbol(const std::string& symbol) {
+std::string model_epoch_symbol(const std::string& symbol) {
   return symbol + ".epoch";
 }
 
@@ -879,7 +879,7 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   }
   if (name == "epoch" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
-    return make_identifier(ref_epoch_symbol(arguments[0]->name), range);
+    return make_identifier(model_epoch_symbol(arguments[0]->name), range);
   }
   if (name == "can_write" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
@@ -914,6 +914,19 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
     auto rhs = make_identifier(allocation_symbol(arguments[1]->name), arguments[1]->range);
     return make_binary(name == "same_allocation" ? BinaryOp::Equal : BinaryOp::NotEqual, lhs, rhs,
                        range);
+  }
+  if (name == "same_snapshot" && arguments.size() == 2 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
+      arguments[1]->kind == ExprNode::Kind::Identifier) {
+    auto same_allocation = make_binary(
+        BinaryOp::Equal,
+        make_identifier(allocation_symbol(arguments[0]->name), arguments[0]->range),
+        make_identifier(allocation_symbol(arguments[1]->name), arguments[1]->range), range);
+    auto same_epoch = make_binary(
+        BinaryOp::Equal,
+        make_identifier(model_epoch_symbol(arguments[0]->name), arguments[0]->range),
+        make_identifier(model_epoch_symbol(arguments[1]->name), arguments[1]->range), range);
+    return make_binary(BinaryOp::And, same_allocation, same_epoch, range);
   }
   if ((name == "same_view" || name == "overlaps") && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -1642,7 +1655,7 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
       expr->name == "disjoint_allocation" || expr->name == "is_live" || expr->name == "owner_id" ||
       expr->name == "has_owner" || expr->name == "shared_borrows" ||
       expr->name == "has_mut_borrow" || expr->name == "slice_offset" || expr->name == "same_view" ||
-      expr->name == "overlaps" || expr->name == "is_initialized") {
+      expr->name == "overlaps" || expr->name == "is_initialized" || expr->name == "same_snapshot") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1806,8 +1819,8 @@ void add_ref_alias_consistency_facts(const std::string& symbol, const Type& type
         make_unary(UnaryOp::Not, make_identifier(ref_valid_symbol(symbol), range), range);
     auto either_invalid = make_binary(BinaryOp::Or, existing_invalid, current_invalid, range);
     auto epochs_differ =
-        make_binary(BinaryOp::NotEqual, make_identifier(ref_epoch_symbol(existing), range),
-                    make_identifier(ref_epoch_symbol(symbol), range), range);
+        make_binary(BinaryOp::NotEqual, make_identifier(model_epoch_symbol(existing), range),
+                    make_identifier(model_epoch_symbol(symbol), range), range);
     auto invalid_or_epoch = make_binary(BinaryOp::Or, either_invalid, epochs_differ, range);
     auto addresses_differ =
         make_binary(BinaryOp::NotEqual, make_identifier(ref_addr_symbol(existing), range),
@@ -1838,17 +1851,20 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto target_data = model_data_symbol(target_symbol);
     const auto target_init = model_init_symbol(target_symbol);
     const auto target_offset = model_offset_symbol(target_symbol);
+    const auto target_epoch = model_epoch_symbol(target_symbol);
     const auto target_allocation = allocation_symbol(target_symbol);
     const auto target_live = allocation_live_symbol(target_symbol);
     const auto source_len = model_len_symbol(source_expr->name);
     const auto source_data = model_data_symbol(source_expr->name);
     const auto source_init = model_init_symbol(source_expr->name);
     const auto source_offset = model_offset_symbol(source_expr->name);
+    const auto source_epoch = model_epoch_symbol(source_expr->name);
     const auto source_allocation = allocation_symbol(source_expr->name);
     const auto source_live = allocation_live_symbol(source_expr->name);
     context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_data] = model_data_type(type);
     context.symbols[target_init] = model_init_type();
+    context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
     register_model_offset(target_symbol, type, context);
     context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
@@ -1868,6 +1884,8 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              context);
     add_symbol_equality_fact("field_" + target_offset, target_offset, source_offset, range,
                              location, context);
+    add_symbol_equality_fact("field_" + target_epoch, target_epoch, source_epoch, range, location,
+                             context);
     add_symbol_equality_fact("field_" + target_allocation, target_allocation, source_allocation,
                              range, location, context);
     add_symbol_equality_fact("field_" + target_live, target_live, source_live, range, location,
@@ -1881,14 +1899,14 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto target_valid = ref_valid_symbol(target_symbol);
     const auto target_value = ref_value_symbol(target_symbol);
     const auto target_write = ref_write_symbol(target_symbol);
-    const auto target_epoch = ref_epoch_symbol(target_symbol);
+    const auto target_epoch = model_epoch_symbol(target_symbol);
     const auto target_allocation = allocation_symbol(target_symbol);
     const auto target_live = allocation_live_symbol(target_symbol);
     const auto source_addr = ref_addr_symbol(source_expr->name);
     const auto source_valid = ref_valid_symbol(source_expr->name);
     const auto source_value = ref_value_symbol(source_expr->name);
     const auto source_write = ref_write_symbol(source_expr->name);
-    const auto source_epoch = ref_epoch_symbol(source_expr->name);
+    const auto source_epoch = model_epoch_symbol(source_expr->name);
     const auto source_allocation = allocation_symbol(source_expr->name);
     const auto source_live = allocation_live_symbol(source_expr->name);
     context.ref_symbols[target_symbol] = type;
@@ -2009,6 +2027,7 @@ void register_allocation_binding(const Expr& allocation, const std::string& targ
   register_model_symbol(target_symbol, type, context);
   context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
   context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+  context.symbols[model_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
   register_ownership_state(target_symbol, context);
 
   for (const auto& previous : previous_allocations) {
@@ -2028,6 +2047,9 @@ void register_allocation_binding(const Expr& allocation, const std::string& targ
                       allocation, context);
   add_transition_fact("allocate_" + mut_borrow_symbol(target_symbol),
                       mut_borrow_symbol(target_symbol), make_boolean(false, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + model_epoch_symbol(target_symbol),
+                      model_epoch_symbol(target_symbol), make_integer(0, allocation->range),
                       allocation, context);
 
   if (!is_ref) {
@@ -2066,7 +2088,6 @@ void register_allocation_binding(const Expr& allocation, const std::string& targ
   context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
   context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
   context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
-  context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
   for (const auto& previous : previous_references) {
     add_distinct_symbol_fact("allocate_address_fresh_" + sanitize_symbol(target_symbol) + "_" +
                                  sanitize_symbol(previous),
@@ -2081,9 +2102,6 @@ void register_allocation_binding(const Expr& allocation, const std::string& targ
                       allocation, context);
   add_transition_fact("allocate_" + ref_value_symbol(target_symbol),
                       ref_value_symbol(target_symbol), std::move(initial), allocation, context);
-  add_transition_fact("allocate_" + ref_epoch_symbol(target_symbol),
-                      ref_epoch_symbol(target_symbol), make_integer(0, allocation->range),
-                      allocation, context);
   add_ref_alias_consistency_facts(target_symbol, type, allocation->range, allocation->location,
                                   context);
 }
@@ -2114,11 +2132,13 @@ void register_slice_view_binding(const Expr& view, const std::string& target_sym
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_init = model_init_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
+  const auto target_epoch = model_epoch_symbol(target_symbol);
   const auto target_allocation = allocation_symbol(target_symbol);
   const auto target_live = allocation_live_symbol(target_symbol);
   context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_data] = model_data_type(type);
   context.symbols[target_init] = model_init_type();
+  context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
   register_model_offset(target_symbol, type, context);
   context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
@@ -2137,6 +2157,8 @@ void register_slice_view_binding(const Expr& view, const std::string& target_sym
       make_binary(BinaryOp::Add, make_identifier(model_offset_symbol(source->name), view->range),
                   start, view->range);
   add_transition_fact("view_" + target_offset, target_offset, absolute_offset, view, context);
+  add_symbol_equality_fact("view_" + target_epoch, target_epoch, model_epoch_symbol(source->name),
+                           view->range, view->location, context);
   add_symbol_equality_fact("view_" + target_allocation, target_allocation,
                            allocation_symbol(source->name), view->range, view->location, context);
   add_symbol_equality_fact("view_" + target_live, target_live, allocation_live_symbol(source->name),
@@ -2168,6 +2190,7 @@ void register_consuming_transition_binding(const Expr& transition, const std::st
   } else {
     context.symbols[target_symbol] = type;
     context.allocation_symbols.insert(target_symbol);
+    context.symbols[model_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     if (is_model_container_type(type)) {
       context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
       context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
@@ -2190,7 +2213,6 @@ void register_consuming_transition_binding(const Expr& transition, const std::st
       context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
       context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
       context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
-      context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
       add_symbol_equality_fact("deallocate_" + ref_addr_symbol(target_symbol),
                                ref_addr_symbol(target_symbol), ref_addr_symbol(source->name),
                                transition->range, transition->location, context);
@@ -2203,12 +2225,13 @@ void register_consuming_transition_binding(const Expr& transition, const std::st
       add_transition_fact("deallocate_" + ref_write_symbol(target_symbol),
                           ref_write_symbol(target_symbol), make_boolean(false, transition->range),
                           transition, context);
-      auto next_epoch = make_binary(
-          BinaryOp::Add, make_identifier(ref_epoch_symbol(source->name), transition->range),
-          make_integer(1, transition->range), transition->range);
-      add_transition_fact("deallocate_" + ref_epoch_symbol(target_symbol),
-                          ref_epoch_symbol(target_symbol), next_epoch, transition, context);
     }
+
+    auto next_epoch = make_binary(
+        BinaryOp::Add, make_identifier(model_epoch_symbol(source->name), transition->range),
+        make_integer(1, transition->range), transition->range);
+    add_transition_fact("deallocate_" + model_epoch_symbol(target_symbol),
+                        model_epoch_symbol(target_symbol), next_epoch, transition, context);
 
     context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
@@ -2258,6 +2281,7 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
 
   context.symbols[target_symbol] = type;
   register_model_symbol(target_symbol, type, context);
+  context.symbols[model_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
   if (is_model_container_type(type)) {
     context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
@@ -2283,7 +2307,6 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
     context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
     context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
-    context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
     add_symbol_equality_fact("transition_" + ref_addr_symbol(target_symbol),
@@ -2298,10 +2321,11 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
     add_symbol_equality_fact("transition_" + ref_write_symbol(target_symbol),
                              ref_write_symbol(target_symbol), ref_write_symbol(source->name),
                              transition->range, transition->location, context);
-    add_symbol_equality_fact("transition_" + ref_epoch_symbol(target_symbol),
-                             ref_epoch_symbol(target_symbol), ref_epoch_symbol(source->name),
-                             transition->range, transition->location, context);
   }
+
+  add_symbol_equality_fact("transition_" + model_epoch_symbol(target_symbol),
+                           model_epoch_symbol(target_symbol), model_epoch_symbol(source->name),
+                           transition->range, transition->location, context);
 
   add_symbol_equality_fact("transition_" + allocation_symbol(target_symbol),
                            allocation_symbol(target_symbol), allocation_symbol(source->name),
@@ -2370,18 +2394,21 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_init = model_init_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
+  const auto target_epoch = model_epoch_symbol(target_symbol);
   const auto target_allocation = allocation_symbol(target_symbol);
   const auto target_live = allocation_live_symbol(target_symbol);
   const auto source_len = model_len_symbol(source->name);
   const auto source_data = model_data_symbol(source->name);
   const auto source_init = model_init_symbol(source->name);
   const auto source_offset = model_offset_symbol(source->name);
+  const auto source_epoch = model_epoch_symbol(source->name);
   const auto source_allocation = allocation_symbol(source->name);
   const auto source_live = allocation_live_symbol(source->name);
 
   context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_data] = model_data_type(type);
   context.symbols[target_init] = model_init_type();
+  context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
   register_model_offset(target_symbol, type, context);
   context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
@@ -2401,6 +2428,9 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                            expr->range, expr->location, context);
   add_symbol_equality_fact("store_" + target_live, target_live, source_live, expr->range,
                            expr->location, context);
+  auto next_epoch = make_binary(BinaryOp::Add, make_identifier(source_epoch, expr->range),
+                                make_integer(1, expr->range), expr->range);
+  add_transition_fact("store_" + target_epoch, target_epoch, next_epoch, expr, context);
   copy_ownership_state("store_", target_symbol, source->name, expr->range, expr->location, context);
 
   auto physical_index = make_binary(BinaryOp::Add, make_identifier(source_offset, expr->range),
@@ -2447,13 +2477,13 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   const auto target_valid = ref_valid_symbol(target_symbol);
   const auto target_value = ref_value_symbol(target_symbol);
   const auto target_write = ref_write_symbol(target_symbol);
-  const auto target_epoch = ref_epoch_symbol(target_symbol);
+  const auto target_epoch = model_epoch_symbol(target_symbol);
   const auto target_allocation = allocation_symbol(target_symbol);
   const auto target_live = allocation_live_symbol(target_symbol);
   const auto source_addr = ref_addr_symbol(source->name);
   const auto source_valid = ref_valid_symbol(source->name);
   const auto source_write = ref_write_symbol(source->name);
-  const auto source_epoch = ref_epoch_symbol(source->name);
+  const auto source_epoch = model_epoch_symbol(source->name);
   const auto source_allocation = allocation_symbol(source->name);
   const auto source_live = allocation_live_symbol(source->name);
 
@@ -3166,6 +3196,8 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
     context.symbols[model_init_symbol(symbol)] = model_init_type();
+    const auto epoch_symbol = model_epoch_symbol(symbol);
+    context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
     register_model_offset(symbol, type, context);
     context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
@@ -3177,6 +3209,9 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.active.push_back(
         NamedPredicate{"model_" + sanitize_symbol(symbol) + "_len_non_negative", len_non_negative,
                        SourceLocation{}, SourceRange{}});
+    add_symbol_equality_fact("model_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,
+                             std::string(kEntryEpochSymbol), SourceRange{}, SourceLocation{},
+                             context);
     return;
   }
 
@@ -3190,7 +3225,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     register_ownership_state(symbol, context);
-    const auto epoch_symbol = ref_epoch_symbol(symbol);
+    const auto epoch_symbol = model_epoch_symbol(symbol);
     context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("ref_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,
                              std::string(kEntryEpochSymbol), SourceRange{}, SourceLocation{},

@@ -622,7 +622,16 @@ fn epoch_scalar(x: i64) -> i64
   return epoch(x);
 }
 )",
-                    "epoch expects a Ref[T] argument");
+                    "epoch expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn scalar_snapshot(x: i64, ptr: Ref[i64]) -> bool
+{
+  return same_snapshot(x, ptr);
+}
+)",
+                    "same_snapshot expects Array[T], Slice[T], or Ref[T] arguments");
 
   expect_diagnostic(R"(
 module bad;

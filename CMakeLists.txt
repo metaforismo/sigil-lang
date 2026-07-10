@@ -311,6 +311,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/function-boundary-initialization")
 
 add_test(
+  NAME sigil_cli_model_epoch_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_model_epochs.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/model_epochs.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/model-epochs")
+
+add_test(
   NAME sigil_cli_control_flow_wp_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_control_flow_wp.sh"
           "$<TARGET_FILE:sigil>"
@@ -591,6 +598,15 @@ if(SIGIL_Z3_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/function_boundary_initialization.sigil"
             "${CMAKE_CURRENT_BINARY_DIR}/function-boundary-initialization-z3")
   set_tests_properties(sigil_z3_function_boundary_initialization PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_model_epochs
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_model_epochs_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/model_epochs.sigil"
+            "${CMAKE_CURRENT_BINARY_DIR}/model-epochs-z3")
+  set_tests_properties(sigil_z3_model_epochs PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

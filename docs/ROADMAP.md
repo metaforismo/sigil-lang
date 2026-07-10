@@ -32,9 +32,11 @@ allocation-wide initialization masks, raw constructors start fully
 uninitialized, checked stores initialize exactly one physical slot, and reads
 prove ordered liveness, bounds, and initialization obligations. Function-entry
 masks are now unconstrained, explicit contracts describe required slots, and
-modular calls prove those contracts over caller snapshots. The next step is
-richer lifetime provenance and model-valued return/effect semantics, followed
-by native aggregate layout and binary-level crash proofs.
+modular calls prove those contracts over caller snapshots. Arrays, slices, and
+references now share memory epochs that distinguish snapshot versions from
+allocation lineage. The next step is path-sensitive alias invalidation and
+model-valued return/effect semantics, followed by native aggregate layout and
+binary-level crash proofs.
 
 ## Completed
 
@@ -113,6 +115,7 @@ by native aggregate layout and binary-level crash proofs.
 - [x] Gate modeled array/slice reads on liveness, bounds, and initialization.
 - [x] Add explicit function-boundary initialization contracts and re-lower
       substituted model predicates over caller snapshots.
+- [x] Add cross-model memory epochs and allocation-plus-epoch snapshot identity.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -148,8 +151,9 @@ by native aggregate layout and binary-level crash proofs.
 - [x] Define local partial initialization semantics for array and slice models.
 - [x] Define parameter-boundary initialization semantics for partial array and
       slice states.
-- [ ] Define richer lifetime provenance and model-valued return/effect
-      semantics for references and containers.
+- [x] Define cross-model allocation lineage and memory-snapshot provenance.
+- [ ] Define model-valued return/effect semantics and path-sensitive alias
+      invalidation for references and containers.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Execute an external agent loop that proposes candidate lemmas from saved
@@ -238,8 +242,9 @@ by native aggregate layout and binary-level crash proofs.
       store-to-initialize snapshots.
 - [x] Prove explicit partial-initialization contracts across scalar-returning
       function calls.
-- [ ] Model richer lifetime provenance, model-valued return/effect summaries,
-      and path-sensitive alias invalidation.
+- [x] Model cross-model epochs with preservation and advancement rules.
+- [ ] Model model-valued return/effect summaries and path-sensitive alias
+      invalidation.
 - [x] Gate modeled array and slice reads on bounds and initialization before
       exposing their abstract values.
 - [ ] Connect those source-level no-crash obligations to monomorphized native

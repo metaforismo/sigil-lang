@@ -230,7 +230,8 @@ start >= 0 && length >= 0 && start + length <= len(source)
 ```
 
 The result preserves backing data, allocation identity, liveness, and ownership
-state; its length is `length` and its absolute offset is
+state, initialization mask, and memory epoch; its length is `length` and its
+absolute offset is
 `slice_offset(source) + start`. `slice_offset(slice)` exposes that offset.
 `same_view(a, b)` requires equal allocation, offset, and length. `overlaps(a, b)`
 uses half-open ranges and is true exactly when equally typed slices share an
@@ -348,6 +349,15 @@ function or theorem arguments when their callee preconditions describe the
 required slots. Model-valued returns and cross-call mutation/effect summaries
 are not implemented yet.
 
+Every array, slice, and reference also carries a proof-level memory epoch.
+`epoch(model)` exposes it. Fresh allocations start at zero; model aliases,
+slice views, borrow transitions, and `move_owner` preserve it; stores advance it
+by one; and `deallocate` advances it into the dead tombstone.
+`same_snapshot(left, right)` means both `same_allocation(left, right)` and
+`epoch(left) == epoch(right)`. Epoch equality by itself never proves common
+provenance. These are logical snapshot tokens, not native counters or a claim
+that old runtime aliases have been invalidated.
+
 Each constructor receives an allocation identity distinct from every allocation
 snapshot previously materialized on the current proof path, including consumed
 owners and deallocation tombstones. This models a fresh lifetime token and
@@ -394,9 +404,9 @@ modeled reference-validity bit. `can_write(ptr)` exposes the modeled
 write-permission bit. `load(ptr)` returns the referenced scalar value and emits
 `memory_live` followed by `memory_valid`, proving both facts at the access site.
 `addr(ptr)` returns the modeled integer address.
-`epoch(ptr)` returns the modeled memory-snapshot token for the reference.
-Function-entry references share an internal entry epoch, and model aliases
-preserve the source epoch and write permission. `same_ref(left, right)` and
+`epoch(ptr)` returns the common modeled memory-snapshot token. Function-entry
+models share an internal entry epoch, and model aliases preserve the source
+epoch and write permission. `same_ref(left, right)` and
 `disjoint(left, right)` compare modeled addresses. The common
 `allocation_id`, `same_allocation`, and `disjoint_allocation` intrinsics compare
 the allocation token independently of a reference's numeric address.

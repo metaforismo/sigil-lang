@@ -168,9 +168,12 @@ The planner walks each function and builds proof obligations:
   `index_in_bounds` safety obligations, preserve the source length, offset,
   allocation, liveness, and ownership state, lower the updated data fact to SMT
   array `store`, and set exactly the allocation-relative physical index in the
-  successor initialization mask to `true`;
+  successor initialization mask to `true`, while advancing the memory epoch;
 - allocation intrinsics lower every model's deterministic `.alloc` component
   to identity or inequality facts across arrays, slices, and references;
+- `epoch` and `same_snapshot` distinguish memory-state versions from allocation
+  lineage; constructors start at zero, immutable aliases/views/borrows/moves
+  preserve epochs, and stores/deallocation advance them;
 - ownership intrinsics lower deterministic owner-presence, owner-ID, shared
   count, and mutable-borrow components with common consistency invariants;
 - borrow transition bindings create `memory_live`, `ownership_present`, and
