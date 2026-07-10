@@ -87,6 +87,10 @@ production verifier yet.
   rejection and ordered liveness, ownership, borrow-free, and conservative
   allocation-uniqueness obligations. Deallocation yields a dead tombstone and
   possible aliases block the transition.
+- Fresh initialized `allocate_array`, `allocate_slice`, and `allocate_ref`
+  constructors. They establish live, owned, borrow-free state, typed initial
+  contents, deterministic lifetime-token freshness, and fresh current reference
+  addresses; sized allocations must prove a nonnegative length.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Bounded control-flow weakest-precondition reasoning: the local prover splits
@@ -209,6 +213,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
@@ -293,9 +298,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- allocation creation and freshness, initialization tracking, richer lifetime
-  and provenance rules, and path-sensitive consuming transitions beyond the
-  current conservative deallocation model;
+- explicit partial-initialization tracking and uninitialized-read gates, richer
+  lifetime and provenance rules, and path-sensitive consuming transitions
+  beyond the current conservative proof allocation/deallocation model;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

@@ -76,6 +76,9 @@ system:
   updated memory-model snapshots after checked transition guards;
 - `move_owner` and `deallocate` are consuming model transitions whose direct
   source identifier becomes unavailable after a root-level model `let`;
+- `allocate_array`, `allocate_slice`, and `allocate_ref` infer their model
+  element type from a scalar initializer and must directly initialize a model
+  binding or container model field;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -171,6 +174,11 @@ The planner walks each function and builds proof obligations:
   current model root; `deallocate` creates a dead, ownerless, borrow-free
   tombstone and invalidates reference permissions without inventing effects on
   possible aliases;
+- allocation bindings emit a nonnegative-size obligation when applicable,
+  create typed constant-array or reference-value initialization facts, and set
+  live/owner/borrow/validity state. Deterministically sorted freshness facts
+  exclude every historical allocation token on the current proof path and
+  every current reference address;
 - reference `load(ref)` expressions create `memory_live` and `memory_valid`
   safety obligations and lower to the modeled referenced value;
 - reference `can_write(ref)` expressions lower to deterministic proof-level

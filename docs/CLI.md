@@ -53,6 +53,10 @@ later snapshot.
 They prove liveness, owner presence, borrow freedom, and allocation uniqueness
 before consuming the source name. Deallocation returns an inspectable dead
 tombstone; access through it still fails the ordinary liveness gate.
+`allocate_array(length, initial)`, `allocate_slice(length, initial)`, and
+`allocate_ref(initial)` create fresh, fully initialized proof snapshots. Size
+constructors emit a nonnegative-length obligation; all constructors establish
+live, owned, borrow-free state and deterministic lifetime-token freshness.
 The local prover also performs bounded control-flow WP reasoning for branch
 joins and loop-summary conjunctions before invoking Z3.
 
@@ -179,6 +183,12 @@ Example with consuming ownership transfer and checked deallocation:
 
 ```sh
 sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250 --save-smt build/consuming-deallocation-smt
+```
+
+Example with fresh initialized allocation constructors:
+
+```sh
+sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250 --save-smt build/fresh-allocation-smt
 ```
 
 Example with branch and loop weakest-precondition reasoning:

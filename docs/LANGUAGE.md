@@ -304,6 +304,26 @@ the active facts prove the allocation IDs distinct. Sigil therefore blocks
 deallocation through a possible alias instead of claiming to invalidate aliases
 retroactively.
 
+Fresh proof-model allocations are created with initialized constructors:
+
+- `allocate_array(length, initial)` returns `Array[T]`.
+- `allocate_slice(length, initial)` returns `Slice[T]`.
+- `allocate_ref(initial)` returns `Ref[T]`.
+
+`T` is inferred from the `i64` or `bool` initial value. Constructors must be the
+direct initializer of a model `let` or container model field. Array and slice
+allocation emits an `allocation_size_nonnegative` obligation for `length >= 0`,
+sets offset zero, and models every in-bounds element as `initial`. Every result
+is live, has an owner with a nonzero owner token, and starts with no borrows.
+References additionally start valid, writable, at epoch zero, and with a fresh
+address relative to every current reference root.
+
+Each constructor receives an allocation identity distinct from every allocation
+snapshot previously materialized on the current proof path, including consumed
+owners and deallocation tombstones. This models a fresh lifetime token and
+prevents identity reuse inside one proof flow. It does not allocate native
+memory or define a global allocator across function calls.
+
 View overlap is currently a proof fact, not an exclusivity policy. The checker
 does not yet reject two simultaneously visible mutable snapshots merely because
 their ranges overlap. Consuming deallocation conservatively requires whole-
@@ -319,9 +339,9 @@ borrow leaves the corresponding safety obligation unresolved.
 
 This is intentionally a proof model, not a runtime memory model. It can model a
 checked transition from a unique live owner to a dead tombstone, but it does not
-create fresh allocations, establish initial contents, perform native
-allocation/deallocation, define byte layout, or propagate effects through
-runtime aliases.
+perform native allocation/deallocation, track partially initialized elements,
+define byte layout, or propagate effects through runtime aliases. The allocation
+constructors above create fully initialized abstract snapshots only.
 Aggregate returns are still rejected, and native lowering skips functions that
 take array or slice model parameters.
 
@@ -400,14 +420,16 @@ in a `let` binding or container field before later facts use them.
 `Ref[T]` is a verification scaffold. The `can_write` bit is an additional
 write-permission fact; it does not replace owner presence or the mutable-borrow
 gate. Sigil can consume a unique modeled owner into a dead reference tombstone,
-but it does not allocate or free native memory, create fresh provenance,
-propagate stores through old aliases, invalidate runtime aliases, mutate native
-memory, or define a native layout. Allocation identities are
+and can create a fresh initialized reference snapshot, but it does not allocate
+or free native memory, define byte provenance, propagate stores through old
+aliases, invalidate runtime aliases, mutate native memory, or define a native
+layout. Allocation identities are
 abstract proof tokens: they do not by themselves prove that an allocation
 exists, remains live, owns an address, or is disjoint from another address
-range. The separate liveness bit must be established by a contract or a future
-allocation transition. Epochs are proof tokens for snapshots, not a runtime
-memory representation. Like array and slice models, reference values
+range. The separate liveness bit must be established by a contract for entry
+values or by an allocation constructor. Epochs are proof tokens for snapshots,
+not a runtime memory representation. Like array and slice models, reference
+values
 are allowed as function and theorem parameters and as container model fields,
 but not as ordinary struct fields or return values yet.
 

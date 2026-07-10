@@ -608,6 +608,7 @@ struct ProofContext {
   SymbolTable symbols;
   SymbolTable ref_symbols;
   SymbolTable model_symbols;
+  std::unordered_set<std::string> allocation_symbols;
   std::unordered_map<std::string, std::string> bindings;
   std::unordered_map<std::string, std::string> struct_types;
   std::vector<NamedPredicate> active;
@@ -630,6 +631,8 @@ using TypeSubstitutions = std::unordered_map<std::string, Type>;
 constexpr std::string_view kTheoremProofPrefix = "theorem.";
 constexpr std::string_view kModelSelectCall = "__sigil_select";
 constexpr std::string_view kModelStoreCall = "__sigil_store";
+constexpr std::string_view kConstI64ArrayCall = "__sigil_const_i64_array";
+constexpr std::string_view kConstBoolArrayCall = "__sigil_const_bool_array";
 constexpr std::string_view kEntryEpochSymbol = "__sigil_entry_epoch";
 
 bool is_borrow_transition_name(const std::string& name) {
@@ -639,6 +642,10 @@ bool is_borrow_transition_name(const std::string& name) {
 
 bool is_consuming_transition_name(const std::string& name) {
   return name == "move_owner" || name == "deallocate";
+}
+
+bool is_allocation_name(const std::string& name) {
+  return name == "allocate_array" || name == "allocate_slice" || name == "allocate_ref";
 }
 
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
@@ -677,6 +684,11 @@ bool is_ref_model_type(const Type& type) {
 
 bool is_model_type(const Type& type) {
   return is_model_container_type(type) || is_ref_model_type(type);
+}
+
+void register_model_symbol(const std::string& symbol, const Type& type, ProofContext& context) {
+  context.model_symbols[symbol] = type;
+  context.allocation_symbols.insert(symbol);
 }
 
 bool same_type(const Type& lhs, const Type& rhs) {
@@ -1291,6 +1303,29 @@ ProofObligation make_allocation_unique_obligation(const FunctionDecl& fn, int sa
   return obligation;
 }
 
+ProofObligation make_allocation_size_obligation(const FunctionDecl& fn, int safety_index,
+                                                const Expr& allocation,
+                                                const ProofContext& context) {
+  if (!allocation || allocation->arguments.empty()) {
+    throw Diagnostic(allocation ? allocation->range : SourceRange{},
+                     "allocation requires a length");
+  }
+  const auto length = rewrite_expr(allocation->arguments[0], context.bindings);
+  auto goal = make_binary(BinaryOp::GreaterEqual, length, make_integer(0, allocation->range),
+                          allocation->range);
+
+  ProofObligation obligation;
+  obligation.name = proof_subject_name(fn) + ".safety." + std::to_string(safety_index) +
+                    ".allocation_size_nonnegative";
+  obligation.location = allocation->arguments[0]->location;
+  obligation.range = allocation->range;
+  obligation.assumptions = context.active;
+  obligation.goal =
+      NamedPredicate{"allocation_size_nonnegative", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 ProofObligation make_memory_write_obligation(const FunctionDecl& fn, int safety_index,
                                              const Expr& access, const ProofContext& context) {
   const auto operation = access && !access->name.empty() ? access->name : std::string("ref");
@@ -1361,6 +1396,10 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
           make_memory_state_obligation(fn, safety_index, expr, context, "borrow_free"));
       ++safety_index;
       obligations.push_back(make_allocation_unique_obligation(fn, safety_index, expr, context));
+    }
+    if (expr->name == "allocate_array" || expr->name == "allocate_slice") {
+      ++safety_index;
+      obligations.push_back(make_allocation_size_obligation(fn, safety_index, expr, context));
     }
     if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;
@@ -1541,6 +1580,11 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
                      "slice_view returns a model value and must be bound with let before use");
   }
 
+  if (is_allocation_name(expr->name)) {
+    throw Diagnostic(expr->range,
+                     expr->name + " returns a model value and must be bound before use");
+  }
+
   if (is_consuming_transition_name(expr->name)) {
     throw Diagnostic(expr->range,
                      expr->name + " returns a consumed model value and must be bound with let");
@@ -1705,7 +1749,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     throw Diagnostic(range, "model field initializer could not be materialized");
   }
   context.symbols[target_symbol] = type;
-  context.model_symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
 
   if (is_model_container_type(type)) {
     const auto target_len = model_len_symbol(target_symbol);
@@ -1805,6 +1849,10 @@ bool is_slice_view_call(const Expr& expr) {
          expr->arguments.size() == 3;
 }
 
+bool is_allocation_call(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Call && is_allocation_name(expr->name);
+}
+
 bool is_consuming_transition_call(const Expr& expr) {
   return expr && expr->kind == ExprNode::Kind::Call && is_consuming_transition_name(expr->name) &&
          expr->arguments.size() == 1;
@@ -1820,6 +1868,129 @@ void add_transition_fact(const std::string& name, const std::string& target, Exp
   auto equality = make_binary(BinaryOp::Equal, make_identifier(target, transition->range),
                               std::move(value), transition->range);
   context.active.push_back(NamedPredicate{name, equality, transition->location, transition->range});
+}
+
+void add_distinct_symbol_fact(const std::string& name, const std::string& left,
+                              const std::string& right, const Expr& allocation,
+                              ProofContext& context) {
+  auto distinct = make_binary(BinaryOp::NotEqual, make_identifier(left, allocation->range),
+                              make_identifier(right, allocation->range), allocation->range);
+  context.active.push_back(NamedPredicate{name, distinct, allocation->location, allocation->range});
+}
+
+Expr make_constant_model_array(const Type& model_type, Expr initial, const SourceRange& range) {
+  const auto& element_type = model_type.arguments.front();
+  const auto call = element_type.kind == TypeKind::Bool ? kConstBoolArrayCall : kConstI64ArrayCall;
+  return make_call(std::string(call), {std::move(initial)}, range);
+}
+
+void register_allocation_binding(const Expr& allocation, const std::string& target_symbol,
+                                 const Type& type, const FunctionDecl& fn, ProofContext& context,
+                                 int& call_index, const StructTable& structs,
+                                 const FunctionTable& functions, const TheoremTable& theorems,
+                                 std::vector<ProofObligation>& obligations) {
+  if (!is_model_type(type) || !is_allocation_call(allocation)) {
+    throw Diagnostic(allocation ? allocation->range : SourceRange{},
+                     "allocation binding requires a memory model target");
+  }
+
+  const bool is_ref = is_ref_model_type(type);
+  const std::size_t expected_arguments = is_ref ? 1 : 2;
+  if (allocation->arguments.size() != expected_arguments) {
+    throw Diagnostic(allocation->range, "invalid allocation constructor arity");
+  }
+
+  Expr length;
+  if (!is_ref) {
+    length = materialize_expr(allocation->arguments[0], fn, context, call_index, structs, functions,
+                              theorems, obligations);
+  }
+  auto initial = materialize_expr(allocation->arguments[is_ref ? 0 : 1], fn, context, call_index,
+                                  structs, functions, theorems, obligations);
+
+  std::vector<std::string> previous_allocations(context.allocation_symbols.begin(),
+                                                context.allocation_symbols.end());
+  std::sort(previous_allocations.begin(), previous_allocations.end());
+  std::vector<std::string> previous_references;
+  previous_references.reserve(context.ref_symbols.size());
+  for (const auto& [symbol, _] : context.ref_symbols) {
+    previous_references.push_back(symbol);
+  }
+  std::sort(previous_references.begin(), previous_references.end());
+
+  context.symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
+  context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+  register_ownership_state(target_symbol, context);
+
+  for (const auto& previous : previous_allocations) {
+    add_distinct_symbol_fact(
+        "allocate_fresh_" + sanitize_symbol(target_symbol) + "_" + sanitize_symbol(previous),
+        allocation_symbol(target_symbol), allocation_symbol(previous), allocation, context);
+  }
+
+  add_transition_fact("allocate_" + allocation_live_symbol(target_symbol),
+                      allocation_live_symbol(target_symbol), make_boolean(true, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + has_owner_symbol(target_symbol),
+                      has_owner_symbol(target_symbol), make_boolean(true, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + shared_borrows_symbol(target_symbol),
+                      shared_borrows_symbol(target_symbol), make_integer(0, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + mut_borrow_symbol(target_symbol),
+                      mut_borrow_symbol(target_symbol), make_boolean(false, allocation->range),
+                      allocation, context);
+
+  if (!is_ref) {
+    const auto target_len = model_len_symbol(target_symbol);
+    context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
+    register_model_offset(target_symbol, type, context);
+    auto len_non_negative =
+        make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, allocation->range),
+                    make_integer(0, allocation->range), allocation->range);
+    context.active.push_back(
+        NamedPredicate{"model_" + sanitize_symbol(target_symbol) + "_len_non_negative",
+                       len_non_negative, allocation->location, allocation->range});
+    add_transition_fact("allocate_" + model_len_symbol(target_symbol),
+                        model_len_symbol(target_symbol), length, allocation, context);
+    add_transition_fact("allocate_" + model_offset_symbol(target_symbol),
+                        model_offset_symbol(target_symbol), make_integer(0, allocation->range),
+                        allocation, context);
+    add_transition_fact("allocate_" + model_data_symbol(target_symbol),
+                        model_data_symbol(target_symbol),
+                        make_constant_model_array(type, std::move(initial), allocation->range),
+                        allocation, context);
+    return;
+  }
+
+  context.ref_symbols[target_symbol] = type;
+  context.symbols[ref_addr_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+  context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
+  context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+  context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+  for (const auto& previous : previous_references) {
+    add_distinct_symbol_fact("allocate_address_fresh_" + sanitize_symbol(target_symbol) + "_" +
+                                 sanitize_symbol(previous),
+                             ref_addr_symbol(target_symbol), ref_addr_symbol(previous), allocation,
+                             context);
+  }
+  add_transition_fact("allocate_" + ref_valid_symbol(target_symbol),
+                      ref_valid_symbol(target_symbol), make_boolean(true, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + ref_write_symbol(target_symbol),
+                      ref_write_symbol(target_symbol), make_boolean(true, allocation->range),
+                      allocation, context);
+  add_transition_fact("allocate_" + ref_value_symbol(target_symbol),
+                      ref_value_symbol(target_symbol), std::move(initial), allocation, context);
+  add_transition_fact("allocate_" + ref_epoch_symbol(target_symbol),
+                      ref_epoch_symbol(target_symbol), make_integer(0, allocation->range),
+                      allocation, context);
+  add_ref_alias_consistency_facts(target_symbol, type, allocation->range, allocation->location,
+                                  context);
 }
 
 void register_slice_view_binding(const Expr& view, const std::string& target_symbol,
@@ -1843,7 +2014,7 @@ void register_slice_view_binding(const Expr& view, const std::string& target_sym
                                        functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
-  context.model_symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
@@ -1897,6 +2068,7 @@ void register_consuming_transition_binding(const Expr& transition, const std::st
                          context);
   } else {
     context.symbols[target_symbol] = type;
+    context.allocation_symbols.insert(target_symbol);
     if (is_model_container_type(type)) {
       context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
       context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
@@ -1982,7 +2154,7 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
   }
 
   context.symbols[target_symbol] = type;
-  context.model_symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
   if (is_model_container_type(type)) {
     context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
@@ -2086,7 +2258,7 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                                       functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
-  context.model_symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
@@ -2152,7 +2324,7 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
                                       functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
-  context.model_symbols[target_symbol] = type;
+  register_model_symbol(target_symbol, type, context);
   const auto target_addr = ref_addr_symbol(target_symbol);
   const auto target_valid = ref_valid_symbol(target_symbol);
   const auto target_value = ref_value_symbol(target_symbol);
@@ -2233,6 +2405,11 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     }
 
     if (is_model_type(expected_type)) {
+      if (is_allocation_call(initializer.expr)) {
+        register_allocation_binding(initializer.expr, target_field, expected_type, fn, context,
+                                    call_index, structs, functions, theorems, obligations);
+        continue;
+      }
       if (is_slice_model_type(expected_type) && is_slice_view_call(initializer.expr)) {
         register_slice_view_binding(initializer.expr, target_field, expected_type, fn, context,
                                     call_index, structs, functions, theorems, obligations);
@@ -2643,6 +2820,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
       return;
     }
 
+    if (is_model_type(statement.type) && is_allocation_call(statement.expr)) {
+      register_allocation_binding(statement.expr, symbol, statement.type, fn, context, call_index,
+                                  structs, functions, theorems, obligations);
+      return;
+    }
+
     if (is_model_type(statement.type) && is_consuming_transition_call(statement.expr)) {
       register_consuming_transition_binding(statement.expr, symbol, statement.type, fn, context,
                                             call_index, structs, functions, theorems, obligations);
@@ -2860,7 +3043,7 @@ StructTable build_struct_table(const Module& module) {
 void register_struct_value(const std::string& symbol, const Type& type, const StructTable& structs,
                            ProofContext& context) {
   if (is_model_container_type(type)) {
-    context.model_symbols[symbol] = type;
+    register_model_symbol(symbol, type, context);
     const auto len_symbol = model_len_symbol(symbol);
     context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
@@ -2879,7 +3062,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
   }
 
   if (is_ref_model_type(type)) {
-    context.model_symbols[symbol] = type;
+    register_model_symbol(symbol, type, context);
     context.ref_symbols[symbol] = type;
     context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
