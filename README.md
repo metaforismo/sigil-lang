@@ -69,6 +69,10 @@ production verifier yet.
   `same_allocation(left, right)`, and `disjoint_allocation(left, right)` for
   arrays, slices, and references. Aliases and immutable stores preserve the
   deterministic allocation token.
+- Cross-model snapshot provenance through `epoch(value)` and
+  `same_snapshot(left, right)`. Fresh allocations start at epoch zero; aliases,
+  views, borrows, and owner moves preserve epochs; stores and deallocation
+  advance them. Snapshot equality requires both allocation and epoch equality.
 - Cross-model allocation liveness through `is_live(value)`. Every array/slice
   access and every reference load/store must prove liveness; aliases and
   immutable stores preserve the liveness fact.
@@ -224,6 +228,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/initialization_safety.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/function_boundary_initialization.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/model_epochs.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
@@ -308,9 +313,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- richer lifetime and provenance rules, path-sensitive consuming transitions,
-  and aggregate return/effect semantics beyond the current model-parameter
-  contracts;
+- path-sensitive alias invalidation and aggregate return/effect semantics built
+  on the current allocation and snapshot provenance tokens;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

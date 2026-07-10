@@ -114,12 +114,12 @@ Container invariant obligations use the
 distinct from ordinary struct invariant obligations while still following the
 same deterministic proof flow.
 
-Array and slice model parameters are materialized as six proof symbols:
+Array and slice model parameters are materialized as seven proof symbols:
 `value.alloc`, `value.live`, `value.len`, `value.offset`, `value.data`, and
-`value.init`. The allocation, length, and offset symbols are `Int`, liveness is
-`Bool`, data is an SMT array from integer indices to the concrete element sort,
-and initialization is `(Array Int Bool)`. Function-entry masks are
-unconstrained: the callee must establish required slots with explicit
+`value.init`, plus `value.epoch`. Allocation, length, offset, and epoch are
+`Int`; liveness is `Bool`; data is an SMT array from integer indices to the
+concrete element sort; and initialization is `(Array Int Bool)`. Function-entry
+masks are unconstrained: the callee must establish required slots with explicit
 `is_initialized` preconditions. Array offsets are constrained to zero; slice
 offsets are non-negative.
 `len(xs)` lowers to `xs.len`, `is_live(xs)` lowers to `xs.live`, and
@@ -280,6 +280,14 @@ on the current proof path and emits the new token as distinct from each sorted
 historical root. Consumed sources and dead tombstones remain in that history,
 so a later constructor cannot reuse their lifetime token even though they no
 longer participate in deallocation uniqueness checks.
+
+All memory models expose `epoch(value)`. Fresh allocations set epoch zero;
+aliases, views, borrows, and owner moves copy the source epoch; array, slice,
+and reference stores set `updated.epoch == source.epoch + 1`; and deallocation
+sets the tombstone epoch to `source.epoch + 1`. `same_snapshot(left, right)`
+lowers to allocation equality conjoined with epoch equality. Function-entry
+models share the internal `__sigil_entry_epoch`, representing one symbolic
+entry snapshot rather than a native clock.
 
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:

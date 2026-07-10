@@ -266,13 +266,13 @@ bool is_model_intrinsic_name(const std::string& name) {
   return name == "len" || name == "at" || name == "store" || name == "load" || name == "is_valid" ||
          name == "addr" || name == "epoch" || name == "can_write" || name == "same_ref" ||
          name == "disjoint" || name == "allocation_id" || name == "same_allocation" ||
-         name == "disjoint_allocation" || name == "is_live" || name == "owner_id" ||
-         name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow" ||
-         name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
-         name == "release_mut" || name == "slice_view" || name == "slice_offset" ||
-         name == "same_view" || name == "overlaps" || name == "move_owner" ||
-         name == "deallocate" || name == "allocate_array" || name == "allocate_slice" ||
-         name == "allocate_ref" || name == "allocate_uninit_array" ||
+         name == "disjoint_allocation" || name == "same_snapshot" || name == "is_live" ||
+         name == "owner_id" || name == "has_owner" || name == "shared_borrows" ||
+         name == "has_mut_borrow" || name == "borrow_shared" || name == "release_shared" ||
+         name == "borrow_mut" || name == "release_mut" || name == "slice_view" ||
+         name == "slice_offset" || name == "same_view" || name == "overlaps" ||
+         name == "move_owner" || name == "deallocate" || name == "allocate_array" ||
+         name == "allocate_slice" || name == "allocate_ref" || name == "allocate_uninit_array" ||
          name == "allocate_uninit_slice" || name == "is_initialized";
 }
 
@@ -512,9 +512,10 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
       throw Diagnostic(expr->range,
                        "epoch expects 1 argument, got " + std::to_string(expr->arguments.size()));
     }
-    const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
-    if (!is_ref_model_type(ref)) {
-      throw Diagnostic(expr->arguments[0]->range, "epoch expects a Ref[T] argument");
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       "epoch expects an Array[T], Slice[T], or Ref[T] argument");
     }
     return Type{TypeKind::I64, "i64", {}};
   }
@@ -572,7 +573,8 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
     return Type{returns_bool ? TypeKind::Bool : TypeKind::I64, returns_bool ? "bool" : "i64", {}};
   }
 
-  if (expr->name == "same_allocation" || expr->name == "disjoint_allocation") {
+  if (expr->name == "same_allocation" || expr->name == "disjoint_allocation" ||
+      expr->name == "same_snapshot") {
     if (expr->arguments.size() != 2) {
       throw Diagnostic(expr->range, expr->name + " expects 2 arguments, got " +
                                         std::to_string(expr->arguments.size()));

@@ -45,6 +45,10 @@ identity, liveness, and ownership state; update the modeled referenced value;
 and advance the modeled epoch. `allocation_id`,
 `is_live`, `same_allocation`, and `disjoint_allocation` expose common abstract
 allocation facts across array, slice, and reference models.
+`epoch(model)` and `same_snapshot(left, right)` expose cross-model snapshot
+provenance. Snapshot equality requires both a common allocation and an equal
+epoch; stores and deallocation advance epochs, while aliases, views, borrows,
+and owner moves preserve them.
 `owner_id`, `has_owner`, `shared_borrows`, and `has_mut_borrow` expose common
 ownership state and deterministic consistency constraints.
 Borrow/release transition bindings emit ordered liveness, ownership, and
@@ -212,6 +216,12 @@ Example with modular initialization contracts across function calls:
 
 ```sh
 sigil check examples/function_boundary_initialization.sigil --strict --solver-timeout-ms 250 --save-smt build/function-boundary-initialization-smt
+```
+
+Example with cross-model memory epochs and snapshot provenance:
+
+```sh
+sigil check examples/model_epochs.sigil --strict --solver-timeout-ms 250 --save-smt build/model-epoch-smt
 ```
 
 Example with branch and loop weakest-precondition reasoning:
