@@ -8,10 +8,12 @@ output="$("$sigil_bin" check "$example_file" --strict --solver-timeout-ms 250)"
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 2" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 15" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 19" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.1.memory_live" >/dev/null
-printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.2.memory_valid" >/dev/null
-printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.3.memory_write" >/dev/null
+printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.2.ownership_present" >/dev/null
+printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.3.mutable_borrow_active" >/dev/null
+printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.4.memory_valid" >/dev/null
+printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.safety.5.memory_write" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.assert.1.still_valid" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.assert.2.still_writable" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.write_then_load.assert.3.same_address" >/dev/null

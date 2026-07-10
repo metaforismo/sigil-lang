@@ -1,0 +1,36 @@
+module memory_state_updates;
+
+fn update_slice(xs: Slice[i64], index: i64, value: i64) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires no_shared: shared_borrows(xs) == 0;
+requires no_mutable: !has_mut_borrow(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == value;
+{
+  let borrowed: Slice[i64] = borrow_mut(xs);
+  let updated: Slice[i64] = store(borrowed, index, value);
+  assert write_visible: at(updated, index) == value;
+  assert still_exclusive: has_mut_borrow(updated);
+  let released: Slice[i64] = release_mut(updated);
+  assert inactive: !has_mut_borrow(released);
+  return at(released, index);
+}
+
+fn update_ref(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires no_shared: shared_borrows(ptr) == 0;
+requires no_mutable: !has_mut_borrow(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == value;
+{
+  let borrowed: Ref[i64] = borrow_mut(ptr);
+  let updated: Ref[i64] = store(borrowed, value);
+  assert epoch_advanced: epoch(updated) == epoch(ptr) + 1;
+  assert still_exclusive: has_mut_borrow(updated);
+  let released: Ref[i64] = release_mut(updated);
+  assert inactive: !has_mut_borrow(released);
+  return load(released);
+}

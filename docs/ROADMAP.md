@@ -17,13 +17,13 @@ models have immutable proof-level store facts for validity-preserving value
 updates, explicit proof-level epoch tokens, and same-snapshot alias consistency
 for valid references. Reference stores now also have an explicit proof-level
 write-permission gate. Arrays, slices, and references now share explicit
-allocation-identity facts that aliases and immutable stores preserve. The next
-compiler work also makes every modeled read and write prove a shared allocation
-liveness fact. The next step is to turn those abstract facts into a real memory
-model. Allocation-level owner and borrow-state facts are now explicit and
-preserved, and shared/mutable borrow acquire/release transitions are checked.
-The next step is allocation/lifetime transitions, provenance, richer state
-propagation, and function-boundary semantics.
+allocation-identity facts that aliases and immutable stores preserve. Every
+modeled read and write now proves a shared allocation-liveness fact.
+Allocation-level owner and borrow-state facts are explicit and preserved,
+shared/mutable borrow acquire/release transitions are checked, and all modeled
+stores require owner presence plus an active mutable borrow.
+The next step is allocation/lifetime transitions, provenance, alias
+invalidation, and function-boundary semantics.
 
 ## Completed
 
@@ -91,6 +91,8 @@ propagation, and function-boundary semantics.
 - [x] Add allocation-level owner and borrow-state facts with consistency
       invariants and preservation.
 - [x] Add checked shared/mutable borrow and release transitions.
+- [x] Gate array, slice, and reference stores on owner presence and an active
+      mutable borrow, preserving that state in the successor snapshot.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -119,7 +121,7 @@ propagation, and function-boundary semantics.
 
 ## Immediate Queue
 
-- [ ] Connect array/slice/reference updates to memory-state and ownership
+- [x] Connect array/slice/reference updates to memory-state and ownership
       rules.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
@@ -199,6 +201,8 @@ propagation, and function-boundary semantics.
 - [x] Add explicit allocation-liveness facts and gate modeled reads and writes.
 - [x] Add owner identity/presence and shared/mutable borrow-state facts.
 - [x] Add checked shared/mutable borrow acquire and release transitions.
+- [x] Require owner presence and an active mutable borrow for every modeled
+      array, slice, and reference store.
 - [ ] Model allocation/deallocation transitions, consuming ownership, and alias
       invalidation as explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and

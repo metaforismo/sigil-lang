@@ -28,23 +28,27 @@ Container instantiations use the same flow, but their model fields also expose
 SMT facts such as `window.items.len == xs.len` and
 `window.items.data == xs.data`, together with allocation identity.
 Array and slice model accesses add `memory_live` and `index_in_bounds` safety
-obligations and emit SMT array `select` terms for `at(model, index)`. Array and slice
-`store(model, index, value)` updates are immutable proof facts: they preserve
-length, emit write-bounds obligations, and emit SMT array `store` terms for the
-updated backing data.
+obligations and emit SMT array `select` terms for `at(model, index)`. Array and
+slice `store(model, index, value)` updates are immutable proof facts: they
+preserve length and memory state, require liveness, ownership, and an active
+mutable borrow, emit write-bounds obligations, and emit SMT array `store` terms
+for the updated backing data.
 Reference model loads add `memory_live` and `memory_valid` safety obligations
 and expose modeled allocation, liveness, address, validity, write-permission,
 epoch, and value symbols in SMT.
 Reference `store(ref, value)` updates are immutable proof facts: they require
-write-site liveness, validity, and write permission, preserve modeled address,
-validity, write permission, allocation identity, and liveness, update the
-modeled referenced value, and advance the modeled epoch. `allocation_id`,
+write-site liveness, ownership, an active mutable borrow, validity, and write
+permission; preserve modeled address, validity, write permission, allocation
+identity, liveness, and ownership state; update the modeled referenced value;
+and advance the modeled epoch. `allocation_id`,
 `is_live`, `same_allocation`, and `disjoint_allocation` expose common abstract
 allocation facts across array, slice, and reference models.
 `owner_id`, `has_owner`, `shared_borrows`, and `has_mut_borrow` expose common
 ownership state and deterministic consistency constraints.
 Borrow/release transition bindings emit ordered liveness, ownership, and
 availability/active obligations before updating a fresh model snapshot.
+Stores preserve active mutable-borrow state until `release_mut` produces a
+later snapshot.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -151,6 +155,12 @@ Example with checked shared and mutable borrow transitions:
 
 ```sh
 sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250 --save-smt build/borrow-transition-smt
+```
+
+Example with borrow-checked array, slice, and reference updates:
+
+```sh
+sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/memory-state-update-smt
 ```
 
 Exit codes:

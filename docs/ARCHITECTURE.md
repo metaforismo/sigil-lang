@@ -146,9 +146,10 @@ The planner walks each function and builds proof obligations:
   `index_in_bounds` safety obligations and lower to SMT `select` over an
   abstract backing array;
 - array and slice `store(container, index, value)` bindings create
-  `memory_live` and `index_in_bounds` safety obligations, preserve the source
-  length, allocation identity, and liveness, and lower the updated data fact to
-  SMT array `store`;
+  `memory_live`, `ownership_present`, `mutable_borrow_active`, and
+  `index_in_bounds` safety obligations, preserve the source length, allocation,
+  liveness, and ownership state, and lower the updated data fact to SMT array
+  `store`;
 - allocation intrinsics lower every model's deterministic `.alloc` component
   to identity or inequality facts across arrays, slices, and references;
 - ownership intrinsics lower deterministic owner-presence, owner-ID, shared
@@ -165,10 +166,11 @@ The planner walks each function and builds proof obligations:
 - same-type reference snapshots gain deterministic alias-consistency
   assumptions so valid refs with equal modeled epochs and addresses have equal
   modeled values in the same proof context;
-- reference `store(ref, value)` bindings create `memory_live`, `memory_valid`,
-  and `memory_write` safety obligations, preserve modeled address, validity,
-  write permission, allocation identity, and liveness, replace the modeled
-  referenced value, and advance the modeled epoch;
+- reference `store(ref, value)` bindings create `memory_live`,
+  `ownership_present`, `mutable_borrow_active`, `memory_valid`, and
+  `memory_write` safety obligations, preserve modeled address, validity, write
+  permission, allocation identity, liveness, and ownership state, replace the
+  modeled referenced value, and advance the modeled epoch;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

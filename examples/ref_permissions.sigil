@@ -8,6 +8,8 @@ ensures exact: result == can_write(ptr);
 
 fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == can_write(ptr);
