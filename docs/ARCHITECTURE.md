@@ -232,6 +232,17 @@ and the selected verification policy accepts every obligation. It is a
 validation command, not an import command: accepted candidates must still be
 reviewed and wired into source explicitly.
 
+`sigil agent-refine` orchestrates that recheck for complete candidate modules.
+It invokes a model-agnostic external proposer through a fixed argv protocol,
+enforces process-group wall-time and attempt budgets, rejects contract or proof
+surface weakening and new assumptions, allows additional checked proof steps,
+and accepts only a strict full-module proof. Request, candidate, proposer-log,
+proof-ledger, and SMT artifacts make each checker decision replayable without
+trusting the proposer. Candidate paths are cleared before invocation and the
+trace is atomically persisted after each decision, so stale or interrupted
+agent runs cannot silently cross the acceptance boundary. External process
+orchestration currently requires POSIX process-group semantics.
+
 ## GCC JIT Backend
 
 CMake detects `libgccjit` and compiles the native backend when available. The

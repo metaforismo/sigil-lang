@@ -338,6 +338,19 @@ cannot smuggle executable code through a lemma workflow. Accepted still means
 all obligations are acceptable under the selected checker settings; with
 `--strict`, even one `UNKNOWN` result rejects the candidate.
 
+`sigil agent-refine` closes the external loop without moving the trust boundary.
+An external executable receives a generated request and writes a complete
+candidate module. Sigil bounds attempts and proposer wall time, preserves the
+original contract/assertion/invariant surface, rejects any new `assume`, and
+runs the ordinary strict verifier over the entire candidate. Every initial and
+attempted proof saves a deterministic status ledger and its exact SMT-LIB
+queries. The external proposer is never treated as a proof oracle.
+Candidates may add checked theorems, assertions, and invariants so discovered
+lemmas can be reused, but they cannot remove or reorder existing proof steps.
+The orchestrator removes stale candidate output before every invocation and
+atomically persists its trace after each completed decision. Its direct process
+runner currently depends on POSIX process-group semantics.
+
 ## 3. LLM-Assisted Search
 
 The intended LLM role is lemma discovery and proof search, not final authority.

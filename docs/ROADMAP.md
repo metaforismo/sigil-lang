@@ -128,8 +128,8 @@ invalidation, and function-boundary semantics.
 - [ ] Define ownership, allocation, lifetime, and provenance for references.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
-- [ ] Execute an external agent loop that proposes candidate lemmas from saved
-      requests and feeds them through `sigil agent-check`.
+- [x] Execute an external agent loop that proposes candidate lemmas from saved
+      requests and feeds complete modules through the strict checker.
 
 ## Core Language
 
@@ -186,10 +186,11 @@ invalidation, and function-boundary semantics.
 - [x] Save agent request artifacts with checked-theorem candidate skeletons.
 - [x] Feed candidate theorem declarations through the ordinary Sigil parser,
       typechecker, proof planner, and checker before accepting them.
-- [ ] Let an LLM propose lemmas, splits, and candidate invariants.
-- [ ] Validate every proposal with Z3 or another deterministic checker.
-- [ ] Save proof traces as reproducible artifacts.
-- [ ] Add budgets, timeouts, and failure modes that are visible to users.
+- [x] Let an external LLM adapter propose complete candidate modules through a
+      model-agnostic executable protocol.
+- [x] Validate every proposal with Z3 or another deterministic checker.
+- [x] Save proof traces and exact per-attempt SMT queries as reproducible artifacts.
+- [x] Add visible attempt budgets, proposer/solver timeouts, and failure modes.
 
 ## Memory Model
 
