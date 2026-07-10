@@ -133,10 +133,17 @@ component facts for the new model:
 updated.len == xs.len
 updated.alloc == xs.alloc
 updated.live == xs.live
+updated.owner == xs.owner
+updated.has_owner == xs.has_owner
+updated.shared == xs.shared
+updated.mut_borrow == xs.mut_borrow
 updated.data == store(xs.data, i, value)
 ```
 
-The write also emits `memory_live` followed by `index_in_bounds` at the store site.
+The write emits `memory_live`, `ownership_present`, `mutable_borrow_active`,
+and `index_in_bounds`, in that order. The owner and mutable-borrow guards make
+the write a checked memory-state transition rather than an unconstrained array
+rewrite.
 Reads from the updated model then lower to `select(updated.data, index)`, so Z3
 can prove standard array-theory facts such as reading the same index that was
 just written. This is still not runtime mutation: the allocation token is an
@@ -227,20 +234,22 @@ updated.value == value
 updated.epoch == ref.epoch + 1
 ```
 
-The write emits `memory_live`, `memory_valid`, and `memory_write` safety
-obligations at the store site. Loading from the updated reference then reads `updated.value`, so
+The write emits `memory_live`, `ownership_present`, `mutable_borrow_active`,
+`memory_valid`, and `memory_write` safety obligations at the store site.
+Loading from the updated reference then reads `updated.value`, so
 the local weakest-precondition substitution can prove straight-line facts such
 as `load(store(ref, value)) == value` once the store has been materialized.
 
 The reference model is intentionally not a full memory semantics. It has no
-allocation creation or destruction, lifetime transitions, borrow, field projection, byte
-layout, native memory mutation, ownership, or native-code provenance model yet. The
-write-permission bit is a proof fact for the current write gate, not a complete
-borrowing discipline. Allocation identity alone does not imply liveness, and a
-true liveness fact currently comes from contracts rather than checked
-allocation/deallocation transitions. Those pieces must be added before Sigil
-can claim low-level memory safety beyond explicit liveness/validity/write
-obligations, epoch ordering, and same-snapshot alias consistency.
+allocation creation or destruction, lifetime transitions, consuming ownership,
+alias invalidation, field projection, byte layout, native memory mutation, or
+native-code provenance model yet. The write-permission bit is an additional
+proof fact beyond the owner and mutable-borrow gates. Allocation identity alone
+does not imply liveness, and a true liveness fact currently comes from contracts
+rather than checked allocation/deallocation transitions. Those pieces must be
+added before Sigil can claim low-level memory safety beyond explicit
+ownership/borrow/liveness/validity/write obligations, epoch ordering, and
+same-snapshot alias consistency.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.

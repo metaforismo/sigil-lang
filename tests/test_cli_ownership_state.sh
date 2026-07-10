@@ -12,7 +12,7 @@ output="$("$sigil_bin" check "$example_file" --no-z3 --save-smt "$smt_dir")"
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 6" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 11" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 15" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.shared_count_nonnegative.ensures.1.nonnegative" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.mutable_excludes_shared.ensures.1.consistent" >/dev/null
 printf '%s\n' "$output" | grep "\[UNKNOWN\] fn.owner_has_identity.ensures.1.nonzero" >/dev/null

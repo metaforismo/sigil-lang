@@ -8,7 +8,7 @@ output="$("$sigil_bin" check "$example_file" --strict --solver-timeout-ms 250)"
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 5" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 10" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 14" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.expose_allocation.ensures.1.exact" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.classify_allocations.ensures.1.exact" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.alias_preserves_allocation.ensures.1.preserved" >/dev/null

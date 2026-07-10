@@ -853,49 +853,48 @@ ProofObligation make_memory_live_obligation(const FunctionDecl& fn, int safety_i
   return obligation;
 }
 
-ProofObligation make_borrow_transition_obligation(const FunctionDecl& fn, int safety_index,
-                                                  const Expr& transition,
-                                                  const ProofContext& context,
-                                                  const std::string& kind) {
-  if (!transition || transition->arguments.empty()) {
-    throw Diagnostic(transition ? transition->range : SourceRange{},
-                     "borrow transition requires a model value");
+ProofObligation make_memory_state_obligation(const FunctionDecl& fn, int safety_index,
+                                             const Expr& operation, const ProofContext& context,
+                                             const std::string& kind) {
+  if (!operation || operation->arguments.empty()) {
+    throw Diagnostic(operation ? operation->range : SourceRange{},
+                     "memory-state operation requires a model value");
   }
-  const auto model = rewrite_expr(transition->arguments[0], context.bindings);
+  const auto model = rewrite_expr(operation->arguments[0], context.bindings);
   if (!model || model->kind != ExprNode::Kind::Identifier) {
-    throw Diagnostic(transition->arguments[0]->range,
-                     "borrow transition requires a materialized memory model value");
+    throw Diagnostic(operation->arguments[0]->range,
+                     "memory-state operation requires a materialized memory model value");
   }
 
   Expr goal;
   if (kind == "ownership_present") {
-    goal = make_identifier(has_owner_symbol(model->name), transition->arguments[0]->range);
+    goal = make_identifier(has_owner_symbol(model->name), operation->arguments[0]->range);
   } else if (kind == "shared_borrow_available") {
     goal =
-        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), transition->range),
-                   transition->range);
+        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), operation->range),
+                   operation->range);
   } else if (kind == "shared_borrow_active") {
     goal = make_binary(BinaryOp::Greater,
-                       make_identifier(shared_borrows_symbol(model->name), transition->range),
-                       make_integer(0, transition->range), transition->range);
+                       make_identifier(shared_borrows_symbol(model->name), operation->range),
+                       make_integer(0, operation->range), operation->range);
   } else if (kind == "mutable_borrow_available") {
     auto no_shared = make_binary(
-        BinaryOp::Equal, make_identifier(shared_borrows_symbol(model->name), transition->range),
-        make_integer(0, transition->range), transition->range);
+        BinaryOp::Equal, make_identifier(shared_borrows_symbol(model->name), operation->range),
+        make_integer(0, operation->range), operation->range);
     auto no_mut =
-        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), transition->range),
-                   transition->range);
-    goal = make_binary(BinaryOp::And, no_shared, no_mut, transition->range);
+        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), operation->range),
+                   operation->range);
+    goal = make_binary(BinaryOp::And, no_shared, no_mut, operation->range);
   } else if (kind == "mutable_borrow_active") {
-    goal = make_identifier(mut_borrow_symbol(model->name), transition->arguments[0]->range);
+    goal = make_identifier(mut_borrow_symbol(model->name), operation->arguments[0]->range);
   } else {
-    throw Diagnostic(transition->range, "unknown borrow transition obligation '" + kind + "'");
+    throw Diagnostic(operation->range, "unknown memory-state obligation '" + kind + "'");
   }
 
   ProofObligation obligation;
   obligation.name = proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + "." + kind;
-  obligation.location = transition->arguments[0]->location;
-  obligation.range = transition->range;
+  obligation.location = operation->arguments[0]->location;
+  obligation.range = operation->range;
   obligation.assumptions = context.active;
   obligation.goal = NamedPredicate{kind, goal, obligation.location, obligation.range};
   obligation.symbols = context.symbols;
@@ -943,17 +942,24 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
       ++safety_index;
       obligations.push_back(make_memory_live_obligation(fn, safety_index, expr, context));
     }
+    if (expr->name == "store") {
+      ++safety_index;
+      obligations.push_back(
+          make_memory_state_obligation(fn, safety_index, expr, context, "ownership_present"));
+      ++safety_index;
+      obligations.push_back(
+          make_memory_state_obligation(fn, safety_index, expr, context, "mutable_borrow_active"));
+    }
     if (is_borrow_transition_name(expr->name)) {
       ++safety_index;
       obligations.push_back(
-          make_borrow_transition_obligation(fn, safety_index, expr, context, "ownership_present"));
+          make_memory_state_obligation(fn, safety_index, expr, context, "ownership_present"));
       ++safety_index;
       const auto kind = expr->name == "borrow_shared"    ? "shared_borrow_available"
                         : expr->name == "release_shared" ? "shared_borrow_active"
                         : expr->name == "borrow_mut"     ? "mutable_borrow_available"
                                                          : "mutable_borrow_active";
-      obligations.push_back(
-          make_borrow_transition_obligation(fn, safety_index, expr, context, kind));
+      obligations.push_back(make_memory_state_obligation(fn, safety_index, expr, context, kind));
     }
     if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;

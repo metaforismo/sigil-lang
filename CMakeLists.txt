@@ -262,6 +262,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/borrow-transitions")
 
 add_test(
+  NAME sigil_cli_memory_state_update_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_memory_state_updates.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/memory_state_updates.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/memory-state-updates")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -471,6 +478,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/borrow_transitions.sigil")
   set_tests_properties(sigil_z3_borrow_transitions PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_memory_state_updates
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_memory_state_updates_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/memory_state_updates.sigil")
+  set_tests_properties(sigil_z3_memory_state_updates PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

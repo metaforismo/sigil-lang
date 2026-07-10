@@ -51,8 +51,9 @@ production verifier yet.
   lowers to SMT `select` over an abstract backing array whose element sort
   comes from `T`.
 - Immutable proof-level `store(model, index, value)` facts for `Array[T]` and
-  `Slice[T]`: stores preserve length, emit write-bounds obligations, and lower
-  to SMT array `store`.
+  `Slice[T]`: stores require a live owned allocation under an active mutable
+  borrow, preserve length and memory state, emit write-bounds obligations, and
+  lower to SMT array `store`.
 - Proof-level `Ref[T]` model types with `is_valid(ref)`, `can_write(ref)`,
   `addr(ref)`, `epoch(ref)`, `load(ref)`, `same_ref(left, right)`, and
   `disjoint(left, right)` intrinsics.
@@ -61,9 +62,9 @@ production verifier yet.
 - Valid same-epoch, same-address `Ref[T]` snapshots of the same element type
   imply equal modeled loaded values in SMT.
 - Immutable proof-level `store(ref, value)` facts for `Ref[T]`: stores require
-  reference validity and write permission, preserve modeled address, validity,
-  and write permission, update the modeled referenced value, and advance the
-  modeled epoch.
+  a live owned allocation under an active mutable borrow plus reference
+  validity and write permission. They preserve modeled address, validity,
+  permission, and ownership state, update the value, and advance the epoch.
 - Cross-model allocation identity through `allocation_id(value)`,
   `same_allocation(left, right)`, and `disjoint_allocation(left, right)` for
   arrays, slices, and references. Aliases and immutable stores preserve the
@@ -79,6 +80,9 @@ production verifier yet.
   `release_shared`, `borrow_mut`, and `release_mut`. Each transition proves
   liveness, owner presence, and its operation-specific availability/active
   condition before updating the borrow snapshot.
+- Writes are connected to those transitions: a mutable borrow can be acquired,
+  preserved through array, slice, or reference `store`, and explicitly
+  released in a later proof-state snapshot.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -187,6 +191,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/allocation_liveness.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt
@@ -269,9 +274,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- ownership, lifetime, allocation transitions, provenance rules, and richer
-  memory-state semantics beyond the current explicit allocation identity,
-  liveness, and reference validity/write-permission facts;
+- allocation/lifetime transitions, consuming ownership, alias invalidation,
+  provenance rules, and richer memory-state semantics beyond the current
+  checked borrow and write transitions;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

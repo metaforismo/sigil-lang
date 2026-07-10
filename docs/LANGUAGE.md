@@ -199,14 +199,17 @@ index >= 0 && index < len(value)
 The SMT model uses an abstract backing array and lowers `at(xs, i)` to a
 solver-level `select`.
 
-`store(value, index, element)` is an immutable proof-level update. It returns
-the same model type as `value`, preserves the model length, emits an
-`index_in_bounds` obligation for the write index, and lowers the backing data
-to solver-level `store`:
+`store(value, index, element)` is an immutable proof-level update. It requires
+the source allocation to be live, owned, and under an active mutable borrow.
+The operation returns the same model type as `value`, preserves the model
+length and ownership state, emits an `index_in_bounds` obligation for the write
+index, and lowers the backing data to solver-level `store`:
 
 ```sigil
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
 requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == value;
 {
@@ -232,10 +235,11 @@ model values.
 
 `is_live(value)` exposes a separate Boolean liveness fact for every array,
 slice, and reference model. `at`, array/slice `store`, `load`, and reference
-`store` each emit a `memory_live` obligation before their operation-specific
-bounds, validity, or write-permission obligations. Aliases and immutable stores
-preserve liveness. Liveness is intentionally independent from allocation
-identity: knowing an allocation token does not prove that it is live.
+`store` each emit a `memory_live` obligation. Stores then emit
+`ownership_present` and `mutable_borrow_active` before their bounds, validity,
+or write-permission obligations. Aliases and immutable stores preserve
+liveness. Liveness is intentionally independent from allocation identity:
+knowing an allocation token does not prove that it is live.
 
 Every memory model also exposes allocation-level ownership and borrow state:
 `owner_id(value)` is an integer owner token, `has_owner(value)` reports whether
@@ -262,6 +266,12 @@ Like `store`, a transition result must be materialized in a model `let` or
 container model field. These are checked proof-state snapshots, not linear
 move semantics: the source model remains visible until a later language layer
 defines consuming ownership and alias invalidation.
+
+Both container and reference stores preserve an active mutable borrow in the
+successor snapshot. Code may establish that state directly in a function
+contract or acquire it with `borrow_mut`, perform one or more stores, and clear
+it with `release_mut`. A store without owner presence or an active mutable
+borrow leaves the corresponding safety obligation unresolved.
 
 This is intentionally a proof model, not a runtime memory model. It does not
 create or destroy allocations, transition an allocation between live and dead,
@@ -315,14 +325,17 @@ ensures exact: result == load(right);
 ```
 
 `store(ptr, value)` is an immutable proof-level reference update. It returns
-the same `Ref[T]` model type, emits `memory_live`, `memory_valid`, and
-`memory_write` obligations for the write site, preserves the modeled address,
-validity, write permission, allocation identity, and liveness, and replaces the
-modeled referenced value. It also advances the modeled epoch by one:
+the same `Ref[T]` model type and emits `memory_live`, `ownership_present`,
+`mutable_borrow_active`, `memory_valid`, and `memory_write` obligations in that
+order. It preserves the modeled address, validity, write permission,
+allocation identity, liveness, and ownership state, replaces the modeled
+referenced value, and advances the modeled epoch by one:
 
 ```sigil
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -339,16 +352,17 @@ ensures exact: result == value;
 As with array and slice stores, reference stores must currently be materialized
 in a `let` binding or container field before later facts use them.
 
-`Ref[T]` is a verification scaffold. The `can_write` bit is an explicit proof
-fact for write-site checks; it is not yet an ownership or borrowing discipline.
-Sigil does not allocate or free memory, transition lifetimes, prove pointer provenance,
-propagate stores through old aliases, model ownership, mutate native memory, or
-define a native layout. Allocation identities are abstract proof tokens: they
-do not by themselves prove that an allocation exists, remains live, owns an
-address, or is disjoint from another address range. The separate liveness bit
-must be established by a contract, but currently has no allocation/deallocation
-transition semantics. Epochs are proof tokens for snapshots, not a runtime
-memory representation. Like array and slice models, reference values
+`Ref[T]` is a verification scaffold. The `can_write` bit is an additional
+write-permission fact; it does not replace owner presence or the mutable-borrow
+gate. Sigil does not allocate or free memory, transition lifetimes, prove
+pointer provenance, propagate stores through old aliases, invalidate aliases,
+mutate native memory, or define a native layout. Allocation identities are
+abstract proof tokens: they do not by themselves prove that an allocation
+exists, remains live, owns an address, or is disjoint from another address
+range. The separate liveness bit must be established by a contract, but
+currently has no allocation/deallocation transition semantics. Epochs are
+proof tokens for snapshots, not a runtime memory representation. Like array
+and slice models, reference values
 are allowed as function and theorem parameters and as container model fields,
 but not as ordinary struct fields or return values yet.
 

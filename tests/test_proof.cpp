@@ -440,6 +440,8 @@ module model_updates;
 
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
 requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == value;
 {
@@ -450,6 +452,8 @@ ensures exact: result == value;
 
 fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
 requires live: is_live(flags);
+requires owned: has_owner(flags);
+requires exclusive: has_mut_borrow(flags);
 requires in_bounds: index >= 0 && index < len(flags);
 ensures exact: result == value;
 {
@@ -460,22 +464,26 @@ ensures exact: result == value;
 
   const auto model_update_module = sigil::parse_source(model_update_source, "model-updates.sigil");
   const auto model_update_obligations = sigil::build_obligations(model_update_module);
-  expect(model_update_obligations.size() == 11, "array and slice store obligations");
+  expect(model_update_obligations.size() == 15, "array and slice store obligations");
   expect(model_update_obligations[0].name == "fn.write_then_read.safety.1.memory_live",
          "store write liveness obligation");
-  expect(model_update_obligations[1].name == "fn.write_then_read.safety.2.index_in_bounds",
+  expect(model_update_obligations[1].name == "fn.write_then_read.safety.2.ownership_present",
+         "store write ownership obligation");
+  expect(model_update_obligations[2].name == "fn.write_then_read.safety.3.mutable_borrow_active",
+         "store write mutable-borrow obligation");
+  expect(model_update_obligations[3].name == "fn.write_then_read.safety.4.index_in_bounds",
          "store write bounds obligation");
-  expect(model_update_obligations[2].name == "fn.write_then_read.assert.1.length_preserved",
+  expect(model_update_obligations[4].name == "fn.write_then_read.assert.1.length_preserved",
          "store length assertion obligation");
-  expect(model_update_obligations[3].name == "fn.write_then_read.safety.3.memory_live",
+  expect(model_update_obligations[5].name == "fn.write_then_read.safety.5.memory_live",
          "store read liveness obligation");
-  expect(model_update_obligations[4].name == "fn.write_then_read.safety.4.index_in_bounds",
+  expect(model_update_obligations[6].name == "fn.write_then_read.safety.6.index_in_bounds",
          "store read bounds obligation");
-  expect(model_update_obligations[5].name == "fn.write_then_read.ensures.1.exact",
+  expect(model_update_obligations[7].name == "fn.write_then_read.ensures.1.exact",
          "store scalar ensure obligation");
-  expect(model_update_obligations[10].name == "fn.update_flag.ensures.1.exact",
+  expect(model_update_obligations[14].name == "fn.update_flag.ensures.1.exact",
          "store bool ensure obligation");
-  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[5]);
+  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[7]);
   expect(write_store_smt.find("(declare-const updated_len Int)") != std::string::npos,
          "store local length is declared");
   expect(write_store_smt.find("(declare-const updated_data (Array Int Int))") != std::string::npos,
@@ -490,7 +498,7 @@ ensures exact: result == value;
          "store read binds result to updated select");
   expect(write_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "store ensure checks write then read");
-  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[10]);
+  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[14]);
   expect(flag_store_smt.find("(declare-const updated_data (Array Int Bool))") != std::string::npos,
          "store bool array data is declared");
   expect(flag_store_smt.find("(assert (= updated_data (store flags_data index value)))") !=
@@ -500,14 +508,18 @@ ensures exact: result == value;
   expect(model_update_results[0].status == sigil::VerificationStatus::Proven,
          "store write liveness proven from precondition");
   expect(model_update_results[1].status == sigil::VerificationStatus::Proven,
-         "store write bounds proven from precondition");
+         "store write ownership proven from precondition");
   expect(model_update_results[2].status == sigil::VerificationStatus::Proven,
-         "store length assertion proven locally");
+         "store write mutable borrow proven from precondition");
   expect(model_update_results[3].status == sigil::VerificationStatus::Proven,
-         "store read liveness proven from store fact");
+         "store write bounds proven from precondition");
   expect(model_update_results[4].status == sigil::VerificationStatus::Proven,
+         "store length assertion proven locally");
+  expect(model_update_results[5].status == sigil::VerificationStatus::Proven,
+         "store read liveness proven from store fact");
+  expect(model_update_results[6].status == sigil::VerificationStatus::Proven,
          "store read bounds proven from store length fact");
-  expect(model_update_results[5].status == sigil::VerificationStatus::Unknown,
+  expect(model_update_results[7].status == sigil::VerificationStatus::Unknown,
          "store write then read needs array theory");
 
   const char* ref_model_source = R"(
@@ -585,6 +597,8 @@ module ref_updates;
 
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -598,6 +612,8 @@ ensures exact: result == value;
 
 fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -609,35 +625,39 @@ ensures exact: result == value;
 
   const auto ref_update_module = sigil::parse_source(ref_update_source, "ref-updates.sigil");
   const auto ref_update_obligations = sigil::build_obligations(ref_update_module);
-  expect(ref_update_obligations.size() == 15, "ref store obligations");
+  expect(ref_update_obligations.size() == 19, "ref store obligations");
   expect(ref_update_obligations[0].name == "fn.write_then_load.safety.1.memory_live",
          "ref store write liveness obligation");
-  expect(ref_update_obligations[1].name == "fn.write_then_load.safety.2.memory_valid",
+  expect(ref_update_obligations[1].name == "fn.write_then_load.safety.2.ownership_present",
+         "ref store write ownership obligation");
+  expect(ref_update_obligations[2].name == "fn.write_then_load.safety.3.mutable_borrow_active",
+         "ref store write mutable-borrow obligation");
+  expect(ref_update_obligations[3].name == "fn.write_then_load.safety.4.memory_valid",
          "ref store write validity obligation");
-  expect(ref_update_obligations[2].name == "fn.write_then_load.safety.3.memory_write",
+  expect(ref_update_obligations[4].name == "fn.write_then_load.safety.5.memory_write",
          "ref store write permission obligation");
-  expect(ref_update_obligations[3].name == "fn.write_then_load.assert.1.still_valid",
+  expect(ref_update_obligations[5].name == "fn.write_then_load.assert.1.still_valid",
          "ref store validity assertion obligation");
-  expect(ref_update_obligations[4].name == "fn.write_then_load.assert.2.still_writable",
+  expect(ref_update_obligations[6].name == "fn.write_then_load.assert.2.still_writable",
          "ref store write permission assertion obligation");
-  expect(ref_update_obligations[5].name == "fn.write_then_load.assert.3.same_address",
+  expect(ref_update_obligations[7].name == "fn.write_then_load.assert.3.same_address",
          "ref store address assertion obligation");
-  expect(ref_update_obligations[6].name == "fn.write_then_load.safety.4.memory_live",
+  expect(ref_update_obligations[8].name == "fn.write_then_load.safety.6.memory_live",
          "ref store read liveness obligation");
-  expect(ref_update_obligations[7].name == "fn.write_then_load.safety.5.memory_valid",
+  expect(ref_update_obligations[9].name == "fn.write_then_load.safety.7.memory_valid",
          "ref store read validity obligation");
-  expect(ref_update_obligations[8].name == "fn.write_then_load.ensures.1.exact",
+  expect(ref_update_obligations[10].name == "fn.write_then_load.ensures.1.exact",
          "ref store scalar ensure obligation");
-  expect(ref_update_obligations[14].name == "fn.update_flag_ref.ensures.1.exact",
+  expect(ref_update_obligations[18].name == "fn.update_flag_ref.ensures.1.exact",
          "ref store bool ensure obligation");
-  const auto ref_write_smt = sigil::emit_smt_lib(ref_update_obligations[2]);
+  const auto ref_write_smt = sigil::emit_smt_lib(ref_update_obligations[4]);
   expect(ref_write_smt.find("(declare-const ptr_write Bool)") != std::string::npos,
          "ref store write permission is declared");
   expect(ref_write_smt.find("(assert ptr_write)") != std::string::npos,
          "ref store write permission precondition is active");
   expect(ref_write_smt.find("(assert (not ptr_write))") != std::string::npos,
          "ref store write permission goal is emitted");
-  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[8]);
+  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[10]);
   expect(ref_store_smt.find("(declare-const updated_addr Int)") != std::string::npos,
          "ref store updated address is declared");
   expect(ref_store_smt.find("(declare-const updated_valid Bool)") != std::string::npos,
@@ -669,7 +689,7 @@ ensures exact: result == value;
          "ref store read binds result to updated value");
   expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "ref store ensure checks write then load");
-  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[14]);
+  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[18]);
   expect(bool_ref_store_smt.find("(declare-const updated_value Bool)") != std::string::npos,
          "ref store bool value is declared");
   expect(bool_ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
@@ -678,20 +698,24 @@ ensures exact: result == value;
   expect(ref_update_results[0].status == sigil::VerificationStatus::Proven,
          "ref store liveness proven from precondition");
   expect(ref_update_results[1].status == sigil::VerificationStatus::Proven,
-         "ref store validity proven from precondition");
+         "ref store ownership proven from precondition");
   expect(ref_update_results[2].status == sigil::VerificationStatus::Proven,
-         "ref store write permission proven from precondition");
+         "ref store mutable borrow proven from precondition");
   expect(ref_update_results[3].status == sigil::VerificationStatus::Proven,
-         "ref store validity assertion proven locally");
+         "ref store validity proven from precondition");
   expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
-         "ref store write permission assertion proven locally");
+         "ref store write permission proven from precondition");
   expect(ref_update_results[5].status == sigil::VerificationStatus::Proven,
-         "ref store address assertion proven locally");
+         "ref store validity assertion proven locally");
   expect(ref_update_results[6].status == sigil::VerificationStatus::Proven,
-         "ref store read liveness proven locally");
+         "ref store write permission assertion proven locally");
   expect(ref_update_results[7].status == sigil::VerificationStatus::Proven,
-         "ref store read validity proven locally");
+         "ref store address assertion proven locally");
   expect(ref_update_results[8].status == sigil::VerificationStatus::Proven,
+         "ref store read liveness proven locally");
+  expect(ref_update_results[9].status == sigil::VerificationStatus::Proven,
+         "ref store read validity proven locally");
+  expect(ref_update_results[10].status == sigil::VerificationStatus::Proven,
          "ref store write then load proven locally");
 
   const char* ref_permission_source = R"(
@@ -705,6 +729,8 @@ ensures exact: result == can_write(ptr);
 
 fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == can_write(ptr);
@@ -717,19 +743,25 @@ ensures exact: result == can_write(ptr);
   const auto ref_permission_module =
       sigil::parse_source(ref_permission_source, "ref-permissions.sigil");
   const auto ref_permission_obligations = sigil::build_obligations(ref_permission_module);
-  expect(ref_permission_obligations.size() == 5, "ref permission obligations");
+  expect(ref_permission_obligations.size() == 7, "ref permission obligations");
   expect(ref_permission_obligations[0].name == "fn.expose_write_permission.ensures.1.exact",
          "ref write permission ensure obligation");
   expect(ref_permission_obligations[1].name ==
              "fn.store_preserves_write_permission.safety.1.memory_live",
          "ref permission store liveness obligation");
   expect(ref_permission_obligations[2].name ==
-             "fn.store_preserves_write_permission.safety.2.memory_valid",
-         "ref permission store validity obligation");
+             "fn.store_preserves_write_permission.safety.2.ownership_present",
+         "ref permission store ownership obligation");
   expect(ref_permission_obligations[3].name ==
-             "fn.store_preserves_write_permission.safety.3.memory_write",
-         "ref permission store write obligation");
+             "fn.store_preserves_write_permission.safety.3.mutable_borrow_active",
+         "ref permission store mutable-borrow obligation");
   expect(ref_permission_obligations[4].name ==
+             "fn.store_preserves_write_permission.safety.4.memory_valid",
+         "ref permission store validity obligation");
+  expect(ref_permission_obligations[5].name ==
+             "fn.store_preserves_write_permission.safety.5.memory_write",
+         "ref permission store write obligation");
+  expect(ref_permission_obligations[6].name ==
              "fn.store_preserves_write_permission.ensures.1.exact",
          "ref permission preserve ensure obligation");
   const auto expose_write_smt = sigil::emit_smt_lib(ref_permission_obligations[0]);
@@ -737,7 +769,7 @@ ensures exact: result == can_write(ptr);
          "ref write permission symbol is declared");
   expect(expose_write_smt.find("(assert (= result ptr_write))") != std::string::npos,
          "can_write lowers to write permission symbol");
-  const auto preserve_write_smt = sigil::emit_smt_lib(ref_permission_obligations[4]);
+  const auto preserve_write_smt = sigil::emit_smt_lib(ref_permission_obligations[6]);
   expect(preserve_write_smt.find("(declare-const updated_write Bool)") != std::string::npos,
          "updated write permission symbol is declared");
   expect(preserve_write_smt.find("(assert (= updated_write ptr_write))") != std::string::npos,
@@ -750,10 +782,14 @@ ensures exact: result == can_write(ptr);
   expect(ref_permission_results[1].status == sigil::VerificationStatus::Proven,
          "ref permission store liveness proven locally");
   expect(ref_permission_results[2].status == sigil::VerificationStatus::Proven,
-         "ref permission store validity proven locally");
+         "ref permission store ownership proven locally");
   expect(ref_permission_results[3].status == sigil::VerificationStatus::Proven,
-         "ref permission store write proven locally");
+         "ref permission store mutable borrow proven locally");
   expect(ref_permission_results[4].status == sigil::VerificationStatus::Proven,
+         "ref permission store validity proven locally");
+  expect(ref_permission_results[5].status == sigil::VerificationStatus::Proven,
+         "ref permission store write proven locally");
+  expect(ref_permission_results[6].status == sigil::VerificationStatus::Proven,
          "ref store write permission preservation proven locally");
 
   const char* allocation_identity_source = R"(
@@ -780,6 +816,8 @@ ensures preserved: result;
 
 fn model_store_preserves_allocation(xs: Slice[i64], index: i64, value: i64) -> bool
 requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures preserved: result;
 {
@@ -789,6 +827,8 @@ ensures preserved: result;
 
 fn ref_store_preserves_allocation(ptr: Ref[i64], value: i64) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures preserved: result;
@@ -801,7 +841,7 @@ ensures preserved: result;
   const auto allocation_identity_module =
       sigil::parse_source(allocation_identity_source, "allocation-identity.sigil");
   const auto allocation_identity_obligations = sigil::build_obligations(allocation_identity_module);
-  expect(allocation_identity_obligations.size() == 10, "allocation identity obligations");
+  expect(allocation_identity_obligations.size() == 14, "allocation identity obligations");
   expect(allocation_identity_obligations[0].name == "fn.expose_allocation.ensures.1.exact",
          "allocation id ensure obligation");
   expect(allocation_identity_obligations[1].name == "fn.classify_allocations.ensures.1.exact",
@@ -813,21 +853,33 @@ ensures preserved: result;
              "fn.model_store_preserves_allocation.safety.1.memory_live",
          "allocation model store liveness obligation");
   expect(allocation_identity_obligations[4].name ==
-             "fn.model_store_preserves_allocation.safety.2.index_in_bounds",
-         "allocation model store bounds obligation");
+             "fn.model_store_preserves_allocation.safety.2.ownership_present",
+         "allocation model store ownership obligation");
   expect(allocation_identity_obligations[5].name ==
+             "fn.model_store_preserves_allocation.safety.3.mutable_borrow_active",
+         "allocation model store mutable-borrow obligation");
+  expect(allocation_identity_obligations[6].name ==
+             "fn.model_store_preserves_allocation.safety.4.index_in_bounds",
+         "allocation model store bounds obligation");
+  expect(allocation_identity_obligations[7].name ==
              "fn.model_store_preserves_allocation.ensures.1.preserved",
          "allocation model store preservation obligation");
-  expect(allocation_identity_obligations[6].name ==
+  expect(allocation_identity_obligations[8].name ==
              "fn.ref_store_preserves_allocation.safety.1.memory_live",
          "allocation ref store liveness obligation");
-  expect(allocation_identity_obligations[7].name ==
-             "fn.ref_store_preserves_allocation.safety.2.memory_valid",
-         "allocation ref store validity obligation");
-  expect(allocation_identity_obligations[8].name ==
-             "fn.ref_store_preserves_allocation.safety.3.memory_write",
-         "allocation ref store write obligation");
   expect(allocation_identity_obligations[9].name ==
+             "fn.ref_store_preserves_allocation.safety.2.ownership_present",
+         "allocation ref store ownership obligation");
+  expect(allocation_identity_obligations[10].name ==
+             "fn.ref_store_preserves_allocation.safety.3.mutable_borrow_active",
+         "allocation ref store mutable-borrow obligation");
+  expect(allocation_identity_obligations[11].name ==
+             "fn.ref_store_preserves_allocation.safety.4.memory_valid",
+         "allocation ref store validity obligation");
+  expect(allocation_identity_obligations[12].name ==
+             "fn.ref_store_preserves_allocation.safety.5.memory_write",
+         "allocation ref store write obligation");
+  expect(allocation_identity_obligations[13].name ==
              "fn.ref_store_preserves_allocation.ensures.1.preserved",
          "allocation ref store preservation obligation");
 
@@ -845,11 +897,11 @@ ensures preserved: result;
   const auto alias_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[2]);
   expect(alias_allocation_smt.find("(assert (= alias_alloc xs_alloc))") != std::string::npos,
          "model alias preserves allocation identity");
-  const auto model_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[5]);
+  const auto model_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[7]);
   expect(model_store_allocation_smt.find("(assert (= updated_alloc xs_alloc))") !=
              std::string::npos,
          "model store preserves allocation identity");
-  const auto ref_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[9]);
+  const auto ref_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[13]);
   expect(ref_store_allocation_smt.find("(assert (= updated_alloc ptr_alloc))") != std::string::npos,
          "ref store preserves allocation identity");
 
@@ -887,6 +939,8 @@ ensures exact: result == load(ptr);
 
 fn model_store_preserves_liveness(xs: Array[bool], index: i64, value: bool) -> bool
 requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures preserved: result;
 {
@@ -896,6 +950,8 @@ ensures preserved: result;
 
 fn ref_store_preserves_liveness(ptr: Ref[i64], value: i64) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures preserved: result;
@@ -908,7 +964,7 @@ ensures preserved: result;
   const auto allocation_liveness_module =
       sigil::parse_source(allocation_liveness_source, "allocation-liveness.sigil");
   const auto allocation_liveness_obligations = sigil::build_obligations(allocation_liveness_module);
-  expect(allocation_liveness_obligations.size() == 18, "allocation liveness obligations");
+  expect(allocation_liveness_obligations.size() == 22, "allocation liveness obligations");
   expect(allocation_liveness_obligations[0].name == "fn.expose_liveness.ensures.1.exact",
          "liveness exposure obligation");
   expect(allocation_liveness_obligations[1].name == "fn.read_live_slice.safety.1.memory_live",
@@ -927,16 +983,28 @@ ensures preserved: result;
              "fn.model_store_preserves_liveness.safety.1.memory_live",
          "model store liveness obligation");
   expect(allocation_liveness_obligations[12].name ==
-             "fn.model_store_preserves_liveness.safety.2.index_in_bounds",
-         "model store bounds obligation after liveness");
+             "fn.model_store_preserves_liveness.safety.2.ownership_present",
+         "model store ownership obligation after liveness");
   expect(allocation_liveness_obligations[13].name ==
+             "fn.model_store_preserves_liveness.safety.3.mutable_borrow_active",
+         "model store mutable-borrow obligation after ownership");
+  expect(allocation_liveness_obligations[14].name ==
+             "fn.model_store_preserves_liveness.safety.4.index_in_bounds",
+         "model store bounds obligation after liveness");
+  expect(allocation_liveness_obligations[15].name ==
              "fn.model_store_preserves_liveness.ensures.1.preserved",
          "model store liveness preservation obligation");
-  expect(allocation_liveness_obligations[14].name ==
+  expect(allocation_liveness_obligations[16].name ==
              "fn.ref_store_preserves_liveness.safety.1.memory_live",
          "ref store liveness obligation");
-  expect(allocation_liveness_obligations[15].name ==
-             "fn.ref_store_preserves_liveness.safety.2.memory_valid",
+  expect(allocation_liveness_obligations[17].name ==
+             "fn.ref_store_preserves_liveness.safety.2.ownership_present",
+         "ref store ownership obligation after liveness");
+  expect(allocation_liveness_obligations[18].name ==
+             "fn.ref_store_preserves_liveness.safety.3.mutable_borrow_active",
+         "ref store mutable-borrow obligation after ownership");
+  expect(allocation_liveness_obligations[19].name ==
+             "fn.ref_store_preserves_liveness.safety.4.memory_valid",
          "ref store validity obligation after liveness");
 
   const auto expose_liveness_smt = sigil::emit_smt_lib(allocation_liveness_obligations[0]);
@@ -944,7 +1012,7 @@ ensures preserved: result;
          "liveness symbol is declared");
   expect(expose_liveness_smt.find("(assert (= result xs_live))") != std::string::npos,
          "is_live lowers to liveness symbol");
-  const auto model_live_smt = sigil::emit_smt_lib(allocation_liveness_obligations[13]);
+  const auto model_live_smt = sigil::emit_smt_lib(allocation_liveness_obligations[15]);
   expect(model_live_smt.find("(assert (= updated_live xs_live))") != std::string::npos,
          "model store preserves liveness");
 
@@ -1013,6 +1081,8 @@ ensures preserved: result;
 
 fn model_store_preserves_borrows(xs: Array[bool], index: i64, value: bool) -> bool
 requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures preserved: result;
 {
@@ -1024,6 +1094,8 @@ ensures preserved: result;
 
 fn ref_store_preserves_borrows(ptr: Ref[i64], value: i64) -> bool
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures preserved: result;
@@ -1038,7 +1110,7 @@ ensures preserved: result;
   const auto ownership_state_module =
       sigil::parse_source(ownership_state_source, "ownership-state.sigil");
   const auto ownership_state_obligations = sigil::build_obligations(ownership_state_module);
-  expect(ownership_state_obligations.size() == 11, "ownership state obligations");
+  expect(ownership_state_obligations.size() == 15, "ownership state obligations");
   const auto ownership_state_results =
       sigil::verify_obligations(ownership_state_obligations, false);
   expect(ownership_state_results[0].status == sigil::VerificationStatus::Proven,
@@ -1052,27 +1124,35 @@ ensures preserved: result;
   expect(ownership_state_results[4].status == sigil::VerificationStatus::Proven,
          "model store liveness proven locally");
   expect(ownership_state_results[5].status == sigil::VerificationStatus::Proven,
-         "model store bounds proven locally");
-  expect(ownership_state_results[6].status == sigil::VerificationStatus::Unknown,
-         "model state conjunction needs SMT reasoning");
+         "model store ownership proven locally");
+  expect(ownership_state_results[6].status == sigil::VerificationStatus::Proven,
+         "model store mutable borrow proven locally");
   expect(ownership_state_results[7].status == sigil::VerificationStatus::Proven,
-         "ref store liveness proven locally");
-  expect(ownership_state_results[8].status == sigil::VerificationStatus::Proven,
-         "ref store validity proven locally");
+         "model store bounds proven locally");
+  expect(ownership_state_results[8].status == sigil::VerificationStatus::Unknown,
+         "model state conjunction needs SMT reasoning");
   expect(ownership_state_results[9].status == sigil::VerificationStatus::Proven,
+         "ref store liveness proven locally");
+  expect(ownership_state_results[10].status == sigil::VerificationStatus::Proven,
+         "ref store ownership proven locally");
+  expect(ownership_state_results[11].status == sigil::VerificationStatus::Proven,
+         "ref store mutable borrow proven locally");
+  expect(ownership_state_results[12].status == sigil::VerificationStatus::Proven,
+         "ref store validity proven locally");
+  expect(ownership_state_results[13].status == sigil::VerificationStatus::Proven,
          "ref store permission proven locally");
-  expect(ownership_state_results[10].status == sigil::VerificationStatus::Unknown,
+  expect(ownership_state_results[14].status == sigil::VerificationStatus::Unknown,
          "ref state conjunction needs SMT reasoning");
   const auto alias_owner_smt = sigil::emit_smt_lib(ownership_state_obligations[3]);
   expect(alias_owner_smt.find("(assert (= alias_owner xs_owner))") != std::string::npos,
          "alias preserves owner identity");
   expect(alias_owner_smt.find("(assert (= alias_shared xs_shared))") != std::string::npos,
          "alias preserves shared borrow count");
-  const auto model_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[6]);
+  const auto model_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[8]);
   expect(model_borrow_smt.find("(assert (= updated_mut_borrow xs_mut_borrow))") !=
              std::string::npos,
          "model store preserves mutable borrow state");
-  const auto ref_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[10]);
+  const auto ref_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[14]);
   expect(ref_borrow_smt.find("(assert (= updated_owner ptr_owner))") != std::string::npos,
          "ref store preserves owner identity");
 
@@ -1179,6 +1259,69 @@ requires owned: has_owner(xs);
   expect(missing_borrow_guard_results[2].status == sigil::VerificationStatus::Unknown,
          "missing borrow availability remains unknown");
 
+  const char* memory_state_update_source = R"(
+module memory_state_updates;
+
+fn update_ref(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires no_shared: shared_borrows(ptr) == 0;
+requires no_mutable: !has_mut_borrow(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == value;
+{
+  let borrowed: Ref[i64] = borrow_mut(ptr);
+  let updated: Ref[i64] = store(borrowed, value);
+  assert still_exclusive: has_mut_borrow(updated);
+  let released: Ref[i64] = release_mut(updated);
+  return load(released);
+}
+)";
+  const auto memory_state_update_module =
+      sigil::parse_source(memory_state_update_source, "memory-state-updates.sigil");
+  const auto memory_state_update_obligations = sigil::build_obligations(memory_state_update_module);
+  expect(memory_state_update_obligations.size() == 15, "checked ref update obligations");
+  expect(memory_state_update_obligations[3].name == "fn.update_ref.safety.4.memory_live",
+         "ref update liveness obligation");
+  expect(memory_state_update_obligations[4].name == "fn.update_ref.safety.5.ownership_present",
+         "ref update ownership obligation");
+  expect(memory_state_update_obligations[5].name == "fn.update_ref.safety.6.mutable_borrow_active",
+         "ref update mutable-borrow obligation");
+  expect(memory_state_update_obligations[6].name == "fn.update_ref.safety.7.memory_valid",
+         "ref update validity obligation");
+  expect(memory_state_update_obligations[7].name == "fn.update_ref.safety.8.memory_write",
+         "ref update permission obligation");
+  const auto checked_store_smt = sigil::emit_smt_lib(memory_state_update_obligations[8]);
+  expect(checked_store_smt.find("(assert (= updated_mut_borrow borrowed_mut_borrow))") !=
+             std::string::npos,
+         "ref update preserves active mutable borrow");
+
+  const char* unborrowed_write_source = R"(
+module unborrowed_write;
+
+fn write_without_borrow(xs: Array[i64], index: i64, value: i64) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+{
+  let updated: Array[i64] = store(xs, index, value);
+  return at(updated, index);
+}
+)";
+  const auto unborrowed_write_module =
+      sigil::parse_source(unborrowed_write_source, "unborrowed-write.sigil");
+  const auto unborrowed_write_obligations = sigil::build_obligations(unborrowed_write_module);
+  expect(unborrowed_write_obligations.size() == 6, "unborrowed write obligations");
+  const auto unborrowed_write_results =
+      sigil::verify_obligations(unborrowed_write_obligations, false);
+  expect(unborrowed_write_results[0].status == sigil::VerificationStatus::Proven,
+         "unborrowed write liveness is independent");
+  expect(unborrowed_write_results[1].status == sigil::VerificationStatus::Proven,
+         "unborrowed write ownership is independent");
+  expect(unborrowed_write_results[2].status == sigil::VerificationStatus::Unknown,
+         "unborrowed write remains unresolved");
+
   const char* ref_epoch_source = R"(
 module ref_epochs;
 
@@ -1190,6 +1333,8 @@ ensures same_entry_epoch: epoch(left) == epoch(right);
 
 fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
 requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures next_epoch: result == epoch(ptr) + 1;
@@ -1201,16 +1346,20 @@ ensures next_epoch: result == epoch(ptr) + 1;
 
   const auto ref_epoch_module = sigil::parse_source(ref_epoch_source, "ref-epochs.sigil");
   const auto ref_epoch_obligations = sigil::build_obligations(ref_epoch_module);
-  expect(ref_epoch_obligations.size() == 5, "ref epoch obligations");
+  expect(ref_epoch_obligations.size() == 7, "ref epoch obligations");
   expect(ref_epoch_obligations[0].name == "fn.entry_epochs_match.ensures.1.same_entry_epoch",
          "entry ref epoch ensure obligation");
   expect(ref_epoch_obligations[1].name == "fn.store_advances_epoch.safety.1.memory_live",
          "ref epoch store liveness obligation");
-  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.safety.2.memory_valid",
+  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.safety.2.ownership_present",
+         "ref epoch store ownership obligation");
+  expect(ref_epoch_obligations[3].name == "fn.store_advances_epoch.safety.3.mutable_borrow_active",
+         "ref epoch store mutable-borrow obligation");
+  expect(ref_epoch_obligations[4].name == "fn.store_advances_epoch.safety.4.memory_valid",
          "ref epoch store validity obligation");
-  expect(ref_epoch_obligations[3].name == "fn.store_advances_epoch.safety.3.memory_write",
+  expect(ref_epoch_obligations[5].name == "fn.store_advances_epoch.safety.5.memory_write",
          "ref epoch store write obligation");
-  expect(ref_epoch_obligations[4].name == "fn.store_advances_epoch.ensures.1.next_epoch",
+  expect(ref_epoch_obligations[6].name == "fn.store_advances_epoch.ensures.1.next_epoch",
          "ref epoch store advance obligation");
   const auto entry_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[0]);
   expect(entry_epoch_smt.find("(declare-const __sigil_entry_epoch Int)") != std::string::npos,
@@ -1225,7 +1374,7 @@ ensures next_epoch: result == epoch(ptr) + 1;
          "right ref is bound to entry epoch");
   expect(entry_epoch_smt.find("(assert (not (= left_epoch right_epoch)))") != std::string::npos,
          "entry epoch ensure compares ref epochs");
-  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[4]);
+  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[6]);
   expect(store_epoch_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
          "store source epoch is declared");
   expect(store_epoch_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
@@ -1244,10 +1393,14 @@ ensures next_epoch: result == epoch(ptr) + 1;
   expect(ref_epoch_results[1].status == sigil::VerificationStatus::Proven,
          "ref epoch store liveness is proven locally");
   expect(ref_epoch_results[2].status == sigil::VerificationStatus::Proven,
-         "ref epoch store validity is proven locally");
+         "ref epoch store ownership is proven locally");
   expect(ref_epoch_results[3].status == sigil::VerificationStatus::Proven,
-         "ref epoch store write is proven locally");
+         "ref epoch store mutable borrow is proven locally");
   expect(ref_epoch_results[4].status == sigil::VerificationStatus::Proven,
+         "ref epoch store validity is proven locally");
+  expect(ref_epoch_results[5].status == sigil::VerificationStatus::Proven,
+         "ref epoch store write is proven locally");
+  expect(ref_epoch_results[6].status == sigil::VerificationStatus::Proven,
          "ref epoch store advance is proven locally");
 
   const char* ref_alias_source = R"(
