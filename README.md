@@ -85,6 +85,9 @@ production verifier yet.
   released in a later proof-state snapshot.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
+- Bounded control-flow weakest-precondition reasoning: the local prover splits
+  branch-join `ite` goals path by path and composes loop-exit invariants for
+  conjunctive postconditions without replacing Z3 arithmetic reasoning.
 - Expression-level `if condition { then } else { else }` conditionals that lower
   to SMT `ite`.
 - Statement-level `if`/`else` branches with branch-local proof contexts and
@@ -192,6 +195,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt

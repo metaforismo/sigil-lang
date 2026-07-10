@@ -53,8 +53,13 @@ states.
 Before asking Z3, the local prover performs a small weakest-precondition-style
 rewrite over those equality assumptions. If a straight-line mutation chain
 reduces an assertion or postcondition to `expr == expr`, Sigil can prove it
-locally and deterministically. Branches and loops are still handled by the proof
-obligation planner and SMT solver rather than by a full WP calculus.
+locally and deterministically. For branch joins, it can also split an `ite`
+goal, specialize guarded branch facts, substitute each path's assignments, and
+accept the goal only when both paths close. After a loop, invariant assumptions
+are tagged as loop summaries; conjunctive postconditions can be discharged by
+proving each conjunct from those summaries. The recursion budget is fixed at
+16, and arithmetic induction, implication search, and invariant discovery stay
+with Z3 or the external agent flow rather than an ad hoc local solver.
 
 Function calls are planned modularly. At a call site, Sigil materializes the
 callee arguments in the caller's current symbolic context, emits one obligation
@@ -282,7 +287,10 @@ emits an initialization obligation for every invariant and a preservation
 obligation that assumes the invariant and loop condition, symbolically checks
 one body iteration, and proves the invariant again. Values assigned in the loop
 are treated as fresh loop-exit symbols after the loop; only the invariant and
-the negated loop condition survive for those mutated values.
+the negated loop condition survive for those mutated values. The local
+control-flow WP rule can compose those exit summaries into `&&` postconditions;
+it does not prove the initialization or inductive preservation steps unless the
+ordinary substitution rules already make them immediate.
 
 The current implementation calls an external `z3` binary. Set `SIGIL_Z3` to use
 a specific executable.
