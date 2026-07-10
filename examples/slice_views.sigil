@@ -1,0 +1,63 @@
+module slice_views;
+
+fn read_subview(xs: Slice[i64], start: i64, count: i64, index: i64) -> i64
+requires live: is_live(xs);
+requires view_bounds: start >= 0 && count >= 0 && start + count <= len(xs);
+requires index_bounds: index >= 0 && index < count;
+ensures exact: result == at(xs, start + index);
+{
+  let sub: Slice[i64] = slice_view(xs, start, count);
+  assert allocation_preserved: same_allocation(sub, xs);
+  assert offset_composed: slice_offset(sub) == slice_offset(xs) + start;
+  assert length_selected: len(sub) == count;
+  return at(sub, index);
+}
+
+fn write_subview(xs: Slice[i64], start: i64, count: i64, index: i64,
+                 value: i64) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires exclusive: has_mut_borrow(xs);
+requires view_bounds: start >= 0 && count >= 0 && start + count <= len(xs);
+requires index_bounds: index >= 0 && index < count;
+ensures exact: result == value;
+{
+  let sub: Slice[i64] = slice_view(xs, start, count);
+  let updated: Slice[i64] = store(sub, index, value);
+  assert offset_preserved: slice_offset(updated) == slice_offset(sub);
+  return at(updated, index);
+}
+
+fn adjacent_views_do_not_overlap(left: Slice[i64], right: Slice[i64]) -> bool
+requires same_origin: same_allocation(left, right);
+requires ordered: slice_offset(left) + len(left) <= slice_offset(right);
+ensures separate: result == true;
+{
+  return !overlaps(left, right);
+}
+
+fn identical_views_match(left: Slice[i64], right: Slice[i64]) -> bool
+requires same_origin: same_allocation(left, right);
+requires same_offset: slice_offset(left) == slice_offset(right);
+requires same_length: len(left) == len(right);
+ensures identical: result == true;
+{
+  return same_view(left, right);
+}
+
+fn identical_nonempty_views_overlap(left: Slice[i64], right: Slice[i64]) -> bool
+requires same_origin: same_allocation(left, right);
+requires same_offset: slice_offset(left) == slice_offset(right);
+requires same_length: len(left) == len(right);
+requires nonempty: len(left) > 0;
+ensures overlapping: result == true;
+{
+  return overlaps(left, right);
+}
+
+fn empty_view_never_overlaps(empty: Slice[i64], other: Slice[i64]) -> bool
+requires empty_length: len(empty) == 0;
+ensures separate: result == true;
+{
+  return !overlaps(empty, other);
+}

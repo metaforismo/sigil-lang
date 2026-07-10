@@ -132,9 +132,9 @@ The planner walks each function and builds proof obligations:
   declared on the constructed type after generic substitution;
 - container literal construction emits the same invariant obligations, and
   model fields are materialized by component facts such as `value.len`,
-  `value.data`, `value.alloc`, `value.live`, `value.addr`, `value.valid`, `value.write`,
-  `value.owner`, `value.has_owner`, `value.shared`, `value.mut_borrow`,
-  `value.value`, and `value.epoch`;
+  `value.data`, `value.offset`, `value.alloc`, `value.live`, `value.addr`,
+  `value.valid`, `value.write`, `value.owner`, `value.has_owner`, `value.shared`,
+  `value.mut_borrow`, `value.value`, and `value.epoch`;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
 - `assume` statements add local assumptions;
@@ -144,12 +144,17 @@ The planner walks each function and builds proof obligations:
   guards reflected in the active assumptions;
 - array and slice `at(container, index)` expressions create `memory_live` then
   `index_in_bounds` safety obligations and lower to SMT `select` over an
-  abstract backing array;
+  allocation-wide abstract backing array at `container.offset + index`;
+- `slice_view(source, start, length)` bindings create `memory_live` then
+  `view_in_bounds` obligations, compose the source offset with `start`, and
+  preserve allocation, backing data, liveness, and ownership state;
+- `same_view` and `overlaps` lower to allocation-relative half-open range facts
+  for equally typed slices;
 - array and slice `store(container, index, value)` bindings create
   `memory_live`, `ownership_present`, `mutable_borrow_active`, and
-  `index_in_bounds` safety obligations, preserve the source length, allocation,
-  liveness, and ownership state, and lower the updated data fact to SMT array
-  `store`;
+  `index_in_bounds` safety obligations, preserve the source length, offset,
+  allocation, liveness, and ownership state, and lower the updated data fact to
+  SMT array `store` at the allocation-relative physical index;
 - allocation intrinsics lower every model's deterministic `.alloc` component
   to identity or inequality facts across arrays, slices, and references;
 - ownership intrinsics lower deterministic owner-presence, owner-ID, shared

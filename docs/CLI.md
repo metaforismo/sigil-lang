@@ -117,6 +117,12 @@ Example with proof-level reference update facts:
 sigil check examples/ref_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-update-smt
 ```
 
+Example with allocation-relative slice views and overlap facts:
+
+```sh
+sigil check examples/slice_views.sigil --strict --solver-timeout-ms 250 --save-smt build/slice-view-smt
+```
+
 Example with proof-level reference alias consistency:
 
 ```sh

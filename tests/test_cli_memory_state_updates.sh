@@ -27,7 +27,9 @@ ref_store="$smt_dir/fn.update_ref.assert.1.epoch_advanced.smt2"
 test -f "$slice_store"
 test -f "$ref_store"
 grep "(assert (= updated_mut_borrow borrowed_mut_borrow))" "$slice_store" >/dev/null
-grep "(assert (= updated_data (store borrowed_data index value)))" "$slice_store" >/dev/null
+grep "(assert (= updated_offset borrowed_offset))" "$slice_store" >/dev/null
+grep "(assert (= updated_data (store borrowed_data (+ borrowed_offset index) value)))" \
+  "$slice_store" >/dev/null
 grep "(assert (= updated_mut_borrow borrowed_mut_borrow))" "$ref_store" >/dev/null
 grep "(assert (= updated_epoch (+ borrowed_epoch 1)))" "$ref_store" >/dev/null
 

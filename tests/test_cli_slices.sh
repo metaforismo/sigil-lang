@@ -32,9 +32,12 @@ test -f "$length_ensure"
 grep "(set-option :timeout 250)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_len Int)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_data (Array Int Int))" "$slice_bounds" >/dev/null
+grep "(declare-const xs_offset Int)" "$slice_bounds" >/dev/null
+grep "(assert (>= xs_offset 0))" "$slice_bounds" >/dev/null
 grep "(assert (not (and (>= index 0) (< index xs_len))))" "$slice_bounds" >/dev/null
 grep "(declare-const flags_data (Array Int Bool))" "$array_ensure" >/dev/null
-grep "(assert (= result (select flags_data index)))" "$array_ensure" >/dev/null
+grep "(assert (= flags_offset 0))" "$array_ensure" >/dev/null
+grep "(assert (= result (select flags_data (+ flags_offset index))))" "$array_ensure" >/dev/null
 grep "(assert (= result xs_len))" "$length_ensure" >/dev/null
 grep "(assert xs_live)" "$slice_live" >/dev/null
 grep "(assert (not xs_live))" "$slice_live" >/dev/null

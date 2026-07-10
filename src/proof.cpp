@@ -662,6 +662,10 @@ bool is_model_container_type(const Type& type) {
          type.arguments.size() == 1;
 }
 
+bool is_slice_model_type(const Type& type) {
+  return type.kind == TypeKind::Unknown && type.spelling == "Slice" && type.arguments.size() == 1;
+}
+
 bool is_ref_model_type(const Type& type) {
   return type.kind == TypeKind::Unknown && type.spelling == "Ref" && type.arguments.size() == 1;
 }
@@ -693,6 +697,10 @@ std::string model_len_symbol(const std::string& symbol) {
 
 std::string model_data_symbol(const std::string& symbol) {
   return symbol + ".data";
+}
+
+std::string model_offset_symbol(const std::string& symbol) {
+  return symbol + ".offset";
 }
 
 std::string allocation_symbol(const std::string& symbol) {
@@ -786,10 +794,18 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   }
   if (name == "at" && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
-    return make_call(
-        std::string(kModelSelectCall),
-        {make_identifier(model_data_symbol(arguments[0]->name), arguments[0]->range), arguments[1]},
-        range);
+    auto physical_index =
+        make_binary(BinaryOp::Add,
+                    make_identifier(model_offset_symbol(arguments[0]->name), arguments[0]->range),
+                    arguments[1], arguments[1]->range);
+    return make_call(std::string(kModelSelectCall),
+                     {make_identifier(model_data_symbol(arguments[0]->name), arguments[0]->range),
+                      physical_index},
+                     range);
+  }
+  if (name == "slice_offset" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(model_offset_symbol(arguments[0]->name), range);
   }
   if (name == "load" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
@@ -840,6 +856,54 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
     auto rhs = make_identifier(allocation_symbol(arguments[1]->name), arguments[1]->range);
     return make_binary(name == "same_allocation" ? BinaryOp::Equal : BinaryOp::NotEqual, lhs, rhs,
                        range);
+  }
+  if ((name == "same_view" || name == "overlaps") && arguments.size() == 2 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
+      arguments[1]->kind == ExprNode::Kind::Identifier) {
+    auto same_allocation = make_binary(
+        BinaryOp::Equal,
+        make_identifier(allocation_symbol(arguments[0]->name), arguments[0]->range),
+        make_identifier(allocation_symbol(arguments[1]->name), arguments[1]->range), range);
+    auto same_offset = make_binary(
+        BinaryOp::Equal,
+        make_identifier(model_offset_symbol(arguments[0]->name), arguments[0]->range),
+        make_identifier(model_offset_symbol(arguments[1]->name), arguments[1]->range), range);
+    auto same_length = make_binary(
+        BinaryOp::Equal, make_identifier(model_len_symbol(arguments[0]->name), arguments[0]->range),
+        make_identifier(model_len_symbol(arguments[1]->name), arguments[1]->range), range);
+    if (name == "same_view") {
+      return make_binary(BinaryOp::And, same_allocation,
+                         make_binary(BinaryOp::And, same_offset, same_length, range), range);
+    }
+
+    auto left_length = make_identifier(model_len_symbol(arguments[0]->name), arguments[0]->range);
+    auto right_length = make_identifier(model_len_symbol(arguments[1]->name), arguments[1]->range);
+    auto left_end =
+        make_binary(BinaryOp::Add,
+                    make_identifier(model_offset_symbol(arguments[0]->name), arguments[0]->range),
+                    left_length, range);
+    auto right_end =
+        make_binary(BinaryOp::Add,
+                    make_identifier(model_offset_symbol(arguments[1]->name), arguments[1]->range),
+                    right_length, range);
+    auto left_before_right_end =
+        make_binary(BinaryOp::Less,
+                    make_identifier(model_offset_symbol(arguments[0]->name), arguments[0]->range),
+                    right_end, range);
+    auto right_before_left_end =
+        make_binary(BinaryOp::Less,
+                    make_identifier(model_offset_symbol(arguments[1]->name), arguments[1]->range),
+                    left_end, range);
+    auto left_nonempty = make_binary(BinaryOp::Greater, left_length, make_integer(0, range), range);
+    auto right_nonempty =
+        make_binary(BinaryOp::Greater, right_length, make_integer(0, range), range);
+    auto ranges_intersect =
+        make_binary(BinaryOp::And, left_before_right_end, right_before_left_end, range);
+    return make_binary(
+        BinaryOp::And, same_allocation,
+        make_binary(BinaryOp::And, left_nonempty,
+                    make_binary(BinaryOp::And, right_nonempty, ranges_intersect, range), range),
+        range);
   }
   if ((name == "same_ref" || name == "disjoint") && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -1032,6 +1096,42 @@ ProofObligation make_index_bounds_obligation(const FunctionDecl& fn, int safety_
   return obligation;
 }
 
+ProofObligation make_slice_view_bounds_obligation(const FunctionDecl& fn, int safety_index,
+                                                  const Expr& view, const ProofContext& context) {
+  if (!view || view->arguments.size() != 3) {
+    throw Diagnostic(view ? view->range : SourceRange{},
+                     "slice_view requires a source, start, and length");
+  }
+  const auto source = rewrite_expr(view->arguments[0], context.bindings);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(view->arguments[0]->range, "slice_view requires a materialized Slice value");
+  }
+  const auto start = rewrite_expr(view->arguments[1], context.bindings);
+  const auto length = rewrite_expr(view->arguments[2], context.bindings);
+  auto zero = make_integer(0, view->range);
+  auto start_non_negative =
+      make_binary(BinaryOp::GreaterEqual, start, zero, view->arguments[1]->range);
+  auto length_non_negative = make_binary(BinaryOp::GreaterEqual, length,
+                                         make_integer(0, view->range), view->arguments[2]->range);
+  auto selected_end = make_binary(BinaryOp::Add, start, length, view->range);
+  auto within_source = make_binary(
+      BinaryOp::LessEqual, selected_end,
+      make_identifier(model_len_symbol(source->name), view->arguments[0]->range), view->range);
+  auto goal = make_binary(
+      BinaryOp::And, start_non_negative,
+      make_binary(BinaryOp::And, length_non_negative, within_source, view->range), view->range);
+
+  ProofObligation obligation;
+  obligation.name =
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".view_in_bounds";
+  obligation.location = view->location;
+  obligation.range = view->range;
+  obligation.assumptions = context.active;
+  obligation.goal = NamedPredicate{"view_in_bounds", goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 ProofObligation make_memory_valid_obligation(const FunctionDecl& fn, int safety_index,
                                              const Expr& access, const ProofContext& context) {
   const auto operation = access && !access->name.empty() ? access->name : std::string("ref");
@@ -1168,7 +1268,7 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
     }
     if (expr->name == "at" || expr->name == "load" || expr->name == "store" ||
-        is_borrow_transition_name(expr->name)) {
+        expr->name == "slice_view" || is_borrow_transition_name(expr->name)) {
       ++safety_index;
       obligations.push_back(make_memory_live_obligation(fn, safety_index, expr, context));
     }
@@ -1194,6 +1294,10 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;
       obligations.push_back(make_index_bounds_obligation(fn, safety_index, expr, context));
+    }
+    if (expr->name == "slice_view") {
+      ++safety_index;
+      obligations.push_back(make_slice_view_bounds_obligation(fn, safety_index, expr, context));
     }
     if (expr->name == "load" || (expr->name == "store" && expr->arguments.size() == 2)) {
       ++safety_index;
@@ -1345,7 +1449,8 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
       expr->name == "allocation_id" || expr->name == "same_allocation" ||
       expr->name == "disjoint_allocation" || expr->name == "is_live" || expr->name == "owner_id" ||
       expr->name == "has_owner" || expr->name == "shared_borrows" ||
-      expr->name == "has_mut_borrow") {
+      expr->name == "has_mut_borrow" || expr->name == "slice_offset" || expr->name == "same_view" ||
+      expr->name == "overlaps") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1358,6 +1463,11 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   if (expr->name == "store") {
     throw Diagnostic(expr->range,
                      "store returns a model value and must be bound with let before proof use");
+  }
+
+  if (expr->name == "slice_view") {
+    throw Diagnostic(expr->range,
+                     "slice_view returns a model value and must be bound with let before use");
   }
 
   if (is_borrow_transition_name(expr->name)) {
@@ -1442,6 +1552,22 @@ void register_ownership_state(const std::string& symbol, ProofContext& context) 
       SourceLocation{}, SourceRange{}});
 }
 
+void register_model_offset(const std::string& symbol, const Type& type, ProofContext& context) {
+  const auto offset = model_offset_symbol(symbol);
+  context.symbols[offset] = Type{TypeKind::I64, "i64", {}};
+  Expr constraint;
+  std::string suffix;
+  if (is_slice_model_type(type)) {
+    constraint = make_binary(BinaryOp::GreaterEqual, make_identifier(offset), make_integer(0));
+    suffix = "offset_nonnegative";
+  } else {
+    constraint = make_binary(BinaryOp::Equal, make_identifier(offset), make_integer(0));
+    suffix = "array_offset_zero";
+  }
+  context.active.push_back(NamedPredicate{"model_" + sanitize_symbol(symbol) + "_" + suffix,
+                                          constraint, SourceLocation{}, SourceRange{}});
+}
+
 void copy_ownership_state(const std::string& prefix, const std::string& target,
                           const std::string& source, const SourceRange& range,
                           const SourceLocation& location, ProofContext& context) {
@@ -1507,14 +1633,17 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
   if (is_model_container_type(type)) {
     const auto target_len = model_len_symbol(target_symbol);
     const auto target_data = model_data_symbol(target_symbol);
+    const auto target_offset = model_offset_symbol(target_symbol);
     const auto target_allocation = allocation_symbol(target_symbol);
     const auto target_live = allocation_live_symbol(target_symbol);
     const auto source_len = model_len_symbol(source_expr->name);
     const auto source_data = model_data_symbol(source_expr->name);
+    const auto source_offset = model_offset_symbol(source_expr->name);
     const auto source_allocation = allocation_symbol(source_expr->name);
     const auto source_live = allocation_live_symbol(source_expr->name);
     context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_data] = model_data_type(type);
+    register_model_offset(target_symbol, type, context);
     context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
     register_ownership_state(target_symbol, context);
@@ -1529,6 +1658,8 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              context);
     add_symbol_equality_fact("field_" + target_data, target_data, source_data, range, location,
                              context);
+    add_symbol_equality_fact("field_" + target_offset, target_offset, source_offset, range,
+                             location, context);
     add_symbol_equality_fact("field_" + target_allocation, target_allocation, source_allocation,
                              range, location, context);
     add_symbol_equality_fact("field_" + target_live, target_live, source_live, range, location,
@@ -1592,6 +1723,11 @@ bool is_ref_store_call(const Expr& expr) {
   return is_model_store_call(expr) && expr->arguments.size() == 2;
 }
 
+bool is_slice_view_call(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Call && expr->name == "slice_view" &&
+         expr->arguments.size() == 3;
+}
+
 bool is_borrow_transition_call(const Expr& expr) {
   return expr && expr->kind == ExprNode::Kind::Call && is_borrow_transition_name(expr->name) &&
          expr->arguments.size() == 1;
@@ -1602,6 +1738,57 @@ void add_transition_fact(const std::string& name, const std::string& target, Exp
   auto equality = make_binary(BinaryOp::Equal, make_identifier(target, transition->range),
                               std::move(value), transition->range);
   context.active.push_back(NamedPredicate{name, equality, transition->location, transition->range});
+}
+
+void register_slice_view_binding(const Expr& view, const std::string& target_symbol,
+                                 const Type& type, const FunctionDecl& fn, ProofContext& context,
+                                 int& call_index, const StructTable& structs,
+                                 const FunctionTable& functions, const TheoremTable& theorems,
+                                 std::vector<ProofObligation>& obligations) {
+  if (!is_slice_model_type(type) || !is_slice_view_call(view)) {
+    throw Diagnostic(view ? view->range : SourceRange{},
+                     "slice_view binding requires a Slice[T] target");
+  }
+  const auto source = materialize_expr(view->arguments[0], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(view->arguments[0]->range,
+                     "slice_view source requires a materialized Slice value");
+  }
+  const auto start = materialize_expr(view->arguments[1], fn, context, call_index, structs,
+                                      functions, theorems, obligations);
+  const auto length = materialize_expr(view->arguments[2], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+
+  context.symbols[target_symbol] = type;
+  const auto target_len = model_len_symbol(target_symbol);
+  const auto target_data = model_data_symbol(target_symbol);
+  const auto target_offset = model_offset_symbol(target_symbol);
+  const auto target_allocation = allocation_symbol(target_symbol);
+  const auto target_live = allocation_live_symbol(target_symbol);
+  context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[target_data] = model_data_type(type);
+  register_model_offset(target_symbol, type, context);
+  context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
+  register_ownership_state(target_symbol, context);
+
+  context.active.push_back(NamedPredicate{
+      "model_" + sanitize_symbol(target_symbol) + "_len_non_negative",
+      make_binary(BinaryOp::GreaterEqual, make_identifier(target_len), make_integer(0)),
+      SourceLocation{}, SourceRange{}});
+  add_transition_fact("view_" + target_len, target_len, length, view, context);
+  add_symbol_equality_fact("view_" + target_data, target_data, model_data_symbol(source->name),
+                           view->range, view->location, context);
+  auto absolute_offset =
+      make_binary(BinaryOp::Add, make_identifier(model_offset_symbol(source->name), view->range),
+                  start, view->range);
+  add_transition_fact("view_" + target_offset, target_offset, absolute_offset, view, context);
+  add_symbol_equality_fact("view_" + target_allocation, target_allocation,
+                           allocation_symbol(source->name), view->range, view->location, context);
+  add_symbol_equality_fact("view_" + target_live, target_live, allocation_live_symbol(source->name),
+                           view->range, view->location, context);
+  copy_ownership_state("view_", target_symbol, source->name, view->range, view->location, context);
 }
 
 void register_borrow_transition_binding(const Expr& transition, const std::string& target_symbol,
@@ -1625,6 +1812,7 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
   if (is_model_container_type(type)) {
     context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
+    register_model_offset(target_symbol, type, context);
     context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
     add_symbol_equality_fact("transition_" + model_len_symbol(target_symbol),
@@ -1632,6 +1820,9 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
                              transition->range, transition->location, context);
     add_symbol_equality_fact("transition_" + model_data_symbol(target_symbol),
                              model_data_symbol(target_symbol), model_data_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + model_offset_symbol(target_symbol),
+                             model_offset_symbol(target_symbol), model_offset_symbol(source->name),
                              transition->range, transition->location, context);
   } else {
     context.ref_symbols[target_symbol] = type;
@@ -1723,15 +1914,18 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
   context.symbols[target_symbol] = type;
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
+  const auto target_offset = model_offset_symbol(target_symbol);
   const auto target_allocation = allocation_symbol(target_symbol);
   const auto target_live = allocation_live_symbol(target_symbol);
   const auto source_len = model_len_symbol(source->name);
   const auto source_data = model_data_symbol(source->name);
+  const auto source_offset = model_offset_symbol(source->name);
   const auto source_allocation = allocation_symbol(source->name);
   const auto source_live = allocation_live_symbol(source->name);
 
   context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_data] = model_data_type(type);
+  register_model_offset(target_symbol, type, context);
   context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_live] = Type{TypeKind::Bool, "bool", {}};
   register_ownership_state(target_symbol, context);
@@ -1744,15 +1938,20 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                      len_non_negative, SourceLocation{}, SourceRange{}});
   add_symbol_equality_fact("store_" + target_len, target_len, source_len, expr->range,
                            expr->location, context);
+  add_symbol_equality_fact("store_" + target_offset, target_offset, source_offset, expr->range,
+                           expr->location, context);
   add_symbol_equality_fact("store_" + target_allocation, target_allocation, source_allocation,
                            expr->range, expr->location, context);
   add_symbol_equality_fact("store_" + target_live, target_live, source_live, expr->range,
                            expr->location, context);
   copy_ownership_state("store_", target_symbol, source->name, expr->range, expr->location, context);
 
-  auto store_expr = make_call(
-      std::string(kModelStoreCall),
-      {make_identifier(source_data, expr->arguments[0]->range), index, value}, expr->range);
+  auto physical_index = make_binary(BinaryOp::Add, make_identifier(source_offset, expr->range),
+                                    index, expr->arguments[1]->range);
+  auto store_expr =
+      make_call(std::string(kModelStoreCall),
+                {make_identifier(source_data, expr->arguments[0]->range), physical_index, value},
+                expr->range);
   auto data_equality = make_binary(BinaryOp::Equal, make_identifier(target_data, expr->range),
                                    store_expr, expr->range);
   context.active.push_back(
@@ -1858,6 +2057,11 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     }
 
     if (is_model_type(expected_type)) {
+      if (is_slice_model_type(expected_type) && is_slice_view_call(initializer.expr)) {
+        register_slice_view_binding(initializer.expr, target_field, expected_type, fn, context,
+                                    call_index, structs, functions, theorems, obligations);
+        continue;
+      }
       if (is_borrow_transition_call(initializer.expr)) {
         register_borrow_transition_binding(initializer.expr, target_field, expected_type, fn,
                                            context, call_index, structs, functions, theorems,
@@ -2269,6 +2473,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
       return;
     }
 
+    if (is_slice_model_type(statement.type) && is_slice_view_call(statement.expr)) {
+      register_slice_view_binding(statement.expr, symbol, statement.type, fn, context, call_index,
+                                  structs, functions, theorems, obligations);
+      return;
+    }
+
     if (is_model_container_type(statement.type) && is_model_container_store_call(statement.expr)) {
       register_model_store_binding(statement.expr, symbol, statement.type, fn, context, call_index,
                                    structs, functions, theorems, obligations);
@@ -2471,6 +2681,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     const auto len_symbol = model_len_symbol(symbol);
     context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
+    register_model_offset(symbol, type, context);
     context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[allocation_live_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     register_ownership_state(symbol, context);
