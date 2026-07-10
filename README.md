@@ -130,6 +130,9 @@ production verifier yet.
   maps in saved native artifacts.
 - Binary-proof experiment fact artifacts that link to native IR and explicitly
   record that crash-safety and cycle-bound claims are not proven yet.
+- Native and binary artifacts carry per-function source proof obligations,
+  identify memory-safety gates, preserve solver goals and source ranges, and
+  explicitly mark source proof as not run by `compile`.
 - Cross-platform backend capability tests for builds with and without
   `libgccjit`.
 - CI that exercises the portable compiler core, solver-backed Z3 smoke checks,

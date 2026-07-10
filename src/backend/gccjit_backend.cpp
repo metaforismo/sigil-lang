@@ -1,4 +1,5 @@
 #include "sigil/gccjit_backend.hpp"
+#include "sigil/proof.hpp"
 
 #if SIGIL_HAVE_GCCJIT
 #include <libgccjit.h>
@@ -271,8 +272,63 @@ void emit_signature(std::ostringstream& out, const FunctionDecl& fn) {
   out << ") -> " << fn.return_type.display() << "\n";
 }
 
+bool is_memory_safety_obligation(const ProofObligation& obligation) {
+  static const std::unordered_set<std::string> kinds = {
+      "memory_live",
+      "ownership_present",
+      "shared_borrow_available",
+      "shared_borrow_active",
+      "mutable_borrow_available",
+      "mutable_borrow_active",
+      "index_in_bounds",
+      "memory_valid",
+      "memory_write",
+  };
+  return obligation.name.find(".safety.") != std::string::npos &&
+         kinds.find(obligation.goal.name) != kinds.end();
+}
+
+std::vector<const ProofObligation*>
+proof_obligations_for_function(const FunctionDecl& fn,
+                               const std::vector<ProofObligation>& obligations) {
+  const auto prefix = "fn." + fn.name + ".";
+  std::vector<const ProofObligation*> selected;
+  for (const auto& obligation : obligations) {
+    if (obligation.name.rfind(prefix, 0) == 0) {
+      selected.push_back(&obligation);
+    }
+  }
+  return selected;
+}
+
+void emit_source_proof_facts(std::ostringstream& out, const FunctionDecl& fn,
+                             const std::vector<ProofObligation>& obligations, bool binary_handoff) {
+  const auto selected = proof_obligations_for_function(fn, obligations);
+  const auto memory_count =
+      std::count_if(selected.begin(), selected.end(), [](const auto* obligation) {
+        return is_memory_safety_obligation(*obligation);
+      });
+
+  out << "source-proof-facts\n";
+  out << "  source-proof-status not-run-by-compile\n";
+  out << "  source-proof-obligation-count " << selected.size() << "\n";
+  out << "  source-memory-obligation-count " << memory_count << "\n";
+  out << "  source-proof-proven no\n";
+  if (binary_handoff) {
+    out << "  source-memory-facts-linked yes\n";
+  }
+  for (const auto* obligation : selected) {
+    out << "  " << (is_memory_safety_obligation(*obligation) ? "memory" : "proof") << "-obligation "
+        << obligation->name << "\n";
+    out << "    goal " << obligation->goal.name << ": " << display_expr(obligation->goal.expr)
+        << "\n";
+    out << "    range " << obligation->range.display() << "\n";
+  }
+}
+
 std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionReport& report,
-                                bool debug_info_enabled) {
+                                bool debug_info_enabled,
+                                const std::vector<ProofObligation>& obligations) {
   std::ostringstream out;
   out << "sigil-native-ir v0\n";
   out << "function " << fn.name << "\n";
@@ -286,6 +342,7 @@ std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionRepo
   emit_signature(out, fn);
   emit_native_predicates(out, "requires", fn.preconditions);
   emit_native_predicates(out, "ensures", fn.ensures);
+  emit_source_proof_facts(out, fn, obligations, false);
   out << "body\n";
   if (fn.body.empty()) {
     out << "  (empty)\n";
@@ -298,7 +355,8 @@ std::string emit_native_ir_text(const FunctionDecl& fn, const GccJitFunctionRepo
 }
 
 std::string emit_binary_proof_text(const FunctionDecl& fn, const GccJitFunctionReport& report,
-                                   bool debug_info_enabled) {
+                                   bool debug_info_enabled,
+                                   const std::vector<ProofObligation>& obligations) {
   std::ostringstream out;
   out << "sigil-binary-proof-facts v0\n";
   out << "function " << fn.name << "\n";
@@ -310,6 +368,7 @@ std::string emit_binary_proof_text(const FunctionDecl& fn, const GccJitFunctionR
   emit_signature(out, fn);
   emit_native_predicates(out, "requires", fn.preconditions);
   emit_native_predicates(out, "ensures", fn.ensures);
+  emit_source_proof_facts(out, fn, obligations, true);
 
   out << "binary-proof-scope\n";
   out << "  candidate " << (report.lowered ? "yes" : "no") << "\n";
@@ -1205,6 +1264,7 @@ std::string binary_proof_file_name_for_function(const std::string& function_name
 
 std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module,
                                                             const GccJitCompileResult& result) {
+  const auto obligations = build_obligations(module);
   std::vector<GccJitNativeArtifact> artifacts;
   artifacts.reserve(module.functions.size());
   for (const auto& fn : module.functions) {
@@ -1214,13 +1274,14 @@ std::vector<GccJitNativeArtifact> build_native_ir_artifacts(const Module& module
     const auto& active_report = report ? *report : fallback;
     artifacts.push_back(GccJitNativeArtifact{
         fn.name, native_ir_file_name_for_function(fn.name),
-        emit_native_ir_text(fn, active_report, result.debug_info_enabled), fn.range});
+        emit_native_ir_text(fn, active_report, result.debug_info_enabled, obligations), fn.range});
   }
   return artifacts;
 }
 
 std::vector<GccJitBinaryProofArtifact>
 build_binary_proof_artifacts(const Module& module, const GccJitCompileResult& result) {
+  const auto obligations = build_obligations(module);
   std::vector<GccJitBinaryProofArtifact> artifacts;
   artifacts.reserve(module.functions.size());
   for (const auto& fn : module.functions) {
@@ -1230,7 +1291,8 @@ build_binary_proof_artifacts(const Module& module, const GccJitCompileResult& re
     const auto& active_report = report ? *report : fallback;
     artifacts.push_back(GccJitBinaryProofArtifact{
         fn.name, binary_proof_file_name_for_function(fn.name),
-        emit_binary_proof_text(fn, active_report, result.debug_info_enabled), fn.range});
+        emit_binary_proof_text(fn, active_report, result.debug_info_enabled, obligations),
+        fn.range});
   }
   return artifacts;
 }

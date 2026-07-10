@@ -169,6 +169,45 @@ fn call_twice(x: i64) -> i64
   expect(artifacts[10].text.find("expr.return.value.arg0 backend.sigil:86:18") != std::string::npos,
          "native artifact call argument debug location");
 
+  const char* memory_artifact_source = R"(
+module memory_artifacts;
+
+fn update_ref(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires exclusive: has_mut_borrow(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures exact: result == value;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return load(updated);
+}
+)";
+  const auto memory_artifact_module =
+      sigil::parse_source(memory_artifact_source, "memory-artifacts.sigil");
+  sigil::validate_module(memory_artifact_module);
+  sigil::GccJitCompileResult memory_artifact_result;
+  memory_artifact_result.detail = "artifact-only test";
+  const auto memory_native_artifacts =
+      sigil::build_native_ir_artifacts(memory_artifact_module, memory_artifact_result);
+  const auto memory_binary_artifacts =
+      sigil::build_binary_proof_artifacts(memory_artifact_module, memory_artifact_result);
+  expect(memory_native_artifacts[0].text.find("source-proof-obligation-count 8") !=
+             std::string::npos,
+         "native artifact counts source obligations");
+  expect(memory_native_artifacts[0].text.find("source-memory-obligation-count 7") !=
+             std::string::npos,
+         "native artifact counts memory obligations");
+  expect(memory_binary_artifacts[0].text.find("fn.update_ref.safety.3.mutable_borrow_active") !=
+             std::string::npos,
+         "binary artifact carries mutable borrow gate");
+  expect(memory_binary_artifacts[0].text.find("source-proof-status not-run-by-compile") !=
+             std::string::npos,
+         "binary artifact does not claim source proof");
+  expect(memory_binary_artifacts[0].text.find("source-proof-proven no") != std::string::npos,
+         "binary artifact explicitly denies source proof");
+
 #if SIGIL_HAVE_GCCJIT
   expect(result.available, "gccjit compile result is available");
   expect(result.compiled, "gccjit compile result compiled");

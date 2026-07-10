@@ -272,7 +272,8 @@ Options:
 - `--dump-native-ir`: print deterministic native-lowering artifacts for every
   function. Each artifact includes whether GCCJIT debug information was
   requested and a `debug-locations` map from native-lowered nodes back to Sigil
-  source ranges.
+  source ranges. It also lists planned source proof obligations and the
+  memory-safety subset, marked `not-run-by-compile`.
 - `--save-native-ir <dir>`: write one native-lowering artifact per function to
   `<dir>`, using stable names such as `fn.add_one.native-ir.txt`.
 - `--dump-binary-facts`: print deterministic binary-proof experiment facts for
@@ -281,7 +282,8 @@ Options:
   function to `<dir>`, using stable names such as
   `fn.add_one.binary-facts.txt`. These artifacts record native-lowering status,
   the linked native-IR artifact name, source contracts, source body surface, and
-  explicit negative claims such as `cycle-bound-proven no`.
+  explicit negative claims such as `source-proof-proven no` and
+  `cycle-bound-proven no`.
 
 The current native subset supports pure scalar functions over `i64` and `bool`
 using:
@@ -307,7 +309,8 @@ the native lowering.
 
 Binary-facts artifacts are scaffolding for future binary-level solvers. They do
 not contain machine-code bytes, target instruction semantics, crash-safety
-proofs, or cycle-bound proofs yet.
+proofs, or cycle-bound proofs yet. Their source obligation ledger is traceability
+data, not a proof certificate.
 
 Exit codes:
 

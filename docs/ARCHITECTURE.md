@@ -260,7 +260,9 @@ contracts, lowering status, diagnostic range, body operations, debug-info mode,
 and source-to-native debug location map using the same source expression printer
 that feeds proof diagnostics. They are intentionally plain text so humans and CI
 can compare the solver-visible surface with the native-lowerable surface as the
-backend grows.
+backend grows. Each artifact also contains the function's planned source proof
+obligations and a separately counted memory-safety subset with stable names,
+solver goals, and source ranges. The section is marked `not-run-by-compile`.
 
 `sigil compile --save-binary-facts <dir>` writes a second deterministic artifact
 family for binary-level proof experiments. These files point back to the native
@@ -268,7 +270,8 @@ IR artifact name, record whether a function is a lowered candidate, and state
 that machine-code bytes, target instruction semantics, crash-safety proofs, and
 cycle-bound proofs are not available yet. The goal is to give future external
 binary provers a stable handoff format without making claims the compiler cannot
-check.
+check. Binary artifacts repeat the source obligation ledger and explicitly set
+`source-proof-proven no`; a successful native lowering is not a proof result.
 
 Contracts, loop invariants, `assume`, `assert`, and `theorem` declarations
 remain proof-layer constructs. The native backend erases proof-only constructs
