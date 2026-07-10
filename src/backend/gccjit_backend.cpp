@@ -274,14 +274,9 @@ void emit_signature(std::ostringstream& out, const FunctionDecl& fn) {
 
 bool is_memory_safety_obligation(const ProofObligation& obligation) {
   static const std::unordered_set<std::string> kinds = {
-      "memory_live",
-      "ownership_present",
-      "shared_borrow_available",
-      "shared_borrow_active",
-      "mutable_borrow_available",
-      "mutable_borrow_active",
-      "index_in_bounds",
-      "memory_valid",
+      "memory_live",          "ownership_present",        "shared_borrow_available",
+      "shared_borrow_active", "mutable_borrow_available", "mutable_borrow_active",
+      "index_in_bounds",      "memory_initialized",       "memory_valid",
       "memory_write",
   };
   return obligation.name.find(".safety.") != std::string::npos &&

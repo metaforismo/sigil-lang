@@ -28,11 +28,13 @@ Container instantiations use the same flow, but their model fields also expose
 SMT facts such as `window.items.len == xs.len` and
 `window.items.data == xs.data`, together with allocation identity.
 Array and slice model accesses add `memory_live` and `index_in_bounds` safety
-obligations and emit SMT array `select` terms for `at(model, index)`. Array and
-slice `store(model, index, value)` updates are immutable proof facts: they
-preserve length and memory state, require liveness, ownership, and an active
-mutable borrow, emit write-bounds obligations, and emit SMT array `store` terms
-for the updated backing data.
+obligations followed by `memory_initialized`, and emit SMT array `select` terms
+for `at(model, index)`. This ordered trio is the modeled no-crash gate for a
+container read. Array and slice `store(model, index, value)` updates are
+immutable proof facts: they preserve length and memory state, require liveness,
+ownership, and an active mutable borrow, emit write-bounds obligations, emit an
+SMT array `store` term for the updated backing data, and set exactly that
+physical slot in the successor initialization mask to `true`.
 Reference model loads add `memory_live` and `memory_valid` safety obligations
 and expose modeled allocation, liveness, address, validity, write-permission,
 epoch, and value symbols in SMT.
@@ -57,6 +59,12 @@ tombstone; access through it still fails the ordinary liveness gate.
 `allocate_ref(initial)` create fresh, fully initialized proof snapshots. Size
 constructors emit a nonnegative-length obligation; all constructors establish
 live, owned, borrow-free state and deterministic lifetime-token freshness.
+`allocate_uninit_array(length, witness)` and
+`allocate_uninit_slice(length, witness)` create raw local proof snapshots whose
+initialization masks start false. The witness selects the element type but is
+not readable until a checked store initializes the selected slot.
+`is_initialized(model, index)` exposes the allocation-relative mask bit for
+array and slice proofs.
 The local prover also performs bounded control-flow WP reasoning for branch
 joins and loop-summary conjunctions before invoking Z3.
 
@@ -189,6 +197,12 @@ Example with fresh initialized allocation constructors:
 
 ```sh
 sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250 --save-smt build/fresh-allocation-smt
+```
+
+Example with raw allocation and initialization-safe reads:
+
+```sh
+sigil check examples/initialization_safety.sigil --strict --solver-timeout-ms 250 --save-smt build/initialization-safety-smt
 ```
 
 Example with branch and loop weakest-precondition reasoning:

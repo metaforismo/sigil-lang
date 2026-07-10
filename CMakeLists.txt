@@ -297,6 +297,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/fresh-allocation")
 
 add_test(
+  NAME sigil_cli_initialization_safety_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_initialization_safety.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/initialization_safety.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/initialization-safety")
+
+add_test(
   NAME sigil_cli_control_flow_wp_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_control_flow_wp.sh"
           "$<TARGET_FILE:sigil>"
@@ -379,6 +386,7 @@ if(SIGIL_GCCJIT_AVAILABLE)
     COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_memory_proof_artifacts.sh"
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/native_memory_facts.sigil"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/initialization_safety.sigil"
             "${CMAKE_CURRENT_BINARY_DIR}/memory-proof-artifacts")
   if(SIGIL_GCCJIT_TEST_ENV)
     set_tests_properties(sigil_gccjit_compile_native PROPERTIES
@@ -557,6 +565,15 @@ if(SIGIL_Z3_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/fresh_allocation.sigil"
             "${CMAKE_CURRENT_BINARY_DIR}/fresh-allocation-z3")
   set_tests_properties(sigil_z3_fresh_allocation PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_initialization_safety
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_initialization_safety_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/initialization_safety.sigil"
+            "${CMAKE_CURRENT_BINARY_DIR}/initialization-safety-z3")
+  set_tests_properties(sigil_z3_initialization_safety PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

@@ -892,6 +892,34 @@ requires invalid: is_live(allocate_ref(0));
 
   expect_diagnostic(R"(
 module bad;
+fn raw_allocation_arity() -> bool
+{
+  let values: Slice[i64] = allocate_uninit_slice(1);
+  return true;
+}
+)",
+                    "allocate_uninit_slice expects 2 argument(s), got 1");
+
+  expect_diagnostic(R"(
+module bad;
+fn ref_initialization(ptr: Ref[i64]) -> bool
+{
+  return is_initialized(ptr, 0);
+}
+)",
+                    "is_initialized expects an Array[T] or Slice[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn bool_initialization_index(values: Array[i64]) -> bool
+{
+  return is_initialized(values, true);
+}
+)",
+                    "is_initialized index must be i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_ref_element(ptr: Ref[Slice[i64]]) -> i64
 {
   return 0;

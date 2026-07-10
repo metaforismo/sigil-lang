@@ -47,13 +47,13 @@ production verifier yet.
   SMT.
 - Proof-level `Array[T]` and `Slice[T]` model types with `len(value)` and
   `at(value, index)` intrinsics.
-- `at` emits allocation-liveness and index-in-bounds proof obligations and
-  lowers to SMT `select` over an abstract backing array whose element sort
-  comes from `T`.
+- `at` emits ordered allocation-liveness, index-in-bounds, and
+  memory-initialized proof obligations. Together they are the compile-time
+  no-crash gate for modeled container reads.
 - Immutable proof-level `store(model, index, value)` facts for `Array[T]` and
   `Slice[T]`: stores require a live owned allocation under an active mutable
   borrow, preserve length and memory state, emit write-bounds obligations, and
-  lower to SMT array `store`.
+  lower data and initialization masks to SMT array `store`.
 - Proof-level `Ref[T]` model types with `is_valid(ref)`, `can_write(ref)`,
   `addr(ref)`, `epoch(ref)`, `load(ref)`, `same_ref(left, right)`, and
   `disjoint(left, right)` intrinsics.
@@ -91,6 +91,10 @@ production verifier yet.
   constructors. They establish live, owned, borrow-free state, typed initial
   contents, deterministic lifetime-token freshness, and fresh current reference
   addresses; sized allocations must prove a nonnegative length.
+- Raw `allocate_uninit_array` and `allocate_uninit_slice` constructors plus
+  `is_initialized(model, index)`. Raw masks start false, model stores set exactly
+  their physical write index true, and aliases, views, borrows, moves, and
+  tombstones preserve mask snapshots.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Bounded control-flow weakest-precondition reasoning: the local prover splits
@@ -214,6 +218,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/initialization_safety.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
@@ -298,9 +303,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- explicit partial-initialization tracking and uninitialized-read gates, richer
-  lifetime and provenance rules, and path-sensitive consuming transitions
-  beyond the current conservative proof allocation/deallocation model;
+- richer lifetime and provenance rules, path-sensitive consuming transitions,
+  and function-boundary semantics for partially initialized models beyond the
+  current local proof allocation/deallocation model;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

@@ -109,19 +109,21 @@ Container invariant obligations use the
 distinct from ordinary struct invariant obligations while still following the
 same deterministic proof flow.
 
-Array and slice model parameters are materialized as five proof symbols:
-`value.alloc`, `value.live`, `value.len`, `value.offset`, and `value.data`. The
-allocation, length, and offset symbols are `Int`, liveness is `Bool`, and data
-is an SMT array from integer indices to the concrete element sort. For example,
-`Slice[i64]` creates `(Array Int Int)` data, while `Array[bool]` creates
-`(Array Int Bool)` data. Array offsets are constrained to zero; slice offsets
-are non-negative.
+Array and slice model parameters are materialized as six proof symbols:
+`value.alloc`, `value.live`, `value.len`, `value.offset`, `value.data`, and
+`value.init`. The allocation, length, and offset symbols are `Int`, liveness is
+`Bool`, data is an SMT array from integer indices to the concrete element sort,
+and initialization is `(Array Int Bool)`. Function-entry masks are currently
+fixed to true for safe-container boundary compatibility. Array offsets are
+constrained to zero; slice offsets are non-negative.
 `len(xs)` lowers to `xs.len`, `is_live(xs)` lowers to `xs.live`, and
 `at(xs, i)` lowers to `(select xs.data (+ xs.offset i))`.
 
 Every `at(container, index)` expression first emits a `memory_live` obligation
-whose goal is `is_live(container)`, followed by an `index_in_bounds` obligation
-at the access site. The bounds goal is:
+whose goal is `is_live(container)`, followed by `index_in_bounds`, then
+`memory_initialized` at the access site. The final goal selects
+`container.init[container.offset + index]`. These three obligations are the
+modeled no-crash gate for a container read. The bounds goal is:
 
 ```sigil
 index >= 0 && index < len(container)
@@ -146,6 +148,7 @@ updated.has_owner == xs.has_owner
 updated.shared == xs.shared
 updated.mut_borrow == xs.mut_borrow
 updated.data == store(xs.data, xs.offset + i, value)
+updated.init == store(xs.init, xs.offset + i, true)
 ```
 
 The write emits `memory_live`, `ownership_present`, `mutable_borrow_active`,
@@ -161,7 +164,8 @@ native-memory semantics.
 
 `slice_view(xs, start, count)` emits `memory_live` and `view_in_bounds`
 obligations, then materializes a result with the same data/allocation/liveness
-and ownership state, length `count`, and offset `xs.offset + start`.
+initialization mask, and ownership state, length `count`, and offset
+`xs.offset + start`.
 `same_view` lowers to allocation/offset/length equality. `overlaps` lowers to
 same-allocation plus intersection of the two half-open element ranges. Both
 arguments must have the same `Slice[T]` type because byte-level layout is not
@@ -245,6 +249,7 @@ their component facts are:
 allocated.len == length
 allocated.offset == 0
 allocated.data == const_array(initial)
+allocated.init == const_array(true)
 allocated.live == true
 allocated.has_owner == true
 allocated.shared == 0
@@ -255,6 +260,13 @@ The SMT data equality uses a typed constant array, so any proved in-bounds read
 of a newly allocated container equals `initial`. `allocate_ref(initial)` has no
 size gate and additionally sets `valid` and `write` true, `value` to `initial`,
 and `epoch` to zero. Its address differs from every current reference root.
+
+`allocate_uninit_array(length, witness)` and
+`allocate_uninit_slice(length, witness)` use the same size, freshness, liveness,
+and ownership rules but set `allocated.init == const_array(false)`. The witness
+only selects the element sort and backs inaccessible data until a checked store
+sets one physical initialization bit. Aliases, views, borrow transitions,
+consuming moves, and tombstones copy the mask unchanged.
 
 Allocation identity freshness is a constructor fact, not a caller obligation.
 The planner retains a deterministic history of materialized allocation symbols
@@ -303,10 +315,10 @@ the local weakest-precondition substitution can prove straight-line facts such
 as `load(store(ref, value)) == value` once the store has been materialized.
 
 The reference model is intentionally not a full memory semantics. It now has a
-conservative consuming deallocation transition and fresh initialized abstract
-constructors, but no partial-initialization state, field projection, byte
-layout, native memory mutation, runtime alias invalidation, or native-code
-provenance model. The write-permission bit is
+conservative consuming deallocation transition, fresh allocation constructors,
+and local partial-initialization state, but no field projection, byte layout,
+native memory mutation, runtime alias invalidation, partial-state function
+boundaries, or native-code provenance model. The write-permission bit is
 an additional proof fact beyond the owner and mutable-borrow gates. Allocation
 identity alone does not imply liveness, and live entry state still comes from
 contracts. Those pieces must be added before Sigil can claim low-level memory
