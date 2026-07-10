@@ -7,6 +7,7 @@ ensures same_entry_epoch: epoch(left) == epoch(right);
 }
 
 fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures next_epoch: result == epoch(ptr) + 1;

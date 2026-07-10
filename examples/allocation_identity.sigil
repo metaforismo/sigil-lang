@@ -20,6 +20,7 @@ ensures preserved: result;
 }
 
 fn model_store_preserves_allocation(xs: Slice[i64], index: i64, value: i64) -> bool
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures preserved: result;
 {
@@ -28,6 +29,7 @@ ensures preserved: result;
 }
 
 fn ref_store_preserves_allocation(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures preserved: result;

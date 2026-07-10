@@ -1,6 +1,8 @@
 module ref_aliases;
 
 fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
+requires left_live: is_live(left);
+requires right_live: is_live(right);
 requires left_valid: is_valid(left);
 requires right_valid: is_valid(right);
 requires same: same_ref(left, right);
@@ -10,6 +12,8 @@ ensures exact: result == load(right);
 }
 
 fn same_bool_ref_loads_match(left: Ref[bool], right: Ref[bool]) -> bool
+requires left_live: is_live(left);
+requires right_live: is_live(right);
 requires left_valid: is_valid(left);
 requires right_valid: is_valid(right);
 requires same: same_ref(left, right);

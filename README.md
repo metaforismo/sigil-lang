@@ -43,19 +43,21 @@ production verifier yet.
   parameter.
 - First-class `container` declarations on the generic aggregate foundation,
   with proof-level `Array[T]`, `Slice[T]`, and `Ref[T]` fields that materialize
-  allocation/length/data/address/validity/write/value/epoch facts in SMT.
+  allocation/liveness/length/data/address/validity/write/value/epoch facts in
+  SMT.
 - Proof-level `Array[T]` and `Slice[T]` model types with `len(value)` and
   `at(value, index)` intrinsics.
-- `at` emits index-in-bounds proof obligations and lowers to SMT `select` over
-  an abstract backing array whose element sort comes from `T`.
+- `at` emits allocation-liveness and index-in-bounds proof obligations and
+  lowers to SMT `select` over an abstract backing array whose element sort
+  comes from `T`.
 - Immutable proof-level `store(model, index, value)` facts for `Array[T]` and
   `Slice[T]`: stores preserve length, emit write-bounds obligations, and lower
   to SMT array `store`.
 - Proof-level `Ref[T]` model types with `is_valid(ref)`, `can_write(ref)`,
   `addr(ref)`, `epoch(ref)`, `load(ref)`, `same_ref(left, right)`, and
   `disjoint(left, right)` intrinsics.
-- `load` emits memory-valid proof obligations before exposing the modeled
-  referenced value.
+- `load` emits allocation-liveness and memory-valid proof obligations before
+  exposing the modeled referenced value.
 - Valid same-epoch, same-address `Ref[T]` snapshots of the same element type
   imply equal modeled loaded values in SMT.
 - Immutable proof-level `store(ref, value)` facts for `Ref[T]`: stores require
@@ -66,6 +68,9 @@ production verifier yet.
   `same_allocation(left, right)`, and `disjoint_allocation(left, right)` for
   arrays, slices, and references. Aliases and immutable stores preserve the
   deterministic allocation token.
+- Cross-model allocation liveness through `is_live(value)`. Every array/slice
+  access and every reference load/store must prove liveness; aliases and
+  immutable stores preserve the liveness fact.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -171,6 +176,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/ref_epochs.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/ref_permissions.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/allocation_identity.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/allocation_liveness.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt
@@ -254,8 +260,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are, in order:
 
 - ownership, lifetime, allocation transitions, provenance rules, and richer
-  memory-state semantics beyond the current explicit allocation identity and
-  reference validity/write-permission facts;
+  memory-state semantics beyond the current explicit allocation identity,
+  liveness, and reference validity/write-permission facts;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

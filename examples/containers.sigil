@@ -9,6 +9,7 @@ container Window[T] {
 }
 
 fn read_window(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == at(xs, index);
 {

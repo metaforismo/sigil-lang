@@ -13,16 +13,19 @@ output="$("$sigil_bin" check "$example_file" --no-z3 --solver-timeout-ms 250 --s
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 4" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 8" >/dev/null
-printf '%s\n' "$output" | grep "fn.read_ref.safety.1.memory_valid" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 12" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_ref.safety.1.memory_live" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_ref.safety.2.memory_valid" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_flag.ensures.1.exact" >/dev/null
 printf '%s\n' "$output" | grep "fn.refs_are_disjoint.ensures.1.exact" >/dev/null
 
-ref_valid="$smt_dir/fn.read_ref.safety.1.memory_valid.smt2"
+ref_live="$smt_dir/fn.read_ref.safety.1.memory_live.smt2"
+ref_valid="$smt_dir/fn.read_ref.safety.2.memory_valid.smt2"
 bool_load="$smt_dir/fn.read_flag.ensures.1.exact.smt2"
 disjoint="$smt_dir/fn.refs_are_disjoint.ensures.1.exact.smt2"
 same_ref="$smt_dir/fn.refs_are_same.ensures.1.exact.smt2"
 
+test -f "$ref_live"
 test -f "$ref_valid"
 test -f "$bool_load"
 test -f "$disjoint"
@@ -36,3 +39,5 @@ grep "(declare-const ptr_value Bool)" "$bool_load" >/dev/null
 grep "(assert (= result ptr_value))" "$bool_load" >/dev/null
 grep "(assert (= result (distinct left_addr right_addr)))" "$disjoint" >/dev/null
 grep "(assert (= result (= left_addr right_addr)))" "$same_ref" >/dev/null
+grep "(assert ptr_live)" "$ref_live" >/dev/null
+grep "(assert (not ptr_live))" "$ref_live" >/dev/null

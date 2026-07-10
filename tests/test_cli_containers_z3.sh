@@ -12,3 +12,4 @@ printf '%s\n' "$output" | grep "\[PROVEN\] fn.read_window.container.window.invar
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.read_window.container.window.invariant.2.index_within_items" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.read_window.assert.1.len_visible" >/dev/null
 printf '%s\n' "$output" | grep "\[PROVEN\] fn.read_window.assert.2.index_visible" >/dev/null
+printf '%s\n' "$output" | grep "\[PROVEN\] fn.read_window.safety.1.memory_live" >/dev/null
