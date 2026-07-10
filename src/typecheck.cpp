@@ -266,7 +266,8 @@ bool is_model_intrinsic_name(const std::string& name) {
   return name == "len" || name == "at" || name == "store" || name == "load" || name == "is_valid" ||
          name == "addr" || name == "epoch" || name == "can_write" || name == "same_ref" ||
          name == "disjoint" || name == "allocation_id" || name == "same_allocation" ||
-         name == "disjoint_allocation" || name == "is_live";
+         name == "disjoint_allocation" || name == "is_live" || name == "owner_id" ||
+         name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -424,6 +425,21 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                        "is_live expects an Array[T], Slice[T], or Ref[T] argument");
     }
     return Type{TypeKind::Bool, "bool", {}};
+  }
+
+  if (expr->name == "owner_id" || expr->name == "has_owner" || expr->name == "shared_borrows" ||
+      expr->name == "has_mut_borrow") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, expr->name + " expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       expr->name + " expects an Array[T], Slice[T], or Ref[T] argument");
+    }
+    const auto returns_bool = expr->name == "has_owner" || expr->name == "has_mut_borrow";
+    return Type{returns_bool ? TypeKind::Bool : TypeKind::I64, returns_bool ? "bool" : "i64", {}};
   }
 
   if (expr->name == "same_allocation" || expr->name == "disjoint_allocation") {

@@ -980,6 +980,102 @@ requires in_bounds: index >= 0 && index < len(xs);
   expect(missing_liveness_results[1].status == sigil::VerificationStatus::Proven,
          "bounds do not depend on liveness");
 
+  const char* ownership_state_source = R"(
+module ownership_state;
+
+fn shared_count_nonnegative(xs: Slice[i64]) -> i64
+ensures nonnegative: result >= 0;
+{
+  return shared_borrows(xs);
+}
+
+fn mutable_excludes_shared(xs: Array[bool]) -> bool
+ensures consistent: result;
+{
+  return !has_mut_borrow(xs) || shared_borrows(xs) == 0;
+}
+
+fn owner_has_identity(ptr: Ref[i64]) -> i64
+requires owned: has_owner(ptr);
+ensures nonzero: result != 0;
+{
+  return owner_id(ptr);
+}
+
+fn alias_preserves_owner(xs: Slice[i64]) -> bool
+ensures preserved: result;
+{
+  let alias: Slice[i64] = xs;
+  return owner_id(alias) == owner_id(xs) && has_owner(alias) == has_owner(xs) &&
+         shared_borrows(alias) == shared_borrows(xs) &&
+         has_mut_borrow(alias) == has_mut_borrow(xs);
+}
+
+fn model_store_preserves_borrows(xs: Array[bool], index: i64, value: bool) -> bool
+requires live: is_live(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures preserved: result;
+{
+  let updated: Array[bool] = store(xs, index, value);
+  return owner_id(updated) == owner_id(xs) && has_owner(updated) == has_owner(xs) &&
+         shared_borrows(updated) == shared_borrows(xs) &&
+         has_mut_borrow(updated) == has_mut_borrow(xs);
+}
+
+fn ref_store_preserves_borrows(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures preserved: result;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return owner_id(updated) == owner_id(ptr) && has_owner(updated) == has_owner(ptr) &&
+         shared_borrows(updated) == shared_borrows(ptr) &&
+         has_mut_borrow(updated) == has_mut_borrow(ptr);
+}
+)";
+
+  const auto ownership_state_module =
+      sigil::parse_source(ownership_state_source, "ownership-state.sigil");
+  const auto ownership_state_obligations = sigil::build_obligations(ownership_state_module);
+  expect(ownership_state_obligations.size() == 11, "ownership state obligations");
+  const auto ownership_state_results =
+      sigil::verify_obligations(ownership_state_obligations, false);
+  expect(ownership_state_results[0].status == sigil::VerificationStatus::Proven,
+         "shared count invariant proven locally");
+  expect(ownership_state_results[1].status == sigil::VerificationStatus::Proven,
+         "borrow exclusion invariant proven locally");
+  expect(ownership_state_results[2].status == sigil::VerificationStatus::Unknown,
+         "owner implication needs SMT reasoning");
+  expect(ownership_state_results[3].status == sigil::VerificationStatus::Unknown,
+         "alias state conjunction needs SMT reasoning");
+  expect(ownership_state_results[4].status == sigil::VerificationStatus::Proven,
+         "model store liveness proven locally");
+  expect(ownership_state_results[5].status == sigil::VerificationStatus::Proven,
+         "model store bounds proven locally");
+  expect(ownership_state_results[6].status == sigil::VerificationStatus::Unknown,
+         "model state conjunction needs SMT reasoning");
+  expect(ownership_state_results[7].status == sigil::VerificationStatus::Proven,
+         "ref store liveness proven locally");
+  expect(ownership_state_results[8].status == sigil::VerificationStatus::Proven,
+         "ref store validity proven locally");
+  expect(ownership_state_results[9].status == sigil::VerificationStatus::Proven,
+         "ref store permission proven locally");
+  expect(ownership_state_results[10].status == sigil::VerificationStatus::Unknown,
+         "ref state conjunction needs SMT reasoning");
+  const auto alias_owner_smt = sigil::emit_smt_lib(ownership_state_obligations[3]);
+  expect(alias_owner_smt.find("(assert (= alias_owner xs_owner))") != std::string::npos,
+         "alias preserves owner identity");
+  expect(alias_owner_smt.find("(assert (= alias_shared xs_shared))") != std::string::npos,
+         "alias preserves shared borrow count");
+  const auto model_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[6]);
+  expect(model_borrow_smt.find("(assert (= updated_mut_borrow xs_mut_borrow))") !=
+             std::string::npos,
+         "model store preserves mutable borrow state");
+  const auto ref_borrow_smt = sigil::emit_smt_lib(ownership_state_obligations[10]);
+  expect(ref_borrow_smt.find("(assert (= updated_owner ptr_owner))") != std::string::npos,
+         "ref store preserves owner identity");
+
   const char* ref_epoch_source = R"(
 module ref_epochs;
 

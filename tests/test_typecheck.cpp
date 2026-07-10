@@ -321,6 +321,18 @@ ensures exact: result == (is_live(xs) && is_live(ptr));
   return is_live(xs) && is_live(ptr);
 }
 
+fn expose_ownership(xs: Array[i64], ptr: Ref[bool]) -> bool
+ensures exact: result == (has_owner(xs) && owner_id(xs) != owner_id(ptr));
+{
+  return has_owner(xs) && owner_id(xs) != owner_id(ptr);
+}
+
+fn expose_borrows(xs: Slice[i64]) -> bool
+ensures exact: result == (shared_borrows(xs) >= 0 && !has_mut_borrow(xs));
+{
+  return shared_borrows(xs) >= 0 && !has_mut_borrow(xs);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -641,6 +653,24 @@ fn is_live_scalar(x: i64) -> bool
 }
 )",
                     "is_live expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn owner_id_scalar(x: i64) -> i64
+{
+  return owner_id(x);
+}
+)",
+                    "owner_id expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn shared_borrows_scalar(x: i64) -> i64
+{
+  return shared_borrows(x);
+}
+)",
+                    "shared_borrows expects an Array[T], Slice[T], or Ref[T] argument");
 
   expect_diagnostic(R"(
 module bad;
