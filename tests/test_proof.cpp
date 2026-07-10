@@ -709,6 +709,102 @@ ensures exact: result == can_write(ptr);
   expect(ref_permission_results[3].status == sigil::VerificationStatus::Proven,
          "ref store write permission preservation proven locally");
 
+  const char* allocation_identity_source = R"(
+module allocation_identity;
+
+fn expose_allocation(xs: Slice[i64]) -> i64
+ensures exact: result == allocation_id(xs);
+{
+  return allocation_id(xs);
+}
+
+fn classify_allocations(xs: Slice[i64], ptr: Ref[bool]) -> bool
+ensures exact: result == disjoint_allocation(xs, ptr);
+{
+  return disjoint_allocation(xs, ptr);
+}
+
+fn alias_preserves_allocation(xs: Array[i64]) -> bool
+ensures preserved: result;
+{
+  let alias: Array[i64] = xs;
+  return same_allocation(alias, xs);
+}
+
+fn model_store_preserves_allocation(xs: Slice[i64], index: i64, value: i64) -> bool
+requires in_bounds: index >= 0 && index < len(xs);
+ensures preserved: result;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  return same_allocation(updated, xs);
+}
+
+fn ref_store_preserves_allocation(ptr: Ref[i64], value: i64) -> bool
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures preserved: result;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return same_allocation(updated, ptr);
+}
+)";
+
+  const auto allocation_identity_module =
+      sigil::parse_source(allocation_identity_source, "allocation-identity.sigil");
+  const auto allocation_identity_obligations = sigil::build_obligations(allocation_identity_module);
+  expect(allocation_identity_obligations.size() == 8, "allocation identity obligations");
+  expect(allocation_identity_obligations[0].name == "fn.expose_allocation.ensures.1.exact",
+         "allocation id ensure obligation");
+  expect(allocation_identity_obligations[1].name == "fn.classify_allocations.ensures.1.exact",
+         "allocation disjointness ensure obligation");
+  expect(allocation_identity_obligations[2].name ==
+             "fn.alias_preserves_allocation.ensures.1.preserved",
+         "allocation alias preservation obligation");
+  expect(allocation_identity_obligations[3].name ==
+             "fn.model_store_preserves_allocation.safety.1.index_in_bounds",
+         "allocation model store bounds obligation");
+  expect(allocation_identity_obligations[4].name ==
+             "fn.model_store_preserves_allocation.ensures.1.preserved",
+         "allocation model store preservation obligation");
+  expect(allocation_identity_obligations[5].name ==
+             "fn.ref_store_preserves_allocation.safety.1.memory_valid",
+         "allocation ref store validity obligation");
+  expect(allocation_identity_obligations[6].name ==
+             "fn.ref_store_preserves_allocation.safety.2.memory_write",
+         "allocation ref store write obligation");
+  expect(allocation_identity_obligations[7].name ==
+             "fn.ref_store_preserves_allocation.ensures.1.preserved",
+         "allocation ref store preservation obligation");
+
+  const auto expose_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[0]);
+  expect(expose_allocation_smt.find("(declare-const xs_alloc Int)") != std::string::npos,
+         "allocation id symbol is declared");
+  expect(expose_allocation_smt.find("(assert (= result xs_alloc))") != std::string::npos,
+         "allocation_id lowers to allocation symbol");
+  const auto classify_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[1]);
+  expect(classify_allocation_smt.find("(declare-const ptr_alloc Int)") != std::string::npos,
+         "ref allocation symbol is declared");
+  expect(classify_allocation_smt.find("(assert (= result (distinct xs_alloc ptr_alloc)))") !=
+             std::string::npos,
+         "disjoint_allocation lowers to allocation inequality");
+  const auto alias_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[2]);
+  expect(alias_allocation_smt.find("(assert (= alias_alloc xs_alloc))") != std::string::npos,
+         "model alias preserves allocation identity");
+  const auto model_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[4]);
+  expect(model_store_allocation_smt.find("(assert (= updated_alloc xs_alloc))") !=
+             std::string::npos,
+         "model store preserves allocation identity");
+  const auto ref_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[7]);
+  expect(ref_store_allocation_smt.find("(assert (= updated_alloc ptr_alloc))") != std::string::npos,
+         "ref store preserves allocation identity");
+
+  const auto allocation_identity_results =
+      sigil::verify_obligations(allocation_identity_obligations, false);
+  for (const auto& result : allocation_identity_results) {
+    expect(result.status == sigil::VerificationStatus::Proven,
+           "allocation identity obligation proven locally");
+  }
+
   const char* ref_epoch_source = R"(
 module ref_epochs;
 

@@ -98,17 +98,18 @@ let window: Window[i64] = Window[i64] { items: xs, index: index };
 
 the scalar field creates `window.index == index`, while the slice field creates
 component facts such as `window.items.len == xs.len` and
-`window.items.data == xs.data`. Container invariant obligations use the
+`window.items.data == xs.data`, plus the shared allocation-identity fact.
+Container invariant obligations use the
 `fn.name.container.local.invariant.N.label` artifact namespace, making them
 distinct from ordinary struct invariant obligations while still following the
 same deterministic proof flow.
 
-Array and slice model parameters are materialized as two proof symbols:
-`value.len` and `value.data`. The length symbol is an `Int`; the data symbol is
-an SMT array from integer indices to the concrete element sort. For example,
-`Slice[i64]` creates `(Array Int Int)` data, while `Array[bool]` creates
-`(Array Int Bool)` data. `len(xs)` lowers to `xs.len`, and `at(xs, i)` lowers to
-`(select xs.data i)`.
+Array and slice model parameters are materialized as three proof symbols:
+`value.alloc`, `value.len`, and `value.data`. The allocation and length symbols
+are `Int`; the data symbol is an SMT array from integer indices to the concrete
+element sort. For example, `Slice[i64]` creates `(Array Int Int)` data, while
+`Array[bool]` creates `(Array Int Bool)` data. `len(xs)` lowers to `xs.len`, and
+`at(xs, i)` lowers to `(select xs.data i)`.
 
 Every `at(container, index)` expression emits an `index_in_bounds` safety
 obligation at the access site. The goal is:
@@ -128,26 +129,36 @@ component facts for the new model:
 
 ```sigil
 updated.len == xs.len
+updated.alloc == xs.alloc
 updated.data == store(xs.data, i, value)
 ```
 
 The write also emits an `index_in_bounds` safety obligation at the store site.
 Reads from the updated model then lower to `select(updated.data, index)`, so Z3
 can prove standard array-theory facts such as reading the same index that was
-just written. This is still not runtime mutation: Sigil does not model aliasing,
-allocation, slice origins, pointer provenance, or native memory effects yet.
+just written. This is still not runtime mutation: the allocation token is an
+abstract identity, not allocation creation, liveness, ownership, slice-range,
+or native-memory semantics.
 
 Reference model parameters are materialized as `ref.addr`, `ref.valid`,
-`ref.write`, `ref.value`, and `ref.epoch`. `addr(ref)` lowers to the address
-symbol, `is_valid(ref)` lowers to the validity symbol, `can_write(ref)` lowers
-to the write-permission symbol, `load(ref)` lowers to the value symbol, and
-`epoch(ref)` lowers to the epoch symbol. Every `load` also emits a
+`ref.write`, `ref.value`, `ref.epoch`, and `ref.alloc`. `addr(ref)` lowers to
+the address symbol, `is_valid(ref)` lowers to the validity symbol,
+`can_write(ref)` lowers to the write-permission symbol, `load(ref)` lowers to
+the value symbol, `epoch(ref)` lowers to the epoch symbol, and
+`allocation_id(ref)` lowers to the allocation symbol. Every `load` also emits a
 `memory_valid` safety obligation whose goal is `is_valid(ref)` at the access
 site. Function-entry references share an internal `__sigil_entry_epoch`, and
 model aliases preserve the source epoch and write permission. Address
 predicates are purely modeled facts today:
 `same_ref(a, b)` lowers to `addr(a) == addr(b)`, and `disjoint(a, b)` lowers to
 `addr(a) != addr(b)`.
+
+All three memory proof models use the same allocation-identity surface.
+`same_allocation(a, b)` lowers to `a.alloc == b.alloc`, while
+`disjoint_allocation(a, b)` lowers to `a.alloc != b.alloc`. These predicates
+accept any pair of `Array[T]`, `Slice[T]`, or `Ref[T]` values, even across
+different element types, because the identity token is deliberately separate
+from the value's typed view. Model aliases and both store forms preserve it.
 
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:
@@ -172,6 +183,7 @@ facts for the new reference:
 updated.addr == ref.addr
 updated.valid == ref.valid
 updated.write == ref.write
+updated.alloc == ref.alloc
 updated.value == value
 updated.epoch == ref.epoch + 1
 ```
@@ -182,10 +194,11 @@ the local weakest-precondition substitution can prove straight-line facts such
 as `load(store(ref, value)) == value` once the store has been materialized.
 
 The reference model is intentionally not a full memory semantics. It has no
-allocation, lifetime, borrow, aliasing, field projection, byte layout, native
-memory mutation, ownership, or native-code provenance model yet. The
+allocation creation or destruction, lifetime, borrow, field projection, byte
+layout, native memory mutation, ownership, or native-code provenance model yet. The
 write-permission bit is a proof fact for the current write gate, not a complete
-borrowing discipline. Those pieces must be added before Sigil can claim
+borrowing discipline, and allocation identity alone does not imply liveness or
+address-range disjointness. Those pieces must be added before Sigil can claim
 low-level memory safety beyond explicit validity/write obligations, epoch
 ordering, and same-snapshot alias consistency.
 

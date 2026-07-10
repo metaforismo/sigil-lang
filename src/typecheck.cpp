@@ -265,7 +265,8 @@ CallableContext with_theorem_calls_allowed(const CallableContext& context) {
 bool is_model_intrinsic_name(const std::string& name) {
   return name == "len" || name == "at" || name == "store" || name == "load" || name == "is_valid" ||
          name == "addr" || name == "epoch" || name == "can_write" || name == "same_ref" ||
-         name == "disjoint";
+         name == "disjoint" || name == "allocation_id" || name == "same_allocation" ||
+         name == "disjoint_allocation";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -395,6 +396,34 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
     const auto ref = infer_expr(expr->arguments[0], symbols, structs, context);
     if (!is_ref_model_type(ref)) {
       throw Diagnostic(expr->arguments[0]->range, "can_write expects a Ref[T] argument");
+    }
+    return Type{TypeKind::Bool, "bool", {}};
+  }
+
+  if (expr->name == "allocation_id") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, "allocation_id expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       "allocation_id expects an Array[T], Slice[T], or Ref[T] argument");
+    }
+    return Type{TypeKind::I64, "i64", {}};
+  }
+
+  if (expr->name == "same_allocation" || expr->name == "disjoint_allocation") {
+    if (expr->arguments.size() != 2) {
+      throw Diagnostic(expr->range, expr->name + " expects 2 arguments, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    for (const auto& argument : expr->arguments) {
+      const auto model = infer_expr(argument, symbols, structs, context);
+      if (!is_model_type(model)) {
+        throw Diagnostic(argument->range,
+                         expr->name + " expects Array[T], Slice[T], or Ref[T] arguments");
+      }
     }
     return Type{TypeKind::Bool, "bool", {}};
   }

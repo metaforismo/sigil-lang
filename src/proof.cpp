@@ -460,6 +460,10 @@ std::string model_data_symbol(const std::string& symbol) {
   return symbol + ".data";
 }
 
+std::string allocation_symbol(const std::string& symbol) {
+  return symbol + ".alloc";
+}
+
 std::string ref_addr_symbol(const std::string& symbol) {
   return symbol + ".addr";
 }
@@ -551,6 +555,18 @@ Expr lower_model_intrinsic_call(std::string name, std::vector<Expr> arguments,
   if (name == "can_write" && arguments.size() == 1 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier) {
     return make_identifier(ref_write_symbol(arguments[0]->name), range);
+  }
+  if (name == "allocation_id" && arguments.size() == 1 && arguments[0] &&
+      arguments[0]->kind == ExprNode::Kind::Identifier) {
+    return make_identifier(allocation_symbol(arguments[0]->name), range);
+  }
+  if ((name == "same_allocation" || name == "disjoint_allocation") && arguments.size() == 2 &&
+      arguments[0] && arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
+      arguments[1]->kind == ExprNode::Kind::Identifier) {
+    auto lhs = make_identifier(allocation_symbol(arguments[0]->name), arguments[0]->range);
+    auto rhs = make_identifier(allocation_symbol(arguments[1]->name), arguments[1]->range);
+    return make_binary(name == "same_allocation" ? BinaryOp::Equal : BinaryOp::NotEqual, lhs, rhs,
+                       range);
   }
   if ((name == "same_ref" || name == "disjoint") && arguments.size() == 2 && arguments[0] &&
       arguments[0]->kind == ExprNode::Kind::Identifier && arguments[1] &&
@@ -954,7 +970,9 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
 
   if (expr->name == "len" || expr->name == "at" || expr->name == "load" ||
       expr->name == "is_valid" || expr->name == "addr" || expr->name == "epoch" ||
-      expr->name == "can_write" || expr->name == "same_ref" || expr->name == "disjoint") {
+      expr->name == "can_write" || expr->name == "same_ref" || expr->name == "disjoint" ||
+      expr->name == "allocation_id" || expr->name == "same_allocation" ||
+      expr->name == "disjoint_allocation") {
     std::vector<Expr> arguments;
     arguments.reserve(expr->arguments.size());
     for (const auto& argument : expr->arguments) {
@@ -1072,10 +1090,13 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
   if (is_model_container_type(type)) {
     const auto target_len = model_len_symbol(target_symbol);
     const auto target_data = model_data_symbol(target_symbol);
+    const auto target_allocation = allocation_symbol(target_symbol);
     const auto source_len = model_len_symbol(source_expr->name);
     const auto source_data = model_data_symbol(source_expr->name);
+    const auto source_allocation = allocation_symbol(source_expr->name);
     context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_data] = model_data_type(type);
+    context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
 
     auto len_non_negative =
         make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
@@ -1087,6 +1108,8 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              context);
     add_symbol_equality_fact("field_" + target_data, target_data, source_data, range, location,
                              context);
+    add_symbol_equality_fact("field_" + target_allocation, target_allocation, source_allocation,
+                             range, location, context);
     return;
   }
 
@@ -1096,17 +1119,20 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     const auto target_value = ref_value_symbol(target_symbol);
     const auto target_write = ref_write_symbol(target_symbol);
     const auto target_epoch = ref_epoch_symbol(target_symbol);
+    const auto target_allocation = allocation_symbol(target_symbol);
     const auto source_addr = ref_addr_symbol(source_expr->name);
     const auto source_valid = ref_valid_symbol(source_expr->name);
     const auto source_value = ref_value_symbol(source_expr->name);
     const auto source_write = ref_write_symbol(source_expr->name);
     const auto source_epoch = ref_epoch_symbol(source_expr->name);
+    const auto source_allocation = allocation_symbol(source_expr->name);
     context.ref_symbols[target_symbol] = type;
     context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
     context.symbols[target_valid] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_value] = type.arguments.front();
     context.symbols[target_write] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("field_" + target_addr, target_addr, source_addr, range, location,
                              context);
     add_symbol_equality_fact("field_" + target_valid, target_valid, source_valid, range, location,
@@ -1117,6 +1143,8 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
                              context);
     add_symbol_equality_fact("field_" + target_epoch, target_epoch, source_epoch, range, location,
                              context);
+    add_symbol_equality_fact("field_" + target_allocation, target_allocation, source_allocation,
+                             range, location, context);
     add_ref_alias_consistency_facts(target_symbol, type, range, location, context);
   }
 }
@@ -1158,11 +1186,14 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
   context.symbols[target_symbol] = type;
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
+  const auto target_allocation = allocation_symbol(target_symbol);
   const auto source_len = model_len_symbol(source->name);
   const auto source_data = model_data_symbol(source->name);
+  const auto source_allocation = allocation_symbol(source->name);
 
   context.symbols[target_len] = Type{TypeKind::I64, "i64", {}};
   context.symbols[target_data] = model_data_type(type);
+  context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
 
   auto len_non_negative =
       make_binary(BinaryOp::GreaterEqual, make_identifier(target_len, SourceLocation{}),
@@ -1172,6 +1203,8 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                      len_non_negative, SourceLocation{}, SourceRange{}});
   add_symbol_equality_fact("store_" + target_len, target_len, source_len, expr->range,
                            expr->location, context);
+  add_symbol_equality_fact("store_" + target_allocation, target_allocation, source_allocation,
+                           expr->range, expr->location, context);
 
   auto store_expr = make_call(
       std::string(kModelStoreCall),
@@ -1206,10 +1239,12 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   const auto target_value = ref_value_symbol(target_symbol);
   const auto target_write = ref_write_symbol(target_symbol);
   const auto target_epoch = ref_epoch_symbol(target_symbol);
+  const auto target_allocation = allocation_symbol(target_symbol);
   const auto source_addr = ref_addr_symbol(source->name);
   const auto source_valid = ref_valid_symbol(source->name);
   const auto source_write = ref_write_symbol(source->name);
   const auto source_epoch = ref_epoch_symbol(source->name);
+  const auto source_allocation = allocation_symbol(source->name);
 
   context.ref_symbols[target_symbol] = type;
   context.symbols[target_addr] = Type{TypeKind::I64, "i64", {}};
@@ -1217,6 +1252,7 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
   context.symbols[target_value] = type.arguments.front();
   context.symbols[target_write] = Type{TypeKind::Bool, "bool", {}};
   context.symbols[target_epoch] = Type{TypeKind::I64, "i64", {}};
+  context.symbols[target_allocation] = Type{TypeKind::I64, "i64", {}};
 
   add_symbol_equality_fact("store_" + target_addr, target_addr, source_addr, expr->range,
                            expr->location, context);
@@ -1224,6 +1260,8 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
                            expr->location, context);
   add_symbol_equality_fact("store_" + target_write, target_write, source_write, expr->range,
                            expr->location, context);
+  add_symbol_equality_fact("store_" + target_allocation, target_allocation, source_allocation,
+                           expr->range, expr->location, context);
 
   auto value_equality =
       make_binary(BinaryOp::Equal, make_identifier(target_value, expr->range), value, expr->range);
@@ -1868,6 +1906,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     const auto len_symbol = model_len_symbol(symbol);
     context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
+    context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
 
     auto len_non_negative =
         make_binary(BinaryOp::GreaterEqual, make_identifier(len_symbol, SourceLocation{}),
@@ -1884,6 +1923,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
     context.symbols[ref_value_symbol(symbol)] = type.arguments.front();
     context.symbols[ref_write_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
+    context.symbols[allocation_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     const auto epoch_symbol = ref_epoch_symbol(symbol);
     context.symbols[epoch_symbol] = Type{TypeKind::I64, "i64", {}};
     add_symbol_equality_fact("ref_" + sanitize_symbol(symbol) + "_entry_epoch", epoch_symbol,

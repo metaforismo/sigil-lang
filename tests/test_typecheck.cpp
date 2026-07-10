@@ -302,6 +302,19 @@ ensures exact: result == can_write(ptr);
   return can_write(updated);
 }
 
+fn expose_allocation(xs: Slice[i64]) -> i64
+ensures exact: result == allocation_id(xs);
+{
+  return allocation_id(xs);
+}
+
+fn compare_allocations(xs: Array[i64], view: Slice[i64], ptr: Ref[bool]) -> bool
+requires shared: same_allocation(xs, view);
+ensures exact: result == disjoint_allocation(view, ptr);
+{
+  return disjoint_allocation(view, ptr);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -586,6 +599,33 @@ fn can_write_scalar(x: i64) -> bool
 }
 )",
                     "can_write expects a Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn allocation_id_scalar(x: i64) -> i64
+{
+  return allocation_id(x);
+}
+)",
+                    "allocation_id expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn same_allocation_arity(xs: Slice[i64]) -> bool
+{
+  return same_allocation(xs);
+}
+)",
+                    "same_allocation expects 2 arguments, got 1");
+
+  expect_diagnostic(R"(
+module bad;
+fn disjoint_allocation_scalar(xs: Slice[i64], x: i64) -> bool
+{
+  return disjoint_allocation(xs, x);
+}
+)",
+                    "disjoint_allocation expects Array[T], Slice[T], or Ref[T] arguments");
 
   expect_diagnostic(R"(
 module bad;

@@ -16,9 +16,11 @@ slice models also have immutable proof-level `store` facts, and reference
 models have immutable proof-level store facts for validity-preserving value
 updates, explicit proof-level epoch tokens, and same-snapshot alias consistency
 for valid references. Reference stores now also have an explicit proof-level
-write-permission gate. The next compiler work is to turn those abstract facts
-into a real memory model: ownership, allocation, lifetime, provenance, richer
-state transitions, and function-boundary semantics.
+write-permission gate. Arrays, slices, and references now share explicit
+allocation-identity facts that aliases and immutable stores preserve. The next
+compiler work is to turn those abstract facts into a real memory model:
+ownership, allocation transitions, lifetime, provenance, richer state
+transitions, and function-boundary semantics.
 
 ## Completed
 
@@ -79,6 +81,8 @@ state transitions, and function-boundary semantics.
 - [x] Add same-snapshot alias consistency for valid same-address references.
 - [x] Add proof-level reference epoch tokens and store epoch advancement.
 - [x] Add proof-level reference write-permission facts and store write gates.
+- [x] Add cross-model allocation identity and preserve it through aliases and
+      immutable stores.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -135,7 +139,10 @@ state transitions, and function-boundary semantics.
 - [x] Add reference address and disjointness facts.
 - [x] Add same-snapshot alias consistency for valid references.
 - [x] Add reference write-permission facts and store write gates.
-- [ ] Add array and slice alias facts beyond modeled reference addresses.
+- [x] Add array and slice allocation-alias facts beyond modeled reference
+      addresses.
+- [ ] Add slice origin, offset, and overlapping-view facts within one
+      allocation.
 - [ ] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Render Z3 counterexamples in Sigil source terms.
@@ -180,6 +187,7 @@ state transitions, and function-boundary semantics.
 - [x] Add same-snapshot alias consistency for valid same-address references.
 - [x] Add proof-level reference epoch tokens and store epoch advancement.
 - [x] Add proof-level reference write-permission facts and store write gates.
+- [x] Add abstract allocation identity across arrays, slices, and references.
 - [ ] Model allocation, lifetime, ownership, borrowing, and alias propagation as
       explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and

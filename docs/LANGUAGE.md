@@ -217,13 +217,22 @@ ensures exact: result == value;
 Model stores must currently be materialized in a `let` binding or container
 field before later `len` or `at` facts use them. Plain model aliases, such as
 `let alias: Slice[i64] = xs;`, are also materialized as length/data component
-facts. This keeps the proof IR explicit until Sigil has first-class temporary
+facts.
+
+Every array, slice, and reference model also carries an abstract allocation
+identity. `allocation_id(value)` exposes that identity as `i64`.
+`same_allocation(left, right)` and `disjoint_allocation(left, right)` compare
+allocation identities and may mix array, slice, and reference model arguments.
+Plain aliases and immutable `store` updates preserve the source allocation
+identity. This is the first common provenance fact across the three proof
+models and keeps the proof IR explicit until Sigil has first-class temporary
 model values.
 
 This is intentionally a proof model, not a runtime memory model. It does not
-define allocation, aliasing, pointer provenance, slice origins, or native
-layout yet. Aggregate returns are still rejected, and native lowering skips
-functions that take array or slice model parameters.
+create or destroy allocations, establish ownership or liveness, define view
+ranges, prove non-overlap inside one allocation, or define native layout yet.
+Aggregate returns are still rejected, and native lowering skips functions that
+take array or slice model parameters.
 
 ## Reference Model
 
@@ -245,7 +254,9 @@ at the access site. `addr(ptr)` returns the modeled integer address.
 `epoch(ptr)` returns the modeled memory-snapshot token for the reference.
 Function-entry references share an internal entry epoch, and model aliases
 preserve the source epoch and write permission. `same_ref(left, right)` and
-`disjoint(left, right)` compare modeled addresses.
+`disjoint(left, right)` compare modeled addresses. The common
+`allocation_id`, `same_allocation`, and `disjoint_allocation` intrinsics compare
+the allocation token independently of a reference's numeric address.
 
 When two `Ref[T]` snapshots with the same element type are both valid and have
 the same modeled epoch and address in one proof context, Sigil assumes their
@@ -266,8 +277,8 @@ ensures exact: result == load(right);
 `store(ptr, value)` is an immutable proof-level reference update. It returns
 the same `Ref[T]` model type, emits `memory_valid` and `memory_write`
 obligations for the write site, preserves the modeled address, validity, and
-write permission, and replaces the modeled referenced value. It also advances
-the modeled epoch by one:
+write permission and allocation identity, and replaces the modeled referenced
+value. It also advances the modeled epoch by one:
 
 ```sigil
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
@@ -291,10 +302,12 @@ in a `let` binding or container field before later facts use them.
 fact for write-site checks; it is not yet an ownership or borrowing discipline.
 Sigil does not allocate memory, track lifetimes, prove pointer provenance,
 propagate stores through old aliases, model ownership, mutate native memory, or
-define a native layout. Epochs are proof tokens for snapshots, not a runtime
-memory representation. Like array and slice models, reference values are
-allowed as function and theorem parameters and as container model fields, but
-not as ordinary struct fields or return values yet.
+define a native layout. Allocation identities are abstract proof tokens: they
+do not prove that an allocation exists, remains live, owns an address, or is
+disjoint from another address range. Epochs are proof tokens for snapshots, not
+a runtime memory representation. Like array and slice models, reference values
+are allowed as function and theorem parameters and as container model fields,
+but not as ordinary struct fields or return values yet.
 
 ## Function Contracts
 
@@ -439,6 +452,8 @@ Supported expression forms:
 - reference intrinsics: `is_valid(ptr)`, `can_write(ptr)`, `load(ptr)`,
   `addr(ptr)`, `store(ptr, value)`, `same_ref(left, right)`,
   `disjoint(left, right)`
+- cross-model allocation intrinsics: `allocation_id(value)`,
+  `same_allocation(left, right)`, `disjoint_allocation(left, right)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
