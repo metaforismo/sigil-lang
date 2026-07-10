@@ -234,6 +234,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/ref-permissions")
 
 add_test(
+  NAME sigil_cli_allocation_identity_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_allocation_identity.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/allocation_identity.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/allocation-identity")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -411,6 +418,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/ref_permissions.sigil")
   set_tests_properties(sigil_z3_ref_permissions PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_allocation_identity
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_allocation_identity_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/allocation_identity.sigil")
+  set_tests_properties(sigil_z3_allocation_identity PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

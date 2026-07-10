@@ -26,7 +26,7 @@ are visible in SMT under materialized names such as `box.value`, and invariant
 obligations are named from the function, local binding, and invariant label.
 Container instantiations use the same flow, but their model fields also expose
 SMT facts such as `window.items.len == xs.len` and
-`window.items.data == xs.data`.
+`window.items.data == xs.data`, together with allocation identity.
 Array and slice model accesses add `index_in_bounds` safety obligations and
 emit SMT array `select` terms for `at(model, index)`. Array and slice
 `store(model, index, value)` updates are immutable proof facts: they preserve
@@ -36,8 +36,10 @@ Reference model loads add `memory_valid` safety obligations and expose modeled
 address, validity, write-permission, epoch, and value symbols in SMT.
 Reference `store(ref, value)` updates are immutable proof facts: they require
 write-site validity and write permission, preserve modeled address, validity,
-and write permission, update the modeled referenced value, and advance the
-modeled epoch.
+write permission, and allocation identity, update the modeled referenced value,
+and advance the modeled epoch. `allocation_id`, `same_allocation`, and
+`disjoint_allocation` expose a common abstract allocation token across array,
+slice, and reference models.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -120,6 +122,12 @@ Example with proof-level reference write-permission facts:
 
 ```sh
 sigil check examples/ref_permissions.sigil --strict --solver-timeout-ms 250 --save-smt build/ref-permission-smt
+```
+
+Example with cross-model allocation identity and store preservation:
+
+```sh
+sigil check examples/allocation_identity.sigil --strict --solver-timeout-ms 250 --save-smt build/allocation-identity-smt
 ```
 
 Exit codes:

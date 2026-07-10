@@ -1,0 +1,37 @@
+module allocation_identity;
+
+fn expose_allocation(xs: Slice[i64]) -> i64
+ensures exact: result == allocation_id(xs);
+{
+  return allocation_id(xs);
+}
+
+fn classify_allocations(xs: Slice[i64], ptr: Ref[bool]) -> bool
+ensures exact: result == disjoint_allocation(xs, ptr);
+{
+  return disjoint_allocation(xs, ptr);
+}
+
+fn alias_preserves_allocation(xs: Array[i64]) -> bool
+ensures preserved: result;
+{
+  let alias: Array[i64] = xs;
+  return same_allocation(alias, xs);
+}
+
+fn model_store_preserves_allocation(xs: Slice[i64], index: i64, value: i64) -> bool
+requires in_bounds: index >= 0 && index < len(xs);
+ensures preserved: result;
+{
+  let updated: Slice[i64] = store(xs, index, value);
+  return same_allocation(updated, xs);
+}
+
+fn ref_store_preserves_allocation(ptr: Ref[i64], value: i64) -> bool
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures preserved: result;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return same_allocation(updated, ptr);
+}
