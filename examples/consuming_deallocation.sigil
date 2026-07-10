@@ -1,0 +1,45 @@
+module consuming_deallocation;
+
+fn retire_slice(xs: Slice[i64]) -> bool
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires no_shared: shared_borrows(xs) == 0;
+requires no_mutable: !has_mut_borrow(xs);
+ensures retired: result;
+{
+  let moved: Slice[i64] = move_owner(xs);
+  assert move_live: is_live(moved);
+  assert move_owner_present: has_owner(moved);
+  let dead: Slice[i64] = deallocate(moved);
+  assert allocation_dead: !is_live(dead);
+  assert owner_consumed: !has_owner(dead);
+  return !is_live(dead) && !has_owner(dead);
+}
+
+fn retire_ref(ptr: Ref[i64]) -> bool
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires no_shared: shared_borrows(ptr) == 0;
+requires no_mutable: !has_mut_borrow(ptr);
+requires valid: is_valid(ptr);
+ensures retired: result;
+{
+  let dead: Ref[i64] = deallocate(ptr);
+  assert allocation_dead: !is_live(dead);
+  assert reference_invalid: !is_valid(dead);
+  assert permission_revoked: !can_write(dead);
+  return !is_live(dead) && !is_valid(dead);
+}
+
+fn retire_one(left: Slice[i64], right: Slice[i64]) -> bool
+requires left_live: is_live(left);
+requires left_owned: has_owner(left);
+requires left_no_shared: shared_borrows(left) == 0;
+requires left_no_mutable: !has_mut_borrow(left);
+requires right_live: is_live(right);
+requires separate: disjoint_allocation(left, right);
+ensures retired: result;
+{
+  let dead: Slice[i64] = deallocate(left);
+  return !is_live(dead) && is_live(right);
+}

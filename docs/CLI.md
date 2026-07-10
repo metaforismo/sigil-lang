@@ -49,6 +49,10 @@ Borrow/release transition bindings emit ordered liveness, ownership, and
 availability/active obligations before updating a fresh model snapshot.
 Stores preserve active mutable-borrow state until `release_mut` produces a
 later snapshot.
+`move_owner(model)` and `deallocate(model)` are root-level consuming bindings.
+They prove liveness, owner presence, borrow freedom, and allocation uniqueness
+before consuming the source name. Deallocation returns an inspectable dead
+tombstone; access through it still fails the ordinary liveness gate.
 The local prover also performs bounded control-flow WP reasoning for branch
 joins and loop-summary conjunctions before invoking Z3.
 
@@ -169,6 +173,12 @@ Example with borrow-checked array, slice, and reference updates:
 
 ```sh
 sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250 --save-smt build/memory-state-update-smt
+```
+
+Example with consuming ownership transfer and checked deallocation:
+
+```sh
+sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250 --save-smt build/consuming-deallocation-smt
 ```
 
 Example with branch and loop weakest-precondition reasoning:

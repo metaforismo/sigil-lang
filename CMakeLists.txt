@@ -283,6 +283,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/memory-state-updates")
 
 add_test(
+  NAME sigil_cli_consuming_deallocation_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_consuming_deallocation.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/consuming_deallocation.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/consuming-deallocation")
+
+add_test(
   NAME sigil_cli_control_flow_wp_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_control_flow_wp.sh"
           "$<TARGET_FILE:sigil>"
@@ -525,6 +532,15 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/memory_state_updates.sigil")
   set_tests_properties(sigil_z3_memory_state_updates PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_consuming_deallocation
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_consuming_deallocation_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/consuming_deallocation.sigil"
+            "${CMAKE_CURRENT_BINARY_DIR}/consuming-deallocation-z3")
+  set_tests_properties(sigil_z3_consuming_deallocation PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

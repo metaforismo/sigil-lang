@@ -270,12 +270,16 @@ bool is_model_intrinsic_name(const std::string& name) {
          name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow" ||
          name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
          name == "release_mut" || name == "slice_view" || name == "slice_offset" ||
-         name == "same_view" || name == "overlaps";
+         name == "same_view" || name == "overlaps" || name == "move_owner" || name == "deallocate";
 }
 
 bool is_borrow_transition_name(const std::string& name) {
   return name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
          name == "release_mut";
+}
+
+bool is_consuming_transition_name(const std::string& name) {
+  return name == "move_owner" || name == "deallocate";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -286,6 +290,19 @@ Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTabl
 
 Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                                 const StructTable& structs, const CallableContext& context) {
+  if (is_consuming_transition_name(expr->name)) {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, expr->name + " expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       expr->name + " expects an Array[T], Slice[T], or Ref[T] argument");
+    }
+    return model;
+  }
+
   if (expr->name == "slice_view") {
     if (expr->arguments.size() != 3) {
       throw Diagnostic(expr->range, "slice_view expects 3 arguments, got " +
@@ -824,8 +841,57 @@ void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symb
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals,
+                        std::unordered_set<std::string>& consumed_models,
                         std::unordered_set<std::string>& proof_labels, const StructTable& structs,
-                        const CallableContext& context, bool proof_only_body);
+                        const CallableContext& context, bool proof_only_body, bool allow_consuming);
+
+void reject_consumed_uses(const Expr& expr,
+                          const std::unordered_set<std::string>& consumed_models) {
+  if (!expr) {
+    return;
+  }
+  if (expr->kind == ExprNode::Kind::Identifier && consumed_models.count(expr->name) != 0) {
+    throw Diagnostic(expr->range, "use of consumed model value '" + expr->name + "'");
+  }
+  reject_consumed_uses(expr->condition, consumed_models);
+  reject_consumed_uses(expr->lhs, consumed_models);
+  reject_consumed_uses(expr->rhs, consumed_models);
+  for (const auto& argument : expr->arguments) {
+    reject_consumed_uses(argument, consumed_models);
+  }
+  for (const auto& field : expr->field_initializers) {
+    reject_consumed_uses(field.expr, consumed_models);
+  }
+}
+
+const ExprNode* find_consuming_call(const Expr& expr) {
+  if (!expr) {
+    return nullptr;
+  }
+  if (expr->kind == ExprNode::Kind::Call && is_consuming_transition_name(expr->name)) {
+    return expr.get();
+  }
+  if (const auto* found = find_consuming_call(expr->condition)) {
+    return found;
+  }
+  if (const auto* found = find_consuming_call(expr->lhs)) {
+    return found;
+  }
+  if (const auto* found = find_consuming_call(expr->rhs)) {
+    return found;
+  }
+  for (const auto& argument : expr->arguments) {
+    if (const auto* found = find_consuming_call(argument)) {
+      return found;
+    }
+  }
+  for (const auto& field : expr->field_initializers) {
+    if (const auto* found = find_consuming_call(field.expr)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
 
 void reject_loop_body_returns(const std::vector<Statement>& statements) {
   for (const auto& statement : statements) {
@@ -864,16 +930,17 @@ bool block_returns(const std::vector<Statement>& statements) {
 
 void validate_statement_block(const std::vector<Statement>& statements, const FunctionDecl& decl,
                               SymbolTable locals, std::unordered_set<std::string> assignable_locals,
+                              std::unordered_set<std::string> consumed_models,
                               std::unordered_set<std::string>& proof_labels,
                               const StructTable& structs, const CallableContext& context,
-                              bool proof_only_body) {
+                              bool proof_only_body, bool allow_consuming) {
   bool terminated = false;
   for (const auto& statement : statements) {
     if (terminated) {
       throw Diagnostic(statement.range, "unreachable statement after guaranteed return");
     }
-    validate_statement(statement, decl, locals, assignable_locals, proof_labels, structs, context,
-                       proof_only_body);
+    validate_statement(statement, decl, locals, assignable_locals, consumed_models, proof_labels,
+                       structs, context, proof_only_body, allow_consuming);
     terminated = statement_returns(statement);
   }
 }
@@ -895,10 +962,30 @@ void validate_statement_label(const Statement& statement,
 
 void validate_statement(const Statement& statement, const FunctionDecl& decl, SymbolTable& locals,
                         std::unordered_set<std::string>& assignable_locals,
+                        std::unordered_set<std::string>& consumed_models,
                         std::unordered_set<std::string>& proof_labels, const StructTable& structs,
-                        const CallableContext& context, bool proof_only_body) {
+                        const CallableContext& context, bool proof_only_body,
+                        bool allow_consuming) {
   const auto value_context = proof_only_body ? with_theorem_calls_allowed(context) : context;
   const auto proof_context = with_theorem_calls_allowed(context);
+  reject_consumed_uses(statement.expr, consumed_models);
+  for (const auto& invariant : statement.loop_invariants) {
+    reject_consumed_uses(invariant.expr, consumed_models);
+  }
+
+  const auto* consuming_call = find_consuming_call(statement.expr);
+  const bool direct_consuming_let = statement.kind == StatementKind::Let && statement.expr &&
+                                    statement.expr->kind == ExprNode::Kind::Call &&
+                                    is_consuming_transition_name(statement.expr->name);
+  if (consuming_call && !direct_consuming_let) {
+    throw Diagnostic(consuming_call->range,
+                     "consuming transition '" + consuming_call->name +
+                         "' must be the direct initializer of a model let binding");
+  }
+  if (consuming_call && !allow_consuming) {
+    throw Diagnostic(consuming_call->range, "consuming transition '" + consuming_call->name +
+                                                "' is only supported in the function body root");
+  }
 
   if (statement.kind == StatementKind::Let) {
     require_unreserved_value_name(statement.name, statement.range,
@@ -917,6 +1004,16 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
     }
     insert_symbol(locals, statement.name, statement.type, statement.range, "local");
     assignable_locals.insert(statement.name);
+    if (direct_consuming_let) {
+      const auto& source = statement.expr->arguments[0];
+      if (!source || source->kind != ExprNode::Kind::Identifier) {
+        throw Diagnostic(source ? source->range : statement.expr->range,
+                         statement.expr->name + " requires an identifier source");
+      }
+      consumed_models.insert(source->name);
+      locals.erase(source->name);
+      assignable_locals.erase(source->name);
+    }
   } else if (statement.kind == StatementKind::Assign) {
     const auto found = locals.find(statement.name);
     if (found == locals.end()) {
@@ -941,10 +1038,12 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
   } else if (statement.kind == StatementKind::If) {
     require_type(statement.expr, locals, structs, value_context, TypeKind::Bool,
                  "if statement condition");
-    validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels,
-                             structs, context, proof_only_body);
-    validate_statement_block(statement.else_branch, decl, locals, assignable_locals, proof_labels,
-                             structs, context, proof_only_body);
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals,
+                             consumed_models, proof_labels, structs, context, proof_only_body,
+                             false);
+    validate_statement_block(statement.else_branch, decl, locals, assignable_locals,
+                             consumed_models, proof_labels, structs, context, proof_only_body,
+                             false);
   } else if (statement.kind == StatementKind::While) {
     require_type(statement.expr, locals, structs, value_context, TypeKind::Bool, "while condition");
     std::unordered_set<std::string> invariant_names;
@@ -956,8 +1055,9 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
       validate_predicate(invariant, locals, structs, proof_context, "loop invariant");
     }
     reject_loop_body_returns(statement.then_branch);
-    validate_statement_block(statement.then_branch, decl, locals, assignable_locals, proof_labels,
-                             structs, context, proof_only_body);
+    validate_statement_block(statement.then_branch, decl, locals, assignable_locals,
+                             consumed_models, proof_labels, structs, context, proof_only_body,
+                             false);
   } else if (statement.kind == StatementKind::Assume) {
     validate_statement_label(statement, proof_labels);
     require_type(statement.expr, locals, structs, proof_context, TypeKind::Bool,
@@ -1099,9 +1199,10 @@ void validate_function(const FunctionDecl& decl, const StructTable& structs,
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
+  std::unordered_set<std::string> consumed_models;
   std::unordered_set<std::string> proof_labels = contract_labels;
-  validate_statement_block(decl.body, decl, locals, assignable_locals, proof_labels, structs,
-                           context, false);
+  validate_statement_block(decl.body, decl, locals, assignable_locals, consumed_models,
+                           proof_labels, structs, context, false, true);
   if (decl.return_type.kind != TypeKind::Void && !block_returns(decl.body)) {
     throw Diagnostic(decl.range, "function '" + decl.name + "' must return a value on every path");
   }
@@ -1154,9 +1255,10 @@ void validate_theorem(const TheoremDecl& decl, const StructTable& structs,
 
   SymbolTable locals = params;
   std::unordered_set<std::string> assignable_locals;
+  std::unordered_set<std::string> consumed_models;
   std::unordered_set<std::string> proof_labels = contract_labels;
-  validate_statement_block(proof_decl.body, proof_decl, locals, assignable_locals, proof_labels,
-                           structs, context, true);
+  validate_statement_block(proof_decl.body, proof_decl, locals, assignable_locals, consumed_models,
+                           proof_labels, structs, context, true, true);
   if (!block_returns(proof_decl.body)) {
     throw Diagnostic(decl.range, "theorem '" + decl.name + "' must return bool on every path");
   }

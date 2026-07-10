@@ -1312,6 +1312,95 @@ requires owned: has_owner(xs);
   expect(missing_borrow_guard_results[2].status == sigil::VerificationStatus::Unknown,
          "missing borrow availability remains unknown");
 
+  const char* consuming_deallocation_source = R"(
+module consuming_deallocation;
+
+fn retire(left: Slice[i64], right: Slice[i64]) -> bool
+requires live: is_live(left);
+requires owned: has_owner(left);
+requires no_shared: shared_borrows(left) == 0;
+requires no_mutable: !has_mut_borrow(left);
+requires separate: disjoint_allocation(left, right);
+{
+  let dead: Slice[i64] = deallocate(left);
+  assert dead_now: !is_live(dead);
+  return !is_live(dead);
+}
+)";
+  const auto consuming_deallocation_module =
+      sigil::parse_source(consuming_deallocation_source, "consuming-deallocation.sigil");
+  const auto consuming_deallocation_obligations =
+      sigil::build_obligations(consuming_deallocation_module);
+  expect(consuming_deallocation_obligations.size() == 5, "consuming deallocation obligations");
+  expect(consuming_deallocation_obligations[0].name == "fn.retire.safety.1.memory_live",
+         "deallocation liveness obligation");
+  expect(consuming_deallocation_obligations[1].name == "fn.retire.safety.2.ownership_present",
+         "deallocation owner obligation");
+  expect(consuming_deallocation_obligations[2].name == "fn.retire.safety.3.borrow_free",
+         "deallocation borrow-free obligation");
+  expect(consuming_deallocation_obligations[3].name == "fn.retire.safety.4.allocation_unique",
+         "deallocation uniqueness obligation");
+  const auto unique_smt = sigil::emit_smt_lib(consuming_deallocation_obligations[3]);
+  expect(unique_smt.find("(assert (distinct left_alloc right_alloc))") != std::string::npos,
+         "deallocation uniqueness uses deterministic disjoint allocation fact");
+  const auto dead_smt = sigil::emit_smt_lib(consuming_deallocation_obligations[4]);
+  expect(dead_smt.find("(assert (= dead_live false))") != std::string::npos,
+         "deallocation clears liveness");
+  expect(dead_smt.find("(assert (= dead_has_owner false))") != std::string::npos,
+         "deallocation consumes owner presence");
+
+  const char* aliased_deallocation_source = R"(
+module aliased_deallocation;
+
+fn retire(xs: Slice[i64]) -> bool
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires no_shared: shared_borrows(xs) == 0;
+requires no_mutable: !has_mut_borrow(xs);
+{
+  let alias: Slice[i64] = xs;
+  let dead: Slice[i64] = deallocate(xs);
+  return !is_live(dead);
+}
+)";
+  const auto aliased_deallocation_module =
+      sigil::parse_source(aliased_deallocation_source, "aliased-deallocation.sigil");
+  const auto aliased_deallocation_obligations =
+      sigil::build_obligations(aliased_deallocation_module);
+  expect(aliased_deallocation_obligations.size() == 4, "aliased deallocation obligations");
+  const auto aliased_unique_smt = sigil::emit_smt_lib(aliased_deallocation_obligations[3]);
+  expect(aliased_unique_smt.find("(assert (= alias_alloc xs_alloc))") != std::string::npos,
+         "plain alias preserves allocation identity");
+  expect(aliased_unique_smt.find("(assert (not (distinct xs_alloc alias_alloc)))") !=
+             std::string::npos,
+         "aliased deallocation negates required allocation uniqueness");
+
+  const char* ordered_deallocation_source = R"(
+module ordered_deallocation;
+
+fn retire_first(first: Slice[i64], third: Ref[i64], second: Array[bool]) -> bool
+requires first_live: is_live(first);
+requires first_owned: has_owner(first);
+requires first_no_shared: shared_borrows(first) == 0;
+requires first_no_mutable: !has_mut_borrow(first);
+requires separate_second: disjoint_allocation(first, second);
+requires separate_third: disjoint_allocation(first, third);
+{
+  let dead: Slice[i64] = deallocate(first);
+  return !is_live(dead);
+}
+  )";
+  const auto ordered_deallocation_module =
+      sigil::parse_source(ordered_deallocation_source, "ordered-deallocation.sigil");
+  const auto ordered_deallocation_obligations =
+      sigil::build_obligations(ordered_deallocation_module);
+  expect(ordered_deallocation_obligations.size() == 4, "ordered deallocation obligations");
+  const auto ordered_unique_smt = sigil::emit_smt_lib(ordered_deallocation_obligations[3]);
+  expect(ordered_unique_smt.find(
+             "(assert (not (and (distinct first_alloc second_alloc) (distinct first_alloc "
+             "third_alloc))))") != std::string::npos,
+         "allocation uniqueness comparisons use deterministic symbol order");
+
   const char* memory_state_update_source = R"(
 module memory_state_updates;
 

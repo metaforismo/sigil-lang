@@ -282,15 +282,34 @@ Borrow state changes through immutable, model-producing transitions:
 Transitions preserve allocation identity, liveness, owner identity/presence,
 container data/length/offset, and reference
 address/validity/value/permission/epoch. Like `store`, a transition result must
-be materialized in a model `let` or container model field. These are checked
-proof-state snapshots, not linear move semantics: the source model remains
-visible until a later language layer defines consuming ownership and alias
-invalidation.
+be materialized in a model `let` or container model field. Borrow transitions
+are non-consuming proof-state snapshots: the source remains visible.
+
+Ownership transfer and deallocation are explicit consuming transitions:
+
+- `move_owner(value)` preserves every model component and transfers the only
+  statically usable source binding to the result.
+- `deallocate(value)` proves that the allocation is live, owned, borrow-free,
+  and distinct from every other live model root in scope. It then returns a
+  tombstone with the same allocation identity, dead liveness, no owner, and no
+  borrows. A reference tombstone is invalid and non-writable, and its epoch is
+  advanced by one.
+
+Both calls must be the direct initializer of a model `let` in the function body
+root. The source must be a bare identifier and cannot be used afterward. They
+are rejected inside branches and loops until path-sensitive linear-state joins
+are defined. Allocation uniqueness is deliberately conservative: if another
+visible model could denote the same allocation, deallocation is rejected unless
+the active facts prove the allocation IDs distinct. Sigil therefore blocks
+deallocation through a possible alias instead of claiming to invalidate aliases
+retroactively.
 
 View overlap is currently a proof fact, not an exclusivity policy. The checker
 does not yet reject two simultaneously visible mutable snapshots merely because
-their ranges overlap; consuming ownership and alias invalidation remain required
-before these models can represent runtime memory safely.
+their ranges overlap. Consuming deallocation conservatively requires whole-
+allocation uniqueness; range-sensitive exclusivity and runtime alias
+invalidation remain required before these models can represent native memory
+safely.
 
 Both container and reference stores preserve an active mutable borrow in the
 successor snapshot. Code may establish that state directly in a function
@@ -298,10 +317,11 @@ contract or acquire it with `borrow_mut`, perform one or more stores, and clear
 it with `release_mut`. A store without owner presence or an active mutable
 borrow leaves the corresponding safety obligation unresolved.
 
-This is intentionally a proof model, not a runtime memory model. It does not
-create or destroy allocations, transition an allocation between live and dead,
-establish ownership, define view ranges, prove non-overlap inside one
-allocation, or define native layout yet.
+This is intentionally a proof model, not a runtime memory model. It can model a
+checked transition from a unique live owner to a dead tombstone, but it does not
+create fresh allocations, establish initial contents, perform native
+allocation/deallocation, define byte layout, or propagate effects through
+runtime aliases.
 Aggregate returns are still rejected, and native lowering skips functions that
 take array or slice model parameters.
 
@@ -379,15 +399,15 @@ in a `let` binding or container field before later facts use them.
 
 `Ref[T]` is a verification scaffold. The `can_write` bit is an additional
 write-permission fact; it does not replace owner presence or the mutable-borrow
-gate. Sigil does not allocate or free memory, transition lifetimes, prove
-pointer provenance, propagate stores through old aliases, invalidate aliases,
-mutate native memory, or define a native layout. Allocation identities are
+gate. Sigil can consume a unique modeled owner into a dead reference tombstone,
+but it does not allocate or free native memory, create fresh provenance,
+propagate stores through old aliases, invalidate runtime aliases, mutate native
+memory, or define a native layout. Allocation identities are
 abstract proof tokens: they do not by themselves prove that an allocation
 exists, remains live, owns an address, or is disjoint from another address
-range. The separate liveness bit must be established by a contract, but
-currently has no allocation/deallocation transition semantics. Epochs are
-proof tokens for snapshots, not a runtime memory representation. Like array
-and slice models, reference values
+range. The separate liveness bit must be established by a contract or a future
+allocation transition. Epochs are proof tokens for snapshots, not a runtime
+memory representation. Like array and slice models, reference values
 are allowed as function and theorem parameters and as container model fields,
 but not as ordinary struct fields or return values yet.
 

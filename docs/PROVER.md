@@ -199,9 +199,9 @@ shared_borrows(value) >= 0
 !has_owner(value) || owner_id(value) != 0
 ```
 
-Aliases and both immutable store forms copy the four symbols unchanged. This
-models allocation state, not linear handle ownership: checked borrow/release
-transitions update fresh snapshots, while move semantics remain separate work.
+Aliases and both immutable store forms copy the four symbols unchanged. Checked
+borrow/release transitions update fresh non-consuming snapshots. Linear source
+availability is tracked separately for consuming transitions.
 
 Each borrow transition emits three ordered safety obligations:
 
@@ -216,6 +216,26 @@ release use `target.shared == source.shared + 1` and `- 1`; mutable acquire and
 release set `target.mut_borrow` to `true` and `false`. The registered consistency
 invariants ensure successful transitions cannot create negative shared counts
 or simultaneous shared and mutable borrows.
+
+`move_owner(source)` and `deallocate(source)` are only planned when directly
+bound to a model local at the function-body root. The type checker consumes the
+source identifier, so later source uses fail before SMT emission. Both
+transitions emit these ordered safety obligations:
+
+1. `memory_live` proves `is_live(source)`.
+2. `ownership_present` proves `has_owner(source)`.
+3. `borrow_free` proves `shared_borrows(source) == 0 &&
+   !has_mut_borrow(source)`.
+4. `allocation_unique` proves the source allocation differs from every other
+   current model root, sorted by symbol name for deterministic SMT artifacts.
+
+`move_owner` copies all model components to the new symbol. `deallocate`
+preserves allocation identity and observational container/reference components,
+sets liveness and ownership/borrow state to the dead values, invalidates and
+revokes write permission on references, and increments a reference epoch. The
+result is a tombstone that can be inspected, while any read or write through it
+still emits and refutes `memory_live`. Possible aliases do not receive invented
+invalidation facts; they make `allocation_unique` unprovable or refutable.
 
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:
@@ -256,16 +276,15 @@ Loading from the updated reference then reads `updated.value`, so
 the local weakest-precondition substitution can prove straight-line facts such
 as `load(store(ref, value)) == value` once the store has been materialized.
 
-The reference model is intentionally not a full memory semantics. It has no
-allocation creation or destruction, lifetime transitions, consuming ownership,
-alias invalidation, field projection, byte layout, native memory mutation, or
-native-code provenance model yet. The write-permission bit is an additional
-proof fact beyond the owner and mutable-borrow gates. Allocation identity alone
-does not imply liveness, and a true liveness fact currently comes from contracts
-rather than checked allocation/deallocation transitions. Those pieces must be
-added before Sigil can claim low-level memory safety beyond explicit
-ownership/borrow/liveness/validity/write obligations, epoch ordering, and
-same-snapshot alias consistency.
+The reference model is intentionally not a full memory semantics. It now has a
+conservative consuming deallocation transition, but no allocation creation,
+freshness proof, field projection, byte layout, native memory mutation, runtime
+alias invalidation, or native-code provenance model. The write-permission bit is
+an additional proof fact beyond the owner and mutable-borrow gates. Allocation
+identity alone does not imply liveness, and live entry state still comes from
+contracts. Those pieces must be added before Sigil can claim low-level memory
+safety beyond explicit ownership/borrow/liveness/validity/write obligations,
+checked deallocation, epoch ordering, and same-snapshot alias consistency.
 
 Conditional expressions are emitted as SMT `ite` terms. For example,
 `if x >= 0 { x } else { -x }` becomes `(ite (>= x 0) x (- x))`.
