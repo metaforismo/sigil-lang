@@ -75,6 +75,10 @@ production verifier yet.
   `has_owner`, `shared_borrows`, and `has_mut_borrow`. The prover enforces
   nonnegative shared counts, mutable/shared exclusion, owner-ID consistency,
   and preservation through aliases and stores.
+- Checked immutable borrow transitions through `borrow_shared`,
+  `release_shared`, `borrow_mut`, and `release_mut`. Each transition proves
+  liveness, owner presence, and its operation-specific availability/active
+  condition before updating the borrow snapshot.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Expression-level `if condition { then } else { else }` conditionals that lower
@@ -182,6 +186,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/allocation_identity.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/allocation_liveness.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
 ./build/sigil agent-check examples/agent_candidate.sigil --strict --no-z3 --save-smt build/agent-candidate-smt

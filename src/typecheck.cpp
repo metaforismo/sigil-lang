@@ -267,7 +267,14 @@ bool is_model_intrinsic_name(const std::string& name) {
          name == "addr" || name == "epoch" || name == "can_write" || name == "same_ref" ||
          name == "disjoint" || name == "allocation_id" || name == "same_allocation" ||
          name == "disjoint_allocation" || name == "is_live" || name == "owner_id" ||
-         name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow";
+         name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow" ||
+         name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
+         name == "release_mut";
+}
+
+bool is_borrow_transition_name(const std::string& name) {
+  return name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
+         name == "release_mut";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -278,6 +285,18 @@ Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTabl
 
 Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                                 const StructTable& structs, const CallableContext& context) {
+  if (is_borrow_transition_name(expr->name)) {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, expr->name + " expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       expr->name + " expects an Array[T], Slice[T], or Ref[T] argument");
+    }
+    return model;
+  }
   if (expr->name == "len") {
     if (expr->arguments.size() != 1) {
       throw Diagnostic(expr->range,

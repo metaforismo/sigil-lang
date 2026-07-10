@@ -401,6 +401,11 @@ constexpr std::string_view kModelSelectCall = "__sigil_select";
 constexpr std::string_view kModelStoreCall = "__sigil_store";
 constexpr std::string_view kEntryEpochSymbol = "__sigil_entry_epoch";
 
+bool is_borrow_transition_name(const std::string& name) {
+  return name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
+         name == "release_mut";
+}
+
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
   return fn.name.rfind(std::string(kTheoremProofPrefix), 0) == 0;
 }
@@ -848,6 +853,55 @@ ProofObligation make_memory_live_obligation(const FunctionDecl& fn, int safety_i
   return obligation;
 }
 
+ProofObligation make_borrow_transition_obligation(const FunctionDecl& fn, int safety_index,
+                                                  const Expr& transition,
+                                                  const ProofContext& context,
+                                                  const std::string& kind) {
+  if (!transition || transition->arguments.empty()) {
+    throw Diagnostic(transition ? transition->range : SourceRange{},
+                     "borrow transition requires a model value");
+  }
+  const auto model = rewrite_expr(transition->arguments[0], context.bindings);
+  if (!model || model->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(transition->arguments[0]->range,
+                     "borrow transition requires a materialized memory model value");
+  }
+
+  Expr goal;
+  if (kind == "ownership_present") {
+    goal = make_identifier(has_owner_symbol(model->name), transition->arguments[0]->range);
+  } else if (kind == "shared_borrow_available") {
+    goal =
+        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), transition->range),
+                   transition->range);
+  } else if (kind == "shared_borrow_active") {
+    goal = make_binary(BinaryOp::Greater,
+                       make_identifier(shared_borrows_symbol(model->name), transition->range),
+                       make_integer(0, transition->range), transition->range);
+  } else if (kind == "mutable_borrow_available") {
+    auto no_shared = make_binary(
+        BinaryOp::Equal, make_identifier(shared_borrows_symbol(model->name), transition->range),
+        make_integer(0, transition->range), transition->range);
+    auto no_mut =
+        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), transition->range),
+                   transition->range);
+    goal = make_binary(BinaryOp::And, no_shared, no_mut, transition->range);
+  } else if (kind == "mutable_borrow_active") {
+    goal = make_identifier(mut_borrow_symbol(model->name), transition->arguments[0]->range);
+  } else {
+    throw Diagnostic(transition->range, "unknown borrow transition obligation '" + kind + "'");
+  }
+
+  ProofObligation obligation;
+  obligation.name = proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + "." + kind;
+  obligation.location = transition->arguments[0]->location;
+  obligation.range = transition->range;
+  obligation.assumptions = context.active;
+  obligation.goal = NamedPredicate{kind, goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
 ProofObligation make_memory_write_obligation(const FunctionDecl& fn, int safety_index,
                                              const Expr& access, const ProofContext& context) {
   const auto operation = access && !access->name.empty() ? access->name : std::string("ref");
@@ -884,9 +938,22 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
     for (const auto& argument : expr->arguments) {
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
     }
-    if (expr->name == "at" || expr->name == "load" || expr->name == "store") {
+    if (expr->name == "at" || expr->name == "load" || expr->name == "store" ||
+        is_borrow_transition_name(expr->name)) {
       ++safety_index;
       obligations.push_back(make_memory_live_obligation(fn, safety_index, expr, context));
+    }
+    if (is_borrow_transition_name(expr->name)) {
+      ++safety_index;
+      obligations.push_back(
+          make_borrow_transition_obligation(fn, safety_index, expr, context, "ownership_present"));
+      ++safety_index;
+      const auto kind = expr->name == "borrow_shared"    ? "shared_borrow_available"
+                        : expr->name == "release_shared" ? "shared_borrow_active"
+                        : expr->name == "borrow_mut"     ? "mutable_borrow_available"
+                                                         : "mutable_borrow_active";
+      obligations.push_back(
+          make_borrow_transition_obligation(fn, safety_index, expr, context, kind));
     }
     if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;
@@ -1055,6 +1122,11 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
   if (expr->name == "store") {
     throw Diagnostic(expr->range,
                      "store returns a model value and must be bound with let before proof use");
+  }
+
+  if (is_borrow_transition_name(expr->name)) {
+    throw Diagnostic(expr->range,
+                     expr->name + " returns a model value and must be bound with let before use");
   }
 
   throw Diagnostic(expr->range, "unknown function '" + expr->name + "'");
@@ -1284,6 +1356,112 @@ bool is_ref_store_call(const Expr& expr) {
   return is_model_store_call(expr) && expr->arguments.size() == 2;
 }
 
+bool is_borrow_transition_call(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Call && is_borrow_transition_name(expr->name) &&
+         expr->arguments.size() == 1;
+}
+
+void add_transition_fact(const std::string& name, const std::string& target, Expr value,
+                         const Expr& transition, ProofContext& context) {
+  auto equality = make_binary(BinaryOp::Equal, make_identifier(target, transition->range),
+                              std::move(value), transition->range);
+  context.active.push_back(NamedPredicate{name, equality, transition->location, transition->range});
+}
+
+void register_borrow_transition_binding(const Expr& transition, const std::string& target_symbol,
+                                        const Type& type, const FunctionDecl& fn,
+                                        ProofContext& context, int& call_index,
+                                        const StructTable& structs, const FunctionTable& functions,
+                                        const TheoremTable& theorems,
+                                        std::vector<ProofObligation>& obligations) {
+  if (!is_model_type(type) || !is_borrow_transition_call(transition)) {
+    throw Diagnostic(transition ? transition->range : SourceRange{},
+                     "borrow transition binding requires a memory model target");
+  }
+  const auto source = materialize_expr(transition->arguments[0], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(transition->arguments[0]->range,
+                     "borrow transition source requires a materialized memory model value");
+  }
+
+  context.symbols[target_symbol] = type;
+  if (is_model_container_type(type)) {
+    context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
+    context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+    add_symbol_equality_fact("transition_" + model_len_symbol(target_symbol),
+                             model_len_symbol(target_symbol), model_len_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + model_data_symbol(target_symbol),
+                             model_data_symbol(target_symbol), model_data_symbol(source->name),
+                             transition->range, transition->location, context);
+  } else {
+    context.ref_symbols[target_symbol] = type;
+    context.symbols[ref_addr_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+    context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
+    context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+    context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+    add_symbol_equality_fact("transition_" + ref_addr_symbol(target_symbol),
+                             ref_addr_symbol(target_symbol), ref_addr_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + ref_valid_symbol(target_symbol),
+                             ref_valid_symbol(target_symbol), ref_valid_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + ref_value_symbol(target_symbol),
+                             ref_value_symbol(target_symbol), ref_value_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + ref_write_symbol(target_symbol),
+                             ref_write_symbol(target_symbol), ref_write_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_symbol_equality_fact("transition_" + ref_epoch_symbol(target_symbol),
+                             ref_epoch_symbol(target_symbol), ref_epoch_symbol(source->name),
+                             transition->range, transition->location, context);
+  }
+
+  add_symbol_equality_fact("transition_" + allocation_symbol(target_symbol),
+                           allocation_symbol(target_symbol), allocation_symbol(source->name),
+                           transition->range, transition->location, context);
+  add_symbol_equality_fact(
+      "transition_" + allocation_live_symbol(target_symbol), allocation_live_symbol(target_symbol),
+      allocation_live_symbol(source->name), transition->range, transition->location, context);
+  register_ownership_state(target_symbol, context);
+  add_symbol_equality_fact("transition_" + owner_symbol(target_symbol), owner_symbol(target_symbol),
+                           owner_symbol(source->name), transition->range, transition->location,
+                           context);
+  add_symbol_equality_fact("transition_" + has_owner_symbol(target_symbol),
+                           has_owner_symbol(target_symbol), has_owner_symbol(source->name),
+                           transition->range, transition->location, context);
+
+  Expr next_shared = make_identifier(shared_borrows_symbol(source->name), transition->range);
+  if (transition->name == "borrow_shared") {
+    next_shared = make_binary(BinaryOp::Add, next_shared, make_integer(1, transition->range),
+                              transition->range);
+  } else if (transition->name == "release_shared") {
+    next_shared = make_binary(BinaryOp::Subtract, next_shared, make_integer(1, transition->range),
+                              transition->range);
+  }
+  add_transition_fact("transition_" + shared_borrows_symbol(target_symbol),
+                      shared_borrows_symbol(target_symbol), next_shared, transition, context);
+
+  Expr next_mut = make_identifier(mut_borrow_symbol(source->name), transition->range);
+  if (transition->name == "borrow_mut") {
+    next_mut = make_boolean(true, transition->range);
+  } else if (transition->name == "release_mut") {
+    next_mut = make_boolean(false, transition->range);
+  }
+  add_transition_fact("transition_" + mut_borrow_symbol(target_symbol),
+                      mut_borrow_symbol(target_symbol), next_mut, transition, context);
+  if (is_ref_model_type(type)) {
+    add_ref_alias_consistency_facts(target_symbol, type, transition->range, transition->location,
+                                    context);
+  }
+}
+
 void register_model_store_binding(const Expr& expr, const std::string& target_symbol,
                                   const Type& type, const FunctionDecl& fn, ProofContext& context,
                                   int& call_index, const StructTable& structs,
@@ -1444,6 +1622,12 @@ void materialize_struct_binding(const Expr& expr, const std::string& target_symb
     }
 
     if (is_model_type(expected_type)) {
+      if (is_borrow_transition_call(initializer.expr)) {
+        register_borrow_transition_binding(initializer.expr, target_field, expected_type, fn,
+                                           context, call_index, structs, functions, theorems,
+                                           obligations);
+        continue;
+      }
       if (is_model_container_type(expected_type) &&
           is_model_container_store_call(initializer.expr)) {
         register_model_store_binding(initializer.expr, target_field, expected_type, fn, context,
@@ -1838,6 +2022,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
         statement.expr->kind == ExprNode::Kind::StructLiteral) {
       materialize_struct_binding(statement.expr, symbol, fn, context, call_index, structs,
                                  functions, theorems, obligations);
+      return;
+    }
+
+    if (is_model_type(statement.type) && is_borrow_transition_call(statement.expr)) {
+      register_borrow_transition_binding(statement.expr, symbol, statement.type, fn, context,
+                                         call_index, structs, functions, theorems, obligations);
       return;
     }
 

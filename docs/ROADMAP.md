@@ -21,8 +21,9 @@ allocation-identity facts that aliases and immutable stores preserve. The next
 compiler work also makes every modeled read and write prove a shared allocation
 liveness fact. The next step is to turn those abstract facts into a real memory
 model. Allocation-level owner and borrow-state facts are now explicit and
-preserved; the next step is checked borrow/allocation/lifetime transitions, provenance, richer
-state transitions, and function-boundary semantics.
+preserved, and shared/mutable borrow acquire/release transitions are checked.
+The next step is allocation/lifetime transitions, provenance, richer state
+propagation, and function-boundary semantics.
 
 ## Completed
 
@@ -89,6 +90,7 @@ state transitions, and function-boundary semantics.
       through aliases and immutable stores.
 - [x] Add allocation-level owner and borrow-state facts with consistency
       invariants and preservation.
+- [x] Add checked shared/mutable borrow and release transitions.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -196,8 +198,9 @@ state transitions, and function-boundary semantics.
 - [x] Add abstract allocation identity across arrays, slices, and references.
 - [x] Add explicit allocation-liveness facts and gate modeled reads and writes.
 - [x] Add owner identity/presence and shared/mutable borrow-state facts.
-- [ ] Model allocation/deallocation transitions, ownership, borrowing, and
-      alias propagation as explicit proof facts.
+- [x] Add checked shared/mutable borrow acquire and release transitions.
+- [ ] Model allocation/deallocation transitions, consuming ownership, and alias
+      invalidation as explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
 - [ ] Connect source-level memory facts to native IR and binary-proof artifacts.

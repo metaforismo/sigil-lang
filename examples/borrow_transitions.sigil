@@ -1,0 +1,29 @@
+module borrow_transitions;
+
+fn shared_round_trip(xs: Slice[i64]) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires available: !has_mut_borrow(xs);
+ensures restored: result == shared_borrows(xs);
+{
+  let borrowed: Slice[i64] = borrow_shared(xs);
+  assert incremented: shared_borrows(borrowed) == shared_borrows(xs) + 1;
+  let released: Slice[i64] = release_shared(borrowed);
+  assert decremented: shared_borrows(released) == shared_borrows(xs);
+  return shared_borrows(released);
+}
+
+fn mutable_round_trip(ptr: Ref[i64]) -> bool
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires no_shared: shared_borrows(ptr) == 0;
+requires no_mutable: !has_mut_borrow(ptr);
+ensures released: result;
+{
+  let borrowed: Ref[i64] = borrow_mut(ptr);
+  assert active: has_mut_borrow(borrowed);
+  assert address_preserved: addr(borrowed) == addr(ptr);
+  let released: Ref[i64] = release_mut(borrowed);
+  assert inactive: !has_mut_borrow(released);
+  return !has_mut_borrow(released);
+}
