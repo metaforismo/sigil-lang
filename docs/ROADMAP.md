@@ -26,8 +26,10 @@ Slices now carry allocation-relative offsets, checked subview construction, and
 half-open overlap facts. Root-level `move_owner` and `deallocate` transitions
 now consume their source binding, prove liveness/ownership/borrow freedom and
 conservative allocation uniqueness, and materialize dead tombstones. The next
-step is fresh allocation creation, initialization tracking, richer provenance,
-and function-boundary semantics.
+proof layer also has fresh, fully initialized array/slice/reference constructors
+with deterministic lifetime-token non-reuse. The next step is explicit partial
+initialization tracking, no-crash summaries, richer provenance, and function
+boundary semantics.
 
 ## Completed
 
@@ -99,6 +101,8 @@ and function-boundary semantics.
       mutable borrow, preserving that state in the successor snapshot.
 - [x] Add consuming owner transfer and conservative checked deallocation with
       static use-after-move rejection and dead tombstones.
+- [x] Add fresh initialized proof-model allocation constructors with
+      deterministic lifetime-token and reference-address freshness.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -131,8 +135,8 @@ and function-boundary semantics.
 
 - [x] Connect array/slice/reference updates to memory-state and ownership
       rules.
-- [ ] Define allocation creation, freshness, richer lifetime, and provenance
-      semantics for references.
+- [ ] Define partial initialization, richer lifetime, and provenance semantics
+      for references and containers.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Execute an external agent loop that proposes candidate lemmas from saved
@@ -215,8 +219,10 @@ and function-boundary semantics.
       array, slice, and reference store.
 - [x] Model consuming owner transfer and deallocation with borrow-free and
       conservative alias-exclusion obligations.
-- [ ] Model fresh allocation creation, initialization, richer lifetime
-      provenance, and path-sensitive alias invalidation.
+- [x] Model fresh fully initialized allocation constructors and prevent
+      lifetime-token reuse on the current proof path.
+- [ ] Model partial initialization, richer lifetime provenance, and
+      path-sensitive alias invalidation.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
 - [x] Connect source-level memory facts to native IR and binary-proof artifacts

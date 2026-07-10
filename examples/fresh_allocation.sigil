@@ -1,0 +1,61 @@
+module fresh_allocation;
+
+container OwnedBuffer[T] {
+  values: Slice[T];
+
+  invariant allocated: is_live(values) && has_owner(values);
+}
+
+fn make_slice(length: i64, initial: i64) -> bool
+requires valid_size: length >= 0;
+ensures created: result;
+{
+  let values: Slice[i64] = allocate_slice(length, initial);
+  assert exact_length: len(values) == length;
+  assert zero_offset: slice_offset(values) == 0;
+  assert live: is_live(values);
+  assert owned: has_owner(values);
+  assert no_shared: shared_borrows(values) == 0;
+  assert no_mutable: !has_mut_borrow(values);
+  if length > 0 {
+    assert initialized: at(values, 0) == initial;
+  } else {
+  }
+  return is_live(values) && has_owner(values);
+}
+
+fn make_models(existing: Ref[i64]) -> bool
+{
+  let flag: Ref[bool] = allocate_ref(true);
+  let bits: Array[bool] = allocate_array(2, false);
+  let number: Ref[i64] = allocate_ref(0);
+  assert fresh_ref_allocation: disjoint_allocation(existing, flag);
+  assert fresh_ref_address: disjoint(existing, number);
+  assert distinct_models: disjoint_allocation(flag, bits);
+  assert reference_valid: is_valid(flag);
+  assert reference_writable: can_write(flag);
+  assert reference_initial: load(flag);
+  assert array_initial: !at(bits, 1);
+  return is_live(flag) && is_live(bits);
+}
+
+fn no_identity_reuse(old: Slice[i64]) -> bool
+requires old_live: is_live(old);
+requires old_owned: has_owner(old);
+requires old_no_shared: shared_borrows(old) == 0;
+requires old_no_mutable: !has_mut_borrow(old);
+{
+  let dead: Slice[i64] = deallocate(old);
+  let replacement: Slice[i64] = allocate_slice(1, 7);
+  assert fresh_lifetime: disjoint_allocation(dead, replacement);
+  return !is_live(dead) && is_live(replacement);
+}
+
+fn make_container() -> bool
+{
+  let buffer: OwnedBuffer[i64] = OwnedBuffer[i64] {
+    values: allocate_slice(1, 3)
+  };
+  let values: Slice[i64] = buffer.values;
+  return at(values, 0) == 3;
+}

@@ -157,7 +157,7 @@ Reads from the updated model then lower to
 can prove standard array-theory facts such as reading the same index that was
 just written. This is still not runtime mutation: the allocation token is an
 abstract identity, and the liveness bit is an explicit proof fact rather than
-allocation creation/destruction or native-memory semantics.
+native-memory semantics.
 
 `slice_view(xs, start, count)` emits `memory_live` and `view_in_bounds`
 obligations, then materializes a result with the same data/allocation/liveness
@@ -237,6 +237,32 @@ result is a tombstone that can be inspected, while any read or write through it
 still emits and refutes `memory_live`. Possible aliases do not receive invented
 invalidation facts; they make `allocation_unique` unprovable or refutable.
 
+Allocation constructors materialize fresh proof snapshots. `allocate_array`
+and `allocate_slice` first emit `allocation_size_nonnegative`; after that gate,
+their component facts are:
+
+```sigil
+allocated.len == length
+allocated.offset == 0
+allocated.data == const_array(initial)
+allocated.live == true
+allocated.has_owner == true
+allocated.shared == 0
+allocated.mut_borrow == false
+```
+
+The SMT data equality uses a typed constant array, so any proved in-bounds read
+of a newly allocated container equals `initial`. `allocate_ref(initial)` has no
+size gate and additionally sets `valid` and `write` true, `value` to `initial`,
+and `epoch` to zero. Its address differs from every current reference root.
+
+Allocation identity freshness is a constructor fact, not a caller obligation.
+The planner retains a deterministic history of materialized allocation symbols
+on the current proof path and emits the new token as distinct from each sorted
+historical root. Consumed sources and dead tombstones remain in that history,
+so a later constructor cannot reuse their lifetime token even though they no
+longer participate in deallocation uniqueness checks.
+
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:
 
@@ -277,9 +303,10 @@ the local weakest-precondition substitution can prove straight-line facts such
 as `load(store(ref, value)) == value` once the store has been materialized.
 
 The reference model is intentionally not a full memory semantics. It now has a
-conservative consuming deallocation transition, but no allocation creation,
-freshness proof, field projection, byte layout, native memory mutation, runtime
-alias invalidation, or native-code provenance model. The write-permission bit is
+conservative consuming deallocation transition and fresh initialized abstract
+constructors, but no partial-initialization state, field projection, byte
+layout, native memory mutation, runtime alias invalidation, or native-code
+provenance model. The write-permission bit is
 an additional proof fact beyond the owner and mutable-borrow gates. Allocation
 identity alone does not imply liveness, and live entry state still comes from
 contracts. Those pieces must be added before Sigil can claim low-level memory

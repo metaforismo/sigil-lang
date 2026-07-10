@@ -270,7 +270,9 @@ bool is_model_intrinsic_name(const std::string& name) {
          name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow" ||
          name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
          name == "release_mut" || name == "slice_view" || name == "slice_offset" ||
-         name == "same_view" || name == "overlaps" || name == "move_owner" || name == "deallocate";
+         name == "same_view" || name == "overlaps" || name == "move_owner" ||
+         name == "deallocate" || name == "allocate_array" || name == "allocate_slice" ||
+         name == "allocate_ref";
 }
 
 bool is_borrow_transition_name(const std::string& name) {
@@ -282,6 +284,10 @@ bool is_consuming_transition_name(const std::string& name) {
   return name == "move_owner" || name == "deallocate";
 }
 
+bool is_allocation_name(const std::string& name) {
+  return name == "allocate_array" || name == "allocate_slice" || name == "allocate_ref";
+}
+
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
                 const CallableContext& context);
 
@@ -290,6 +296,29 @@ Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTabl
 
 Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                                 const StructTable& structs, const CallableContext& context) {
+  if (is_allocation_name(expr->name)) {
+    const bool is_ref = expr->name == "allocate_ref";
+    const std::size_t expected_arguments = is_ref ? 1 : 2;
+    if (expr->arguments.size() != expected_arguments) {
+      throw Diagnostic(expr->range, expr->name + " expects " + std::to_string(expected_arguments) +
+                                        " argument(s), got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    if (!is_ref) {
+      require_type(expr->arguments[0], symbols, structs, context, TypeKind::I64,
+                   expr->name + " length");
+    }
+    const auto& initial_expr = expr->arguments[is_ref ? 0 : 1];
+    const auto initial = infer_expr(initial_expr, symbols, structs, context);
+    if (initial.kind != TypeKind::I64 && initial.kind != TypeKind::Bool) {
+      throw Diagnostic(initial_expr->range, expr->name +
+                                                " initial value must be i64 or bool, found " +
+                                                initial.display());
+    }
+    const auto model_name = is_ref ? "Ref" : (expr->name == "allocate_array" ? "Array" : "Slice");
+    return Type{TypeKind::Unknown, model_name, {initial}};
+  }
+
   if (is_consuming_transition_name(expr->name)) {
     if (expr->arguments.size() != 1) {
       throw Diagnostic(expr->range, expr->name + " expects 1 argument, got " +
@@ -832,9 +861,12 @@ Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable&
   throw Diagnostic(expr->range, "unknown expression kind");
 }
 
+void validate_allocation_placement(const Expr& expr, bool direct_model_binding);
+
 void validate_predicate(const NamedPredicate& predicate, const SymbolTable& symbols,
                         const StructTable& structs, const CallableContext& context,
                         const std::string& owner) {
+  validate_allocation_placement(predicate.expr, false);
   require_type(predicate.expr, symbols, structs, with_theorem_calls_allowed(context),
                TypeKind::Bool, owner + " '" + predicate.name + "'");
 }
@@ -891,6 +923,34 @@ const ExprNode* find_consuming_call(const Expr& expr) {
     }
   }
   return nullptr;
+}
+
+void validate_allocation_placement(const Expr& expr, bool direct_model_binding) {
+  if (!expr) {
+    return;
+  }
+  if (expr->kind == ExprNode::Kind::Call && is_allocation_name(expr->name)) {
+    if (!direct_model_binding) {
+      throw Diagnostic(expr->range, "allocation constructor '" + expr->name +
+                                        "' must be the direct initializer of a model binding");
+    }
+    for (const auto& argument : expr->arguments) {
+      validate_allocation_placement(argument, false);
+    }
+    return;
+  }
+  if (expr->kind == ExprNode::Kind::StructLiteral) {
+    for (const auto& field : expr->field_initializers) {
+      validate_allocation_placement(field.expr, direct_model_binding);
+    }
+    return;
+  }
+  validate_allocation_placement(expr->condition, false);
+  validate_allocation_placement(expr->lhs, false);
+  validate_allocation_placement(expr->rhs, false);
+  for (const auto& argument : expr->arguments) {
+    validate_allocation_placement(argument, false);
+  }
 }
 
 void reject_loop_body_returns(const std::vector<Statement>& statements) {
@@ -969,6 +1029,7 @@ void validate_statement(const Statement& statement, const FunctionDecl& decl, Sy
   const auto value_context = proof_only_body ? with_theorem_calls_allowed(context) : context;
   const auto proof_context = with_theorem_calls_allowed(context);
   reject_consumed_uses(statement.expr, consumed_models);
+  validate_allocation_placement(statement.expr, statement.kind == StatementKind::Let);
   for (const auto& invariant : statement.loop_invariants) {
     reject_consumed_uses(invariant.expr, consumed_models);
   }

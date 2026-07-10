@@ -1401,6 +1401,72 @@ requires separate_third: disjoint_allocation(first, third);
              "third_alloc))))") != std::string::npos,
          "allocation uniqueness comparisons use deterministic symbol order");
 
+  const char* fresh_allocation_source = R"(
+module fresh_allocation;
+
+fn allocate(existing: Slice[i64], length: i64, initial: i64) -> bool
+requires size: length >= 0;
+{
+  let values: Slice[i64] = allocate_slice(length, initial);
+  assert created: len(values) == length && is_live(values) && has_owner(values) &&
+                  disjoint_allocation(existing, values);
+  return is_live(values);
+}
+  )";
+  const auto fresh_allocation_module =
+      sigil::parse_source(fresh_allocation_source, "fresh-allocation.sigil");
+  const auto fresh_allocation_obligations = sigil::build_obligations(fresh_allocation_module);
+  expect(fresh_allocation_obligations.size() == 2, "fresh allocation obligations");
+  expect(fresh_allocation_obligations[0].name == "fn.allocate.safety.1.allocation_size_nonnegative",
+         "fresh allocation size obligation name");
+  expect(fresh_allocation_obligations[1].name == "fn.allocate.assert.1.created",
+         "fresh allocation assertion name");
+  const auto fresh_allocation_smt = sigil::emit_smt_lib(fresh_allocation_obligations[1]);
+  expect(fresh_allocation_smt.find("(assert (= values_len length))") != std::string::npos,
+         "fresh allocation length fact");
+  expect(fresh_allocation_smt.find(
+             "(assert (= values_data ((as const (Array Int Int)) initial)))") != std::string::npos,
+         "fresh allocation initialization fact");
+  expect(fresh_allocation_smt.find("(assert (distinct values_alloc existing_alloc))") !=
+             std::string::npos,
+         "fresh allocation identity fact");
+  expect(fresh_allocation_smt.find("(assert (= values_live true))") != std::string::npos,
+         "fresh allocation liveness fact");
+  expect(fresh_allocation_smt.find("(assert (= values_has_owner true))") != std::string::npos,
+         "fresh allocation ownership fact");
+
+  const char* fresh_reference_source = R"(
+module fresh_reference;
+
+fn allocate(existing: Ref[i64]) -> bool
+{
+  let value: Ref[i64] = allocate_ref(9);
+  assert created: disjoint(existing, value) && disjoint_allocation(existing, value) &&
+                  is_valid(value) && can_write(value) && load(value) == 9;
+  return is_live(value);
+}
+  )";
+  const auto fresh_reference_module =
+      sigil::parse_source(fresh_reference_source, "fresh-reference.sigil");
+  const auto fresh_reference_obligations = sigil::build_obligations(fresh_reference_module);
+  expect(fresh_reference_obligations.size() == 3, "fresh reference obligations");
+  expect(fresh_reference_obligations[0].name == "fn.allocate.safety.1.memory_live",
+         "fresh reference load liveness obligation");
+  expect(fresh_reference_obligations[1].name == "fn.allocate.safety.2.memory_valid",
+         "fresh reference load validity obligation");
+  const auto fresh_reference_smt = sigil::emit_smt_lib(fresh_reference_obligations[2]);
+  expect(fresh_reference_smt.find("(assert (distinct value_addr existing_addr))") !=
+             std::string::npos,
+         "fresh reference address fact");
+  expect(fresh_reference_smt.find("(assert (= value_valid true))") != std::string::npos,
+         "fresh reference validity fact");
+  expect(fresh_reference_smt.find("(assert (= value_write true))") != std::string::npos,
+         "fresh reference write fact");
+  expect(fresh_reference_smt.find("(assert (= value_value 9))") != std::string::npos,
+         "fresh reference initial value fact");
+  expect(fresh_reference_smt.find("(assert (= value_epoch 0))") != std::string::npos,
+         "fresh reference initial epoch fact");
+
   const char* memory_state_update_source = R"(
 module memory_state_updates;
 

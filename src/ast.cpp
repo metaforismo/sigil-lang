@@ -363,6 +363,10 @@ std::string display_expr(const Expr& expr) {
     if (expr->name == "__sigil_store" && expr->arguments.size() == 3) {
       return "store(" + display_arguments(expr->arguments) + ")";
     }
+    if ((expr->name == "__sigil_const_i64_array" || expr->name == "__sigil_const_bool_array") &&
+        expr->arguments.size() == 1) {
+      return "const_array(" + display_arguments(expr->arguments) + ")";
+    }
     return expr->name + "(" + display_arguments(expr->arguments) + ")";
   case ExprNode::Kind::StructLiteral:
     return expr->literal_type.display() + " { " +
@@ -400,6 +404,12 @@ std::string emit_smt_expr(const Expr& expr) {
     if (expr->name == "__sigil_store" && expr->arguments.size() == 3) {
       return "(store " + emit_smt_expr(expr->arguments[0]) + " " +
              emit_smt_expr(expr->arguments[1]) + " " + emit_smt_expr(expr->arguments[2]) + ")";
+    }
+    if (expr->name == "__sigil_const_i64_array" && expr->arguments.size() == 1) {
+      return "((as const (Array Int Int)) " + emit_smt_expr(expr->arguments[0]) + ")";
+    }
+    if (expr->name == "__sigil_const_bool_array" && expr->arguments.size() == 1) {
+      return "((as const (Array Int Bool)) " + emit_smt_expr(expr->arguments[0]) + ")";
     }
     throw std::runtime_error("cannot emit unresolved call expression '" + expr->name + "'");
   case ExprNode::Kind::StructLiteral:

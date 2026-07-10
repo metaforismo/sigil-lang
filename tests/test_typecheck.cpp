@@ -831,6 +831,67 @@ fn nested_move_expression(xs: Slice[i64]) -> i64
 
   expect_diagnostic(R"(
 module bad;
+fn allocate_slice_arity() -> bool
+{
+  let values: Slice[i64] = allocate_slice(1);
+  return true;
+}
+)",
+                    "allocate_slice expects 2 argument(s), got 1");
+
+  expect_diagnostic(R"(
+module bad;
+fn allocate_bool_length() -> bool
+{
+  let values: Array[i64] = allocate_array(true, 0);
+  return true;
+}
+)",
+                    "allocate_array length must be i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn allocate_model_initial(xs: Slice[i64]) -> bool
+{
+  let values: Slice[i64] = allocate_slice(1, xs);
+  return true;
+}
+)",
+                    "allocate_slice initial value must be i64 or bool, found Slice[i64]");
+
+  expect_diagnostic(R"(
+module bad;
+fn allocate_type_mismatch() -> bool
+{
+  let values: Slice[bool] = allocate_slice(1, 0);
+  return true;
+}
+)",
+                    "let type mismatch: expected Slice[bool], found Slice[i64]");
+
+  expect_diagnostic(R"(
+module bad;
+fn nested_allocation() -> i64
+{
+  return len(allocate_slice(1, 0));
+}
+)",
+                    "allocation constructor 'allocate_slice' must be the direct initializer of a "
+                    "model binding");
+
+  expect_diagnostic(R"(
+module bad;
+fn allocation_in_contract() -> bool
+requires invalid: is_live(allocate_ref(0));
+{
+  return true;
+}
+)",
+                    "allocation constructor 'allocate_ref' must be the direct initializer of a "
+                    "model binding");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_ref_element(ptr: Ref[Slice[i64]]) -> i64
 {
   return 0;
