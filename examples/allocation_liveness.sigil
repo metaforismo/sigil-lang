@@ -9,6 +9,7 @@ ensures exact: result == is_live(xs);
 fn read_live_slice(xs: Slice[i64], index: i64) -> i64
 requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
+requires initialized: is_initialized(xs, index);
 ensures exact: result == at(xs, index);
 {
   return at(xs, index);

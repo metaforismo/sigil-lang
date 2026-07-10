@@ -66,6 +66,11 @@ callee arguments in the caller's current symbolic context, emits one obligation
 for each callee `requires` predicate, introduces a fresh symbol for the call
 result, and adds each callee `ensures` predicate as an assumption with
 parameters and `result` substituted by the actual arguments and result symbol.
+After substitution, model intrinsics are lowered again so contracts over
+arrays, slices, and references refer to the caller's concrete component
+symbols. This allows a stored partial-initialization mask to prove a callee's
+`is_initialized` requirement without treating source calls as solver
+functions.
 The type checker rejects recursive call graphs for now, so this modular model is
 acyclic.
 
@@ -113,9 +118,10 @@ Array and slice model parameters are materialized as six proof symbols:
 `value.alloc`, `value.live`, `value.len`, `value.offset`, `value.data`, and
 `value.init`. The allocation, length, and offset symbols are `Int`, liveness is
 `Bool`, data is an SMT array from integer indices to the concrete element sort,
-and initialization is `(Array Int Bool)`. Function-entry masks are currently
-fixed to true for safe-container boundary compatibility. Array offsets are
-constrained to zero; slice offsets are non-negative.
+and initialization is `(Array Int Bool)`. Function-entry masks are
+unconstrained: the callee must establish required slots with explicit
+`is_initialized` preconditions. Array offsets are constrained to zero; slice
+offsets are non-negative.
 `len(xs)` lowers to `xs.len`, `is_live(xs)` lowers to `xs.live`, and
 `at(xs, i)` lowers to `(select xs.data (+ xs.offset i))`.
 
@@ -316,9 +322,10 @@ as `load(store(ref, value)) == value` once the store has been materialized.
 
 The reference model is intentionally not a full memory semantics. It now has a
 conservative consuming deallocation transition, fresh allocation constructors,
-and local partial-initialization state, but no field projection, byte layout,
-native memory mutation, runtime alias invalidation, partial-state function
-boundaries, or native-code provenance model. The write-permission bit is
+and explicit parameter contracts for partial-initialization state, but no field
+projection, byte layout, native memory mutation, runtime alias invalidation,
+model-valued return/effect summaries, or native-code provenance model. The
+write-permission bit is
 an additional proof fact beyond the owner and mutable-borrow gates. Allocation
 identity alone does not imply liveness, and live entry state still comes from
 contracts. Those pieces must be added before Sigil can claim low-level memory

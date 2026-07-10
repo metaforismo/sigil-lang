@@ -1,0 +1,28 @@
+module function_boundary_initialization;
+
+fn read_initialized(values: Slice[i64], index: i64) -> i64
+requires live: is_live(values);
+requires in_bounds: index >= 0 && index < len(values);
+requires initialized: is_initialized(values, index);
+ensures exact: result == at(values, index);
+{
+  return at(values, index);
+}
+
+fn call_with_partial(length: i64, index: i64, value: i64) -> i64
+requires valid_length: length > 0;
+requires valid_index: index >= 0 && index < length;
+ensures exact: result == value;
+{
+  let raw: Slice[i64] = allocate_uninit_slice(length, 0);
+  let exclusive: Slice[i64] = borrow_mut(raw);
+  let initialized: Slice[i64] = store(exclusive, index, value);
+  return read_initialized(initialized, index);
+}
+
+fn call_with_full(value: i64) -> i64
+ensures exact: result == value;
+{
+  let initialized: Slice[i64] = allocate_slice(1, value);
+  return read_initialized(initialized, 0);
+}

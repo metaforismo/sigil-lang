@@ -41,9 +41,10 @@ types can be added without redesigning the AST, but the static checker rejects
 unknown concrete types before proof generation.
 
 Struct types are supported for fields and local values constructed directly
-from struct literals. Function parameters and return values are scalar-only for
-now, because aggregate function-boundary layout and proof semantics are not
-defined yet.
+from struct literals. Functions and theorems may take built-in proof model
+parameters with scalar element types, such as `Array[i64]`, `Slice[bool]`, and
+`Ref[i64]`; other aggregate parameters and every aggregate return remain
+unsupported until copy, effect, layout, and ABI semantics are defined.
 
 ## Structs And Invariants
 
@@ -208,6 +209,18 @@ ordered read obligations prove that the allocation is live, the logical index
 is in bounds, and the physical element is initialized; together they are the
 modeled no-crash condition for `at`.
 
+Function-entry initialization masks are unconstrained. A function that reads a
+parameter must declare the exact state it needs, for example:
+
+```sigil
+requires initialized: is_initialized(xs, index);
+```
+
+At a call site, Sigil substitutes the caller's current model snapshot into the
+callee contract and lowers model intrinsics again. A fully initialized
+constructor proves any in-bounds mask query, while a raw allocation followed by
+`store` proves only the physical slots written in that successor snapshot.
+
 `slice_view(source, start, length)` creates a checked subview and must be bound
 to a `Slice[T]` local or model field. It emits `memory_live` followed by
 `view_in_bounds`:
@@ -330,10 +343,10 @@ address relative to every current reference root.
 Ordinary array and slice constructors set every initialization-mask element to
 true. Raw constructors set every mask element to false; their `witness` selects
 `T` and supplies an inaccessible backing value until a checked `store`
-initializes a logical index. Function-entry array/slice models are currently
-treated as fully initialized safe-container snapshots. Passing partially
-initialized models across function boundaries remains undefined because model
-return and aggregate effect semantics are not implemented yet.
+initializes a logical index. Partially initialized models can be passed as
+function or theorem arguments when their callee preconditions describe the
+required slots. Model-valued returns and cross-call mutation/effect summaries
+are not implemented yet.
 
 Each constructor receives an allocation identity distinct from every allocation
 snapshot previously materialized on the current proof path, including consumed
@@ -358,7 +371,7 @@ This is intentionally a proof model, not a runtime memory model. It can model a
 checked transition from a unique live owner to a dead tombstone and track local
 partial initialization, but it does not perform native allocation/deallocation,
 define byte layout, propagate effects through runtime aliases, or pass partial
-initialization state across function boundaries.
+initialization through model-valued returns or mutation summaries.
 Aggregate returns are still rejected, and native lowering skips functions that
 take array or slice model parameters.
 

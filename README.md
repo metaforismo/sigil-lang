@@ -95,6 +95,10 @@ production verifier yet.
   `is_initialized(model, index)`. Raw masks start false, model stores set exactly
   their physical write index true, and aliases, views, borrows, moves, and
   tombstones preserve mask snapshots.
+- Explicit initialization contracts at function boundaries. Array and slice
+  parameters have unconstrained masks; callees declare the slots they read with
+  `requires is_initialized(model, index)`, and modular calls prove those
+  predicates over the caller's current constructor/store/view snapshot.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Bounded control-flow weakest-precondition reasoning: the local prover splits
@@ -219,6 +223,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/fresh_allocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/initialization_safety.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/function_boundary_initialization.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
@@ -304,8 +309,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 The next hard pieces are, in order:
 
 - richer lifetime and provenance rules, path-sensitive consuming transitions,
-  and function-boundary semantics for partially initialized models beyond the
-  current local proof allocation/deallocation model;
+  and aggregate return/effect semantics beyond the current model-parameter
+  contracts;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;
