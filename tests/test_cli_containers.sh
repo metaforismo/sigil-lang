@@ -19,14 +19,17 @@ printf '%s\n' "$output" | grep "fn.read_window.container.window.invariant.1.inde
 printf '%s\n' "$output" | grep "fn.read_window.container.window.invariant.2.index_within_items" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_window.assert.1.len_visible" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_window.assert.2.index_visible" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_window.safety.1.memory_live" >/dev/null
 
 len_assert="$smt_dir/fn.read_window.assert.1.len_visible.smt2"
 index_assert="$smt_dir/fn.read_window.assert.2.index_visible.smt2"
 container_invariant="$smt_dir/fn.read_window.container.window.invariant.2.index_within_items.smt2"
+live_gate="$smt_dir/fn.read_window.safety.1.memory_live.smt2"
 
 test -f "$len_assert"
 test -f "$index_assert"
 test -f "$container_invariant"
+test -f "$live_gate"
 
 grep "(set-option :timeout 250)" "$len_assert" >/dev/null
 grep "(declare-const window_items_len Int)" "$len_assert" >/dev/null
@@ -36,3 +39,5 @@ grep "(assert (= window_items_data xs_data))" "$len_assert" >/dev/null
 grep "(assert (not (= window_items_len xs_len)))" "$len_assert" >/dev/null
 grep "(assert (= window_index index))" "$index_assert" >/dev/null
 grep "(assert (not (< window_index window_items_len)))" "$container_invariant" >/dev/null
+grep "(assert xs_live)" "$live_gate" >/dev/null
+grep "(assert (not xs_live))" "$live_gate" >/dev/null

@@ -328,6 +328,7 @@ container Window[T] {
 }
 
 fn read_window(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == at(xs, index);
 {
@@ -340,7 +341,7 @@ ensures exact: result == at(xs, index);
 
   const auto container_module = sigil::parse_source(container_source, "containers.sigil");
   const auto container_obligations = sigil::build_obligations(container_module);
-  expect(container_obligations.size() == 7, "container invariants, field asserts, safety, ensure");
+  expect(container_obligations.size() == 9, "container invariants, field asserts, safety, ensure");
   expect(container_obligations[0].name ==
              "fn.read_window.container.window.invariant.1.index_non_negative",
          "container first invariant obligation name");
@@ -375,6 +376,7 @@ ensures exact: result == at(xs, index);
 module slice_model;
 
 fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == at(xs, index);
 {
@@ -382,6 +384,7 @@ ensures exact: result == at(xs, index);
 }
 
 fn read_array(flags: Array[bool], index: i64) -> bool
+requires live: is_live(flags);
 requires in_bounds: index >= 0 && index < len(flags);
 ensures exact: result == at(flags, index);
 {
@@ -391,16 +394,20 @@ ensures exact: result == at(flags, index);
 
   const auto slice_model_module = sigil::parse_source(slice_model_source, "slice-model.sigil");
   const auto slice_model_obligations = sigil::build_obligations(slice_model_module);
-  expect(slice_model_obligations.size() == 6, "array and slice model obligations");
-  expect(slice_model_obligations[0].name == "fn.read_slice.safety.1.index_in_bounds",
-         "slice return access bounds obligation");
+  expect(slice_model_obligations.size() == 10, "array and slice model obligations");
+  expect(slice_model_obligations[0].name == "fn.read_slice.safety.1.memory_live",
+         "slice return access liveness obligation");
   expect(slice_model_obligations[1].name == "fn.read_slice.safety.2.index_in_bounds",
+         "slice return access bounds obligation");
+  expect(slice_model_obligations[2].name == "fn.read_slice.safety.3.memory_live",
+         "slice ensure access liveness obligation");
+  expect(slice_model_obligations[3].name == "fn.read_slice.safety.4.index_in_bounds",
          "slice ensure access bounds obligation");
-  expect(slice_model_obligations[2].name == "fn.read_slice.ensures.1.exact",
+  expect(slice_model_obligations[4].name == "fn.read_slice.ensures.1.exact",
          "slice ensure obligation");
-  expect(slice_model_obligations[3].name == "fn.read_array.safety.1.index_in_bounds",
-         "array return access bounds obligation");
-  const auto slice_safety_smt = sigil::emit_smt_lib(slice_model_obligations[0]);
+  expect(slice_model_obligations[5].name == "fn.read_array.safety.1.memory_live",
+         "array return access liveness obligation");
+  const auto slice_safety_smt = sigil::emit_smt_lib(slice_model_obligations[1]);
   expect(slice_safety_smt.find("(declare-const xs_len Int)") != std::string::npos,
          "slice length is declared");
   expect(slice_safety_smt.find("(declare-const xs_data (Array Int Int))") != std::string::npos,
@@ -408,7 +415,7 @@ ensures exact: result == at(flags, index);
   expect(slice_safety_smt.find("(assert (not (and (>= index 0) (< index xs_len))))") !=
              std::string::npos,
          "slice bounds goal uses len");
-  const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[5]);
+  const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[9]);
   expect(array_ensure_smt.find("(declare-const flags_data (Array Int Bool))") != std::string::npos,
          "array bool data model is declared");
   expect(array_ensure_smt.find("(assert (= result (select flags_data index)))") !=
@@ -416,18 +423,23 @@ ensures exact: result == at(flags, index);
          "array ensure assumes selected element");
   const auto slice_model_results = sigil::verify_obligations(slice_model_obligations, false);
   expect(slice_model_results[0].status == sigil::VerificationStatus::Proven,
+         "slice liveness proven from precondition");
+  expect(slice_model_results[1].status == sigil::VerificationStatus::Proven,
          "slice bounds proven from precondition");
-  expect(slice_model_results[2].status == sigil::VerificationStatus::Proven,
+  expect(slice_model_results[4].status == sigil::VerificationStatus::Proven,
          "slice ensure proven from return binding");
-  expect(slice_model_results[3].status == sigil::VerificationStatus::Proven,
-         "array bounds proven from precondition");
   expect(slice_model_results[5].status == sigil::VerificationStatus::Proven,
+         "array liveness proven from precondition");
+  expect(slice_model_results[6].status == sigil::VerificationStatus::Proven,
+         "array bounds proven from precondition");
+  expect(slice_model_results[9].status == sigil::VerificationStatus::Proven,
          "array ensure proven from return binding");
 
   const char* model_update_source = R"(
 module model_updates;
 
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == value;
 {
@@ -437,6 +449,7 @@ ensures exact: result == value;
 }
 
 fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
+requires live: is_live(flags);
 requires in_bounds: index >= 0 && index < len(flags);
 ensures exact: result == value;
 {
@@ -447,18 +460,22 @@ ensures exact: result == value;
 
   const auto model_update_module = sigil::parse_source(model_update_source, "model-updates.sigil");
   const auto model_update_obligations = sigil::build_obligations(model_update_module);
-  expect(model_update_obligations.size() == 7, "array and slice store obligations");
-  expect(model_update_obligations[0].name == "fn.write_then_read.safety.1.index_in_bounds",
+  expect(model_update_obligations.size() == 11, "array and slice store obligations");
+  expect(model_update_obligations[0].name == "fn.write_then_read.safety.1.memory_live",
+         "store write liveness obligation");
+  expect(model_update_obligations[1].name == "fn.write_then_read.safety.2.index_in_bounds",
          "store write bounds obligation");
-  expect(model_update_obligations[1].name == "fn.write_then_read.assert.1.length_preserved",
+  expect(model_update_obligations[2].name == "fn.write_then_read.assert.1.length_preserved",
          "store length assertion obligation");
-  expect(model_update_obligations[2].name == "fn.write_then_read.safety.2.index_in_bounds",
+  expect(model_update_obligations[3].name == "fn.write_then_read.safety.3.memory_live",
+         "store read liveness obligation");
+  expect(model_update_obligations[4].name == "fn.write_then_read.safety.4.index_in_bounds",
          "store read bounds obligation");
-  expect(model_update_obligations[3].name == "fn.write_then_read.ensures.1.exact",
+  expect(model_update_obligations[5].name == "fn.write_then_read.ensures.1.exact",
          "store scalar ensure obligation");
-  expect(model_update_obligations[6].name == "fn.update_flag.ensures.1.exact",
+  expect(model_update_obligations[10].name == "fn.update_flag.ensures.1.exact",
          "store bool ensure obligation");
-  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[3]);
+  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[5]);
   expect(write_store_smt.find("(declare-const updated_len Int)") != std::string::npos,
          "store local length is declared");
   expect(write_store_smt.find("(declare-const updated_data (Array Int Int))") != std::string::npos,
@@ -473,7 +490,7 @@ ensures exact: result == value;
          "store read binds result to updated select");
   expect(write_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "store ensure checks write then read");
-  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[6]);
+  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[10]);
   expect(flag_store_smt.find("(declare-const updated_data (Array Int Bool))") != std::string::npos,
          "store bool array data is declared");
   expect(flag_store_smt.find("(assert (= updated_data (store flags_data index value)))") !=
@@ -481,18 +498,23 @@ ensures exact: result == value;
          "store bool array data is updated");
   const auto model_update_results = sigil::verify_obligations(model_update_obligations, false);
   expect(model_update_results[0].status == sigil::VerificationStatus::Proven,
-         "store write bounds proven from precondition");
+         "store write liveness proven from precondition");
   expect(model_update_results[1].status == sigil::VerificationStatus::Proven,
-         "store length assertion proven locally");
+         "store write bounds proven from precondition");
   expect(model_update_results[2].status == sigil::VerificationStatus::Proven,
+         "store length assertion proven locally");
+  expect(model_update_results[3].status == sigil::VerificationStatus::Proven,
+         "store read liveness proven from store fact");
+  expect(model_update_results[4].status == sigil::VerificationStatus::Proven,
          "store read bounds proven from store length fact");
-  expect(model_update_results[3].status == sigil::VerificationStatus::Unknown,
+  expect(model_update_results[5].status == sigil::VerificationStatus::Unknown,
          "store write then read needs array theory");
 
   const char* ref_model_source = R"(
 module ref_model;
 
 fn read_ref(ptr: Ref[i64]) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
 {
@@ -500,6 +522,7 @@ ensures exact: result == load(ptr);
 }
 
 fn read_flag(ptr: Ref[bool]) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
 {
@@ -515,25 +538,29 @@ ensures exact: result == disjoint(left, right);
 
   const auto ref_model_module = sigil::parse_source(ref_model_source, "ref-model.sigil");
   const auto ref_model_obligations = sigil::build_obligations(ref_model_module);
-  expect(ref_model_obligations.size() == 7, "ref model obligations");
-  expect(ref_model_obligations[0].name == "fn.read_ref.safety.1.memory_valid",
-         "ref return load validity obligation");
+  expect(ref_model_obligations.size() == 11, "ref model obligations");
+  expect(ref_model_obligations[0].name == "fn.read_ref.safety.1.memory_live",
+         "ref return load liveness obligation");
   expect(ref_model_obligations[1].name == "fn.read_ref.safety.2.memory_valid",
+         "ref return load validity obligation");
+  expect(ref_model_obligations[2].name == "fn.read_ref.safety.3.memory_live",
+         "ref ensure load liveness obligation");
+  expect(ref_model_obligations[3].name == "fn.read_ref.safety.4.memory_valid",
          "ref ensure load validity obligation");
-  expect(ref_model_obligations[2].name == "fn.read_ref.ensures.1.exact", "ref ensure obligation");
-  expect(ref_model_obligations[6].name == "fn.refs_are_disjoint.ensures.1.exact",
+  expect(ref_model_obligations[4].name == "fn.read_ref.ensures.1.exact", "ref ensure obligation");
+  expect(ref_model_obligations[10].name == "fn.refs_are_disjoint.ensures.1.exact",
          "ref disjoint ensure obligation");
-  const auto ref_safety_smt = sigil::emit_smt_lib(ref_model_obligations[0]);
+  const auto ref_safety_smt = sigil::emit_smt_lib(ref_model_obligations[1]);
   expect(ref_safety_smt.find("(declare-const ptr_valid Bool)") != std::string::npos,
          "ref validity is declared");
   expect(ref_safety_smt.find("(declare-const ptr_value Int)") != std::string::npos,
          "ref i64 value is declared");
   expect(ref_safety_smt.find("(assert (not ptr_valid))") != std::string::npos,
          "ref validity goal is emitted");
-  const auto bool_ref_ensure_smt = sigil::emit_smt_lib(ref_model_obligations[5]);
+  const auto bool_ref_ensure_smt = sigil::emit_smt_lib(ref_model_obligations[9]);
   expect(bool_ref_ensure_smt.find("(declare-const ptr_value Bool)") != std::string::npos,
          "ref bool value is declared");
-  const auto disjoint_smt = sigil::emit_smt_lib(ref_model_obligations[6]);
+  const auto disjoint_smt = sigil::emit_smt_lib(ref_model_obligations[10]);
   expect(disjoint_smt.find("(declare-const left_addr Int)") != std::string::npos,
          "left ref address is declared");
   expect(disjoint_smt.find("(assert (= result (distinct left_addr right_addr)))") !=
@@ -541,18 +568,23 @@ ensures exact: result == disjoint(left, right);
          "disjoint lowers to address inequality");
   const auto ref_model_results = sigil::verify_obligations(ref_model_obligations, false);
   expect(ref_model_results[0].status == sigil::VerificationStatus::Proven,
+         "ref load liveness proven from precondition");
+  expect(ref_model_results[1].status == sigil::VerificationStatus::Proven,
          "ref load validity proven from precondition");
-  expect(ref_model_results[2].status == sigil::VerificationStatus::Proven,
+  expect(ref_model_results[4].status == sigil::VerificationStatus::Proven,
          "ref ensure proven from return binding");
-  expect(ref_model_results[3].status == sigil::VerificationStatus::Proven,
-         "bool ref load validity proven from precondition");
+  expect(ref_model_results[5].status == sigil::VerificationStatus::Proven,
+         "bool ref load liveness proven from precondition");
   expect(ref_model_results[6].status == sigil::VerificationStatus::Proven,
+         "bool ref load validity proven from precondition");
+  expect(ref_model_results[10].status == sigil::VerificationStatus::Proven,
          "ref disjoint ensure proven from return binding");
 
   const char* ref_update_source = R"(
 module ref_updates;
 
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -565,6 +597,7 @@ ensures exact: result == value;
 }
 
 fn update_flag_ref(ptr: Ref[bool], value: bool) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -576,31 +609,35 @@ ensures exact: result == value;
 
   const auto ref_update_module = sigil::parse_source(ref_update_source, "ref-updates.sigil");
   const auto ref_update_obligations = sigil::build_obligations(ref_update_module);
-  expect(ref_update_obligations.size() == 11, "ref store obligations");
-  expect(ref_update_obligations[0].name == "fn.write_then_load.safety.1.memory_valid",
+  expect(ref_update_obligations.size() == 15, "ref store obligations");
+  expect(ref_update_obligations[0].name == "fn.write_then_load.safety.1.memory_live",
+         "ref store write liveness obligation");
+  expect(ref_update_obligations[1].name == "fn.write_then_load.safety.2.memory_valid",
          "ref store write validity obligation");
-  expect(ref_update_obligations[1].name == "fn.write_then_load.safety.2.memory_write",
+  expect(ref_update_obligations[2].name == "fn.write_then_load.safety.3.memory_write",
          "ref store write permission obligation");
-  expect(ref_update_obligations[2].name == "fn.write_then_load.assert.1.still_valid",
+  expect(ref_update_obligations[3].name == "fn.write_then_load.assert.1.still_valid",
          "ref store validity assertion obligation");
-  expect(ref_update_obligations[3].name == "fn.write_then_load.assert.2.still_writable",
+  expect(ref_update_obligations[4].name == "fn.write_then_load.assert.2.still_writable",
          "ref store write permission assertion obligation");
-  expect(ref_update_obligations[4].name == "fn.write_then_load.assert.3.same_address",
+  expect(ref_update_obligations[5].name == "fn.write_then_load.assert.3.same_address",
          "ref store address assertion obligation");
-  expect(ref_update_obligations[5].name == "fn.write_then_load.safety.3.memory_valid",
+  expect(ref_update_obligations[6].name == "fn.write_then_load.safety.4.memory_live",
+         "ref store read liveness obligation");
+  expect(ref_update_obligations[7].name == "fn.write_then_load.safety.5.memory_valid",
          "ref store read validity obligation");
-  expect(ref_update_obligations[6].name == "fn.write_then_load.ensures.1.exact",
+  expect(ref_update_obligations[8].name == "fn.write_then_load.ensures.1.exact",
          "ref store scalar ensure obligation");
-  expect(ref_update_obligations[10].name == "fn.update_flag_ref.ensures.1.exact",
+  expect(ref_update_obligations[14].name == "fn.update_flag_ref.ensures.1.exact",
          "ref store bool ensure obligation");
-  const auto ref_write_smt = sigil::emit_smt_lib(ref_update_obligations[1]);
+  const auto ref_write_smt = sigil::emit_smt_lib(ref_update_obligations[2]);
   expect(ref_write_smt.find("(declare-const ptr_write Bool)") != std::string::npos,
          "ref store write permission is declared");
   expect(ref_write_smt.find("(assert ptr_write)") != std::string::npos,
          "ref store write permission precondition is active");
   expect(ref_write_smt.find("(assert (not ptr_write))") != std::string::npos,
          "ref store write permission goal is emitted");
-  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[6]);
+  const auto ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[8]);
   expect(ref_store_smt.find("(declare-const updated_addr Int)") != std::string::npos,
          "ref store updated address is declared");
   expect(ref_store_smt.find("(declare-const updated_valid Bool)") != std::string::npos,
@@ -632,25 +669,29 @@ ensures exact: result == value;
          "ref store read binds result to updated value");
   expect(ref_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "ref store ensure checks write then load");
-  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[10]);
+  const auto bool_ref_store_smt = sigil::emit_smt_lib(ref_update_obligations[14]);
   expect(bool_ref_store_smt.find("(declare-const updated_value Bool)") != std::string::npos,
          "ref store bool value is declared");
   expect(bool_ref_store_smt.find("(assert (= updated_value value))") != std::string::npos,
          "ref store bool value is updated");
   const auto ref_update_results = sigil::verify_obligations(ref_update_obligations, false);
   expect(ref_update_results[0].status == sigil::VerificationStatus::Proven,
-         "ref store validity proven from precondition");
+         "ref store liveness proven from precondition");
   expect(ref_update_results[1].status == sigil::VerificationStatus::Proven,
-         "ref store write permission proven from precondition");
+         "ref store validity proven from precondition");
   expect(ref_update_results[2].status == sigil::VerificationStatus::Proven,
-         "ref store validity assertion proven locally");
+         "ref store write permission proven from precondition");
   expect(ref_update_results[3].status == sigil::VerificationStatus::Proven,
-         "ref store write permission assertion proven locally");
+         "ref store validity assertion proven locally");
   expect(ref_update_results[4].status == sigil::VerificationStatus::Proven,
-         "ref store address assertion proven locally");
+         "ref store write permission assertion proven locally");
   expect(ref_update_results[5].status == sigil::VerificationStatus::Proven,
-         "ref store read validity proven locally");
+         "ref store address assertion proven locally");
   expect(ref_update_results[6].status == sigil::VerificationStatus::Proven,
+         "ref store read liveness proven locally");
+  expect(ref_update_results[7].status == sigil::VerificationStatus::Proven,
+         "ref store read validity proven locally");
+  expect(ref_update_results[8].status == sigil::VerificationStatus::Proven,
          "ref store write then load proven locally");
 
   const char* ref_permission_source = R"(
@@ -663,6 +704,7 @@ ensures exact: result == can_write(ptr);
 }
 
 fn store_preserves_write_permission(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == can_write(ptr);
@@ -675,16 +717,19 @@ ensures exact: result == can_write(ptr);
   const auto ref_permission_module =
       sigil::parse_source(ref_permission_source, "ref-permissions.sigil");
   const auto ref_permission_obligations = sigil::build_obligations(ref_permission_module);
-  expect(ref_permission_obligations.size() == 4, "ref permission obligations");
+  expect(ref_permission_obligations.size() == 5, "ref permission obligations");
   expect(ref_permission_obligations[0].name == "fn.expose_write_permission.ensures.1.exact",
          "ref write permission ensure obligation");
   expect(ref_permission_obligations[1].name ==
-             "fn.store_preserves_write_permission.safety.1.memory_valid",
-         "ref permission store validity obligation");
+             "fn.store_preserves_write_permission.safety.1.memory_live",
+         "ref permission store liveness obligation");
   expect(ref_permission_obligations[2].name ==
-             "fn.store_preserves_write_permission.safety.2.memory_write",
-         "ref permission store write obligation");
+             "fn.store_preserves_write_permission.safety.2.memory_valid",
+         "ref permission store validity obligation");
   expect(ref_permission_obligations[3].name ==
+             "fn.store_preserves_write_permission.safety.3.memory_write",
+         "ref permission store write obligation");
+  expect(ref_permission_obligations[4].name ==
              "fn.store_preserves_write_permission.ensures.1.exact",
          "ref permission preserve ensure obligation");
   const auto expose_write_smt = sigil::emit_smt_lib(ref_permission_obligations[0]);
@@ -692,7 +737,7 @@ ensures exact: result == can_write(ptr);
          "ref write permission symbol is declared");
   expect(expose_write_smt.find("(assert (= result ptr_write))") != std::string::npos,
          "can_write lowers to write permission symbol");
-  const auto preserve_write_smt = sigil::emit_smt_lib(ref_permission_obligations[3]);
+  const auto preserve_write_smt = sigil::emit_smt_lib(ref_permission_obligations[4]);
   expect(preserve_write_smt.find("(declare-const updated_write Bool)") != std::string::npos,
          "updated write permission symbol is declared");
   expect(preserve_write_smt.find("(assert (= updated_write ptr_write))") != std::string::npos,
@@ -703,10 +748,12 @@ ensures exact: result == can_write(ptr);
   expect(ref_permission_results[0].status == sigil::VerificationStatus::Proven,
          "ref write permission exposure proven locally");
   expect(ref_permission_results[1].status == sigil::VerificationStatus::Proven,
-         "ref permission store validity proven locally");
+         "ref permission store liveness proven locally");
   expect(ref_permission_results[2].status == sigil::VerificationStatus::Proven,
-         "ref permission store write proven locally");
+         "ref permission store validity proven locally");
   expect(ref_permission_results[3].status == sigil::VerificationStatus::Proven,
+         "ref permission store write proven locally");
+  expect(ref_permission_results[4].status == sigil::VerificationStatus::Proven,
          "ref store write permission preservation proven locally");
 
   const char* allocation_identity_source = R"(
@@ -732,6 +779,7 @@ ensures preserved: result;
 }
 
 fn model_store_preserves_allocation(xs: Slice[i64], index: i64, value: i64) -> bool
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures preserved: result;
 {
@@ -740,6 +788,7 @@ ensures preserved: result;
 }
 
 fn ref_store_preserves_allocation(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures preserved: result;
@@ -752,7 +801,7 @@ ensures preserved: result;
   const auto allocation_identity_module =
       sigil::parse_source(allocation_identity_source, "allocation-identity.sigil");
   const auto allocation_identity_obligations = sigil::build_obligations(allocation_identity_module);
-  expect(allocation_identity_obligations.size() == 8, "allocation identity obligations");
+  expect(allocation_identity_obligations.size() == 10, "allocation identity obligations");
   expect(allocation_identity_obligations[0].name == "fn.expose_allocation.ensures.1.exact",
          "allocation id ensure obligation");
   expect(allocation_identity_obligations[1].name == "fn.classify_allocations.ensures.1.exact",
@@ -761,18 +810,24 @@ ensures preserved: result;
              "fn.alias_preserves_allocation.ensures.1.preserved",
          "allocation alias preservation obligation");
   expect(allocation_identity_obligations[3].name ==
-             "fn.model_store_preserves_allocation.safety.1.index_in_bounds",
-         "allocation model store bounds obligation");
+             "fn.model_store_preserves_allocation.safety.1.memory_live",
+         "allocation model store liveness obligation");
   expect(allocation_identity_obligations[4].name ==
+             "fn.model_store_preserves_allocation.safety.2.index_in_bounds",
+         "allocation model store bounds obligation");
+  expect(allocation_identity_obligations[5].name ==
              "fn.model_store_preserves_allocation.ensures.1.preserved",
          "allocation model store preservation obligation");
-  expect(allocation_identity_obligations[5].name ==
-             "fn.ref_store_preserves_allocation.safety.1.memory_valid",
-         "allocation ref store validity obligation");
   expect(allocation_identity_obligations[6].name ==
-             "fn.ref_store_preserves_allocation.safety.2.memory_write",
-         "allocation ref store write obligation");
+             "fn.ref_store_preserves_allocation.safety.1.memory_live",
+         "allocation ref store liveness obligation");
   expect(allocation_identity_obligations[7].name ==
+             "fn.ref_store_preserves_allocation.safety.2.memory_valid",
+         "allocation ref store validity obligation");
+  expect(allocation_identity_obligations[8].name ==
+             "fn.ref_store_preserves_allocation.safety.3.memory_write",
+         "allocation ref store write obligation");
+  expect(allocation_identity_obligations[9].name ==
              "fn.ref_store_preserves_allocation.ensures.1.preserved",
          "allocation ref store preservation obligation");
 
@@ -790,11 +845,11 @@ ensures preserved: result;
   const auto alias_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[2]);
   expect(alias_allocation_smt.find("(assert (= alias_alloc xs_alloc))") != std::string::npos,
          "model alias preserves allocation identity");
-  const auto model_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[4]);
+  const auto model_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[5]);
   expect(model_store_allocation_smt.find("(assert (= updated_alloc xs_alloc))") !=
              std::string::npos,
          "model store preserves allocation identity");
-  const auto ref_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[7]);
+  const auto ref_store_allocation_smt = sigil::emit_smt_lib(allocation_identity_obligations[9]);
   expect(ref_store_allocation_smt.find("(assert (= updated_alloc ptr_alloc))") != std::string::npos,
          "ref store preserves allocation identity");
 
@@ -804,6 +859,126 @@ ensures preserved: result;
     expect(result.status == sigil::VerificationStatus::Proven,
            "allocation identity obligation proven locally");
   }
+
+  const char* allocation_liveness_source = R"(
+module allocation_liveness;
+
+fn expose_liveness(xs: Slice[i64]) -> bool
+ensures exact: result == is_live(xs);
+{
+  return is_live(xs);
+}
+
+fn read_live_slice(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+
+fn read_live_ref(ptr: Ref[i64]) -> i64
+requires live: is_live(ptr);
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn model_store_preserves_liveness(xs: Array[bool], index: i64, value: bool) -> bool
+requires live: is_live(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures preserved: result;
+{
+  let updated: Array[bool] = store(xs, index, value);
+  return is_live(updated);
+}
+
+fn ref_store_preserves_liveness(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures preserved: result;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return is_live(updated);
+}
+)";
+
+  const auto allocation_liveness_module =
+      sigil::parse_source(allocation_liveness_source, "allocation-liveness.sigil");
+  const auto allocation_liveness_obligations = sigil::build_obligations(allocation_liveness_module);
+  expect(allocation_liveness_obligations.size() == 18, "allocation liveness obligations");
+  expect(allocation_liveness_obligations[0].name == "fn.expose_liveness.ensures.1.exact",
+         "liveness exposure obligation");
+  expect(allocation_liveness_obligations[1].name == "fn.read_live_slice.safety.1.memory_live",
+         "slice read liveness obligation");
+  expect(allocation_liveness_obligations[2].name == "fn.read_live_slice.safety.2.index_in_bounds",
+         "slice read bounds obligation after liveness");
+  expect(allocation_liveness_obligations[5].name == "fn.read_live_slice.ensures.1.exact",
+         "slice read ensure obligation");
+  expect(allocation_liveness_obligations[6].name == "fn.read_live_ref.safety.1.memory_live",
+         "ref load liveness obligation");
+  expect(allocation_liveness_obligations[7].name == "fn.read_live_ref.safety.2.memory_valid",
+         "ref load validity obligation after liveness");
+  expect(allocation_liveness_obligations[10].name == "fn.read_live_ref.ensures.1.exact",
+         "ref load ensure obligation");
+  expect(allocation_liveness_obligations[11].name ==
+             "fn.model_store_preserves_liveness.safety.1.memory_live",
+         "model store liveness obligation");
+  expect(allocation_liveness_obligations[12].name ==
+             "fn.model_store_preserves_liveness.safety.2.index_in_bounds",
+         "model store bounds obligation after liveness");
+  expect(allocation_liveness_obligations[13].name ==
+             "fn.model_store_preserves_liveness.ensures.1.preserved",
+         "model store liveness preservation obligation");
+  expect(allocation_liveness_obligations[14].name ==
+             "fn.ref_store_preserves_liveness.safety.1.memory_live",
+         "ref store liveness obligation");
+  expect(allocation_liveness_obligations[15].name ==
+             "fn.ref_store_preserves_liveness.safety.2.memory_valid",
+         "ref store validity obligation after liveness");
+
+  const auto expose_liveness_smt = sigil::emit_smt_lib(allocation_liveness_obligations[0]);
+  expect(expose_liveness_smt.find("(declare-const xs_live Bool)") != std::string::npos,
+         "liveness symbol is declared");
+  expect(expose_liveness_smt.find("(assert (= result xs_live))") != std::string::npos,
+         "is_live lowers to liveness symbol");
+  const auto model_live_smt = sigil::emit_smt_lib(allocation_liveness_obligations[13]);
+  expect(model_live_smt.find("(assert (= updated_live xs_live))") != std::string::npos,
+         "model store preserves liveness");
+
+  const auto allocation_liveness_results =
+      sigil::verify_obligations(allocation_liveness_obligations, false);
+  for (const auto& result : allocation_liveness_results) {
+    expect(result.status == sigil::VerificationStatus::Proven,
+           "allocation liveness obligation proven locally");
+  }
+
+  const char* missing_liveness_source = R"(
+module missing_liveness;
+
+fn unsafe_read(xs: Slice[i64], index: i64) -> i64
+requires in_bounds: index >= 0 && index < len(xs);
+{
+  return at(xs, index);
+}
+)";
+
+  const auto missing_liveness_module =
+      sigil::parse_source(missing_liveness_source, "missing-liveness.sigil");
+  const auto missing_liveness_obligations = sigil::build_obligations(missing_liveness_module);
+  expect(missing_liveness_obligations.size() == 2, "missing liveness obligations");
+  expect(missing_liveness_obligations[0].name == "fn.unsafe_read.safety.1.memory_live",
+         "missing liveness gate is first");
+  expect(missing_liveness_obligations[1].name == "fn.unsafe_read.safety.2.index_in_bounds",
+         "independent bounds gate follows liveness");
+  const auto missing_liveness_results =
+      sigil::verify_obligations(missing_liveness_obligations, false);
+  expect(missing_liveness_results[0].status == sigil::VerificationStatus::Unknown,
+         "missing liveness remains unknown");
+  expect(missing_liveness_results[1].status == sigil::VerificationStatus::Proven,
+         "bounds do not depend on liveness");
 
   const char* ref_epoch_source = R"(
 module ref_epochs;
@@ -815,6 +990,7 @@ ensures same_entry_epoch: epoch(left) == epoch(right);
 }
 
 fn store_advances_epoch(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures next_epoch: result == epoch(ptr) + 1;
@@ -826,14 +1002,16 @@ ensures next_epoch: result == epoch(ptr) + 1;
 
   const auto ref_epoch_module = sigil::parse_source(ref_epoch_source, "ref-epochs.sigil");
   const auto ref_epoch_obligations = sigil::build_obligations(ref_epoch_module);
-  expect(ref_epoch_obligations.size() == 4, "ref epoch obligations");
+  expect(ref_epoch_obligations.size() == 5, "ref epoch obligations");
   expect(ref_epoch_obligations[0].name == "fn.entry_epochs_match.ensures.1.same_entry_epoch",
          "entry ref epoch ensure obligation");
-  expect(ref_epoch_obligations[1].name == "fn.store_advances_epoch.safety.1.memory_valid",
+  expect(ref_epoch_obligations[1].name == "fn.store_advances_epoch.safety.1.memory_live",
+         "ref epoch store liveness obligation");
+  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.safety.2.memory_valid",
          "ref epoch store validity obligation");
-  expect(ref_epoch_obligations[2].name == "fn.store_advances_epoch.safety.2.memory_write",
+  expect(ref_epoch_obligations[3].name == "fn.store_advances_epoch.safety.3.memory_write",
          "ref epoch store write obligation");
-  expect(ref_epoch_obligations[3].name == "fn.store_advances_epoch.ensures.1.next_epoch",
+  expect(ref_epoch_obligations[4].name == "fn.store_advances_epoch.ensures.1.next_epoch",
          "ref epoch store advance obligation");
   const auto entry_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[0]);
   expect(entry_epoch_smt.find("(declare-const __sigil_entry_epoch Int)") != std::string::npos,
@@ -848,7 +1026,7 @@ ensures next_epoch: result == epoch(ptr) + 1;
          "right ref is bound to entry epoch");
   expect(entry_epoch_smt.find("(assert (not (= left_epoch right_epoch)))") != std::string::npos,
          "entry epoch ensure compares ref epochs");
-  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[3]);
+  const auto store_epoch_smt = sigil::emit_smt_lib(ref_epoch_obligations[4]);
   expect(store_epoch_smt.find("(declare-const ptr_epoch Int)") != std::string::npos,
          "store source epoch is declared");
   expect(store_epoch_smt.find("(declare-const updated_epoch Int)") != std::string::npos,
@@ -865,16 +1043,20 @@ ensures next_epoch: result == epoch(ptr) + 1;
   expect(ref_epoch_results[0].status == sigil::VerificationStatus::Proven,
          "entry ref epochs are proven equal locally");
   expect(ref_epoch_results[1].status == sigil::VerificationStatus::Proven,
-         "ref epoch store validity is proven locally");
+         "ref epoch store liveness is proven locally");
   expect(ref_epoch_results[2].status == sigil::VerificationStatus::Proven,
-         "ref epoch store write is proven locally");
+         "ref epoch store validity is proven locally");
   expect(ref_epoch_results[3].status == sigil::VerificationStatus::Proven,
+         "ref epoch store write is proven locally");
+  expect(ref_epoch_results[4].status == sigil::VerificationStatus::Proven,
          "ref epoch store advance is proven locally");
 
   const char* ref_alias_source = R"(
 module ref_aliases;
 
 fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
+requires left_live: is_live(left);
+requires right_live: is_live(right);
 requires left_valid: is_valid(left);
 requires right_valid: is_valid(right);
 requires same: same_ref(left, right);
@@ -884,6 +1066,8 @@ ensures exact: result == load(right);
 }
 
 fn same_bool_ref_loads_match(left: Ref[bool], right: Ref[bool]) -> bool
+requires left_live: is_live(left);
+requires right_live: is_live(right);
 requires left_valid: is_valid(left);
 requires right_valid: is_valid(right);
 requires same: same_ref(left, right);
@@ -895,16 +1079,20 @@ ensures exact: result == load(right);
 
   const auto ref_alias_module = sigil::parse_source(ref_alias_source, "ref-aliases.sigil");
   const auto ref_alias_obligations = sigil::build_obligations(ref_alias_module);
-  expect(ref_alias_obligations.size() == 6, "ref alias obligations");
-  expect(ref_alias_obligations[0].name == "fn.same_ref_loads_match.safety.1.memory_valid",
-         "ref alias return load validity obligation");
+  expect(ref_alias_obligations.size() == 10, "ref alias obligations");
+  expect(ref_alias_obligations[0].name == "fn.same_ref_loads_match.safety.1.memory_live",
+         "ref alias return load liveness obligation");
   expect(ref_alias_obligations[1].name == "fn.same_ref_loads_match.safety.2.memory_valid",
+         "ref alias return load validity obligation");
+  expect(ref_alias_obligations[2].name == "fn.same_ref_loads_match.safety.3.memory_live",
+         "ref alias ensure load liveness obligation");
+  expect(ref_alias_obligations[3].name == "fn.same_ref_loads_match.safety.4.memory_valid",
          "ref alias ensure load validity obligation");
-  expect(ref_alias_obligations[2].name == "fn.same_ref_loads_match.ensures.1.exact",
+  expect(ref_alias_obligations[4].name == "fn.same_ref_loads_match.ensures.1.exact",
          "ref alias scalar ensure obligation");
-  expect(ref_alias_obligations[5].name == "fn.same_bool_ref_loads_match.ensures.1.exact",
+  expect(ref_alias_obligations[9].name == "fn.same_bool_ref_loads_match.ensures.1.exact",
          "ref alias bool ensure obligation");
-  const auto ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[2]);
+  const auto ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[4]);
   expect(ref_alias_smt.find("(declare-const left_value Int)") != std::string::npos,
          "ref alias left scalar value is declared");
   expect(ref_alias_smt.find("(declare-const right_value Int)") != std::string::npos,
@@ -926,7 +1114,7 @@ ensures exact: result == load(right);
          "ref alias return binds result to left value");
   expect(ref_alias_smt.find("(assert (not (= result right_value)))") != std::string::npos,
          "ref alias ensure checks right value");
-  const auto bool_ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[5]);
+  const auto bool_ref_alias_smt = sigil::emit_smt_lib(ref_alias_obligations[9]);
   expect(bool_ref_alias_smt.find("(declare-const left_value Bool)") != std::string::npos,
          "ref alias left bool value is declared");
   expect(bool_ref_alias_smt.find("(declare-const right_value Bool)") != std::string::npos,
@@ -939,12 +1127,16 @@ ensures exact: result == load(right);
          "valid same-epoch same-address refs share the same bool snapshot value");
   const auto ref_alias_results = sigil::verify_obligations(ref_alias_obligations, false);
   expect(ref_alias_results[0].status == sigil::VerificationStatus::Proven,
-         "ref alias left load validity proven from precondition");
+         "ref alias left load liveness proven from precondition");
   expect(ref_alias_results[1].status == sigil::VerificationStatus::Proven,
+         "ref alias left load validity proven from precondition");
+  expect(ref_alias_results[2].status == sigil::VerificationStatus::Proven,
+         "ref alias right load liveness proven from precondition");
+  expect(ref_alias_results[3].status == sigil::VerificationStatus::Proven,
          "ref alias right load validity proven from precondition");
-  expect(ref_alias_results[2].status == sigil::VerificationStatus::Unknown,
+  expect(ref_alias_results[4].status == sigil::VerificationStatus::Unknown,
          "ref alias scalar value consistency needs SMT reasoning");
-  expect(ref_alias_results[5].status == sigil::VerificationStatus::Unknown,
+  expect(ref_alias_results[9].status == sigil::VerificationStatus::Unknown,
          "ref alias bool value consistency needs SMT reasoning");
 
   const char* conditional_source = R"(

@@ -1,0 +1,42 @@
+module allocation_liveness;
+
+fn expose_liveness(xs: Slice[i64]) -> bool
+ensures exact: result == is_live(xs);
+{
+  return is_live(xs);
+}
+
+fn read_live_slice(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures exact: result == at(xs, index);
+{
+  return at(xs, index);
+}
+
+fn read_live_ref(ptr: Ref[i64]) -> i64
+requires live: is_live(ptr);
+requires valid: is_valid(ptr);
+ensures exact: result == load(ptr);
+{
+  return load(ptr);
+}
+
+fn model_store_preserves_liveness(xs: Array[bool], index: i64, value: bool) -> bool
+requires live: is_live(xs);
+requires in_bounds: index >= 0 && index < len(xs);
+ensures preserved: result;
+{
+  let updated: Array[bool] = store(xs, index, value);
+  return is_live(updated);
+}
+
+fn ref_store_preserves_liveness(ptr: Ref[i64], value: i64) -> bool
+requires live: is_live(ptr);
+requires valid: is_valid(ptr);
+requires writable: can_write(ptr);
+ensures preserved: result;
+{
+  let updated: Ref[i64] = store(ptr, value);
+  return is_live(updated);
+}

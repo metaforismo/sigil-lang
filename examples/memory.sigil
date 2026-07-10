@@ -1,6 +1,7 @@
 module memory;
 
 fn read_ref(ptr: Ref[i64]) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
 {
@@ -8,6 +9,7 @@ ensures exact: result == load(ptr);
 }
 
 fn read_flag(ptr: Ref[bool]) -> bool
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
 {

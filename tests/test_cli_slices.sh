@@ -13,15 +13,18 @@ output="$("$sigil_bin" check "$example_file" --no-z3 --solver-timeout-ms 250 --s
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 3" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 7" >/dev/null
-printf '%s\n' "$output" | grep "fn.read_slice.safety.1.index_in_bounds" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 11" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_slice.safety.1.memory_live" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_slice.safety.2.index_in_bounds" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_flags.ensures.1.exact" >/dev/null
 printf '%s\n' "$output" | grep "fn.length_is_non_negative.ensures.1.non_negative" >/dev/null
 
-slice_bounds="$smt_dir/fn.read_slice.safety.1.index_in_bounds.smt2"
+slice_live="$smt_dir/fn.read_slice.safety.1.memory_live.smt2"
+slice_bounds="$smt_dir/fn.read_slice.safety.2.index_in_bounds.smt2"
 array_ensure="$smt_dir/fn.read_flags.ensures.1.exact.smt2"
 length_ensure="$smt_dir/fn.length_is_non_negative.ensures.1.non_negative.smt2"
 
+test -f "$slice_live"
 test -f "$slice_bounds"
 test -f "$array_ensure"
 test -f "$length_ensure"
@@ -33,3 +36,5 @@ grep "(assert (not (and (>= index 0) (< index xs_len))))" "$slice_bounds" >/dev/
 grep "(declare-const flags_data (Array Int Bool))" "$array_ensure" >/dev/null
 grep "(assert (= result (select flags_data index)))" "$array_ensure" >/dev/null
 grep "(assert (= result xs_len))" "$length_ensure" >/dev/null
+grep "(assert xs_live)" "$slice_live" >/dev/null
+grep "(assert (not xs_live))" "$slice_live" >/dev/null

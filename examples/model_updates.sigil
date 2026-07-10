@@ -1,6 +1,7 @@
 module model_updates;
 
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == value;
 {
@@ -10,6 +11,7 @@ ensures exact: result == value;
 }
 
 fn update_flag(flags: Array[bool], index: i64, value: bool) -> bool
+requires live: is_live(flags);
 requires in_bounds: index >= 0 && index < len(flags);
 ensures exact: result == value;
 {

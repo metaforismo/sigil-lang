@@ -180,6 +180,7 @@ function and theorem parameters when `T` is `i64` or `bool`:
 
 ```sigil
 fn read_slice(xs: Slice[i64], index: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == at(xs, index);
 {
@@ -189,7 +190,7 @@ ensures exact: result == at(xs, index);
 
 `len(value)` returns an `i64` length. Sigil treats model lengths as
 non-negative proof facts. `at(value, index)` returns the element type `T` and
-creates a compile-time `index_in_bounds` proof obligation:
+creates compile-time `memory_live` and `index_in_bounds` proof obligations:
 
 ```sigil
 index >= 0 && index < len(value)
@@ -205,6 +206,7 @@ to solver-level `store`:
 
 ```sigil
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
+requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
 ensures exact: result == value;
 {
@@ -228,9 +230,17 @@ identity. This is the first common provenance fact across the three proof
 models and keeps the proof IR explicit until Sigil has first-class temporary
 model values.
 
+`is_live(value)` exposes a separate Boolean liveness fact for every array,
+slice, and reference model. `at`, array/slice `store`, `load`, and reference
+`store` each emit a `memory_live` obligation before their operation-specific
+bounds, validity, or write-permission obligations. Aliases and immutable stores
+preserve liveness. Liveness is intentionally independent from allocation
+identity: knowing an allocation token does not prove that it is live.
+
 This is intentionally a proof model, not a runtime memory model. It does not
-create or destroy allocations, establish ownership or liveness, define view
-ranges, prove non-overlap inside one allocation, or define native layout yet.
+create or destroy allocations, transition an allocation between live and dead,
+establish ownership, define view ranges, prove non-overlap inside one
+allocation, or define native layout yet.
 Aggregate returns are still rejected, and native lowering skips functions that
 take array or slice model parameters.
 
@@ -240,6 +250,7 @@ take array or slice model parameters.
 
 ```sigil
 fn read_ref(ptr: Ref[i64]) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 ensures exact: result == load(ptr);
 {
@@ -247,10 +258,11 @@ ensures exact: result == load(ptr);
 }
 ```
 
-`is_valid(ptr)` exposes the modeled validity bit. `can_write(ptr)` exposes the
-modeled write-permission bit. `load(ptr)` returns the referenced scalar value
-and emits a `memory_valid` safety obligation proving that `is_valid(ptr)` holds
-at the access site. `addr(ptr)` returns the modeled integer address.
+`is_live(ptr)` exposes the allocation-liveness bit. `is_valid(ptr)` exposes the
+modeled reference-validity bit. `can_write(ptr)` exposes the modeled
+write-permission bit. `load(ptr)` returns the referenced scalar value and emits
+`memory_live` followed by `memory_valid`, proving both facts at the access site.
+`addr(ptr)` returns the modeled integer address.
 `epoch(ptr)` returns the modeled memory-snapshot token for the reference.
 Function-entry references share an internal entry epoch, and model aliases
 preserve the source epoch and write permission. `same_ref(left, right)` and
@@ -265,6 +277,8 @@ source-level alias facts without a separate annotation language:
 
 ```sigil
 fn same_ref_loads_match(left: Ref[i64], right: Ref[i64]) -> i64
+requires left_live: is_live(left);
+requires right_live: is_live(right);
 requires left_valid: is_valid(left);
 requires right_valid: is_valid(right);
 requires same: same_ref(left, right);
@@ -275,13 +289,14 @@ ensures exact: result == load(right);
 ```
 
 `store(ptr, value)` is an immutable proof-level reference update. It returns
-the same `Ref[T]` model type, emits `memory_valid` and `memory_write`
-obligations for the write site, preserves the modeled address, validity, and
-write permission and allocation identity, and replaces the modeled referenced
-value. It also advances the modeled epoch by one:
+the same `Ref[T]` model type, emits `memory_live`, `memory_valid`, and
+`memory_write` obligations for the write site, preserves the modeled address,
+validity, write permission, allocation identity, and liveness, and replaces the
+modeled referenced value. It also advances the modeled epoch by one:
 
 ```sigil
 fn write_then_load(ptr: Ref[i64], value: i64) -> i64
+requires live: is_live(ptr);
 requires valid: is_valid(ptr);
 requires writable: can_write(ptr);
 ensures exact: result == value;
@@ -300,12 +315,14 @@ in a `let` binding or container field before later facts use them.
 
 `Ref[T]` is a verification scaffold. The `can_write` bit is an explicit proof
 fact for write-site checks; it is not yet an ownership or borrowing discipline.
-Sigil does not allocate memory, track lifetimes, prove pointer provenance,
+Sigil does not allocate or free memory, transition lifetimes, prove pointer provenance,
 propagate stores through old aliases, model ownership, mutate native memory, or
 define a native layout. Allocation identities are abstract proof tokens: they
-do not prove that an allocation exists, remains live, owns an address, or is
-disjoint from another address range. Epochs are proof tokens for snapshots, not
-a runtime memory representation. Like array and slice models, reference values
+do not by themselves prove that an allocation exists, remains live, owns an
+address, or is disjoint from another address range. The separate liveness bit
+must be established by a contract, but currently has no allocation/deallocation
+transition semantics. Epochs are proof tokens for snapshots, not a runtime
+memory representation. Like array and slice models, reference values
 are allowed as function and theorem parameters and as container model fields,
 but not as ordinary struct fields or return values yet.
 
@@ -453,7 +470,8 @@ Supported expression forms:
   `addr(ptr)`, `store(ptr, value)`, `same_ref(left, right)`,
   `disjoint(left, right)`
 - cross-model allocation intrinsics: `allocation_id(value)`,
-  `same_allocation(left, right)`, `disjoint_allocation(left, right)`
+  `is_live(value)`, `same_allocation(left, right)`,
+  `disjoint_allocation(left, right)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`

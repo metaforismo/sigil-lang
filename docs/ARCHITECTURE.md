@@ -68,6 +68,8 @@ system:
 - `allocation_id(value)`, `same_allocation(left, right)`, and
   `disjoint_allocation(left, right)` are built-in allocation-identity
   intrinsics for array, slice, and reference proof models;
+- `is_live(value)` is a built-in allocation-liveness intrinsic for every memory
+  proof model;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -126,7 +128,7 @@ The planner walks each function and builds proof obligations:
   declared on the constructed type after generic substitution;
 - container literal construction emits the same invariant obligations, and
   model fields are materialized by component facts such as `value.len`,
-  `value.data`, `value.alloc`, `value.addr`, `value.valid`, `value.write`,
+  `value.data`, `value.alloc`, `value.live`, `value.addr`, `value.valid`, `value.write`,
   `value.value`, and `value.epoch`;
 - `name = expr` creates a fresh internal version of `name` and records that the
   fresh version equals `expr` evaluated in the previous context;
@@ -135,15 +137,17 @@ The planner walks each function and builds proof obligations:
 - division and modulo expressions create `divisor_nonzero` safety obligations at
   the point where the expression is evaluated, with `if`, `&&`, and `||`
   guards reflected in the active assumptions;
-- array and slice `at(container, index)` expressions create `index_in_bounds`
-  safety obligations and lower to SMT `select` over an abstract backing array;
+- array and slice `at(container, index)` expressions create `memory_live` then
+  `index_in_bounds` safety obligations and lower to SMT `select` over an
+  abstract backing array;
 - array and slice `store(container, index, value)` bindings create
-  `index_in_bounds` safety obligations, preserve the source length and
-  allocation identity, and lower the updated data fact to SMT array `store`;
+  `memory_live` and `index_in_bounds` safety obligations, preserve the source
+  length, allocation identity, and liveness, and lower the updated data fact to
+  SMT array `store`;
 - allocation intrinsics lower every model's deterministic `.alloc` component
   to identity or inequality facts across arrays, slices, and references;
-- reference `load(ref)` expressions create `memory_valid` safety obligations
-  and lower to the modeled referenced value;
+- reference `load(ref)` expressions create `memory_live` and `memory_valid`
+  safety obligations and lower to the modeled referenced value;
 - reference `can_write(ref)` expressions lower to deterministic proof-level
   write-permission symbols;
 - reference `epoch(ref)` expressions lower to deterministic proof-level memory
@@ -151,10 +155,10 @@ The planner walks each function and builds proof obligations:
 - same-type reference snapshots gain deterministic alias-consistency
   assumptions so valid refs with equal modeled epochs and addresses have equal
   modeled values in the same proof context;
-- reference `store(ref, value)` bindings create `memory_valid` and
-  `memory_write` safety obligations, preserve modeled address, validity, and
-  write permission and allocation identity, replace the modeled referenced
-  value, and advance the modeled epoch;
+- reference `store(ref, value)` bindings create `memory_live`, `memory_valid`,
+  and `memory_write` safety obligations, preserve modeled address, validity,
+  write permission, allocation identity, and liveness, replace the modeled
+  referenced value, and advance the modeled epoch;
 - `if` statements build separate then/else proof contexts and merge
   branch-derived facts as guarded assumptions;
 - `while` statements create initialization and preservation obligations for

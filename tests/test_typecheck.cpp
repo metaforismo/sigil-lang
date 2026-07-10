@@ -315,6 +315,12 @@ ensures exact: result == disjoint_allocation(view, ptr);
   return disjoint_allocation(view, ptr);
 }
 
+fn expose_liveness(xs: Slice[i64], ptr: Ref[bool]) -> bool
+ensures exact: result == (is_live(xs) && is_live(ptr));
+{
+  return is_live(xs) && is_live(ptr);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -626,6 +632,15 @@ fn disjoint_allocation_scalar(xs: Slice[i64], x: i64) -> bool
 }
 )",
                     "disjoint_allocation expects Array[T], Slice[T], or Ref[T] arguments");
+
+  expect_diagnostic(R"(
+module bad;
+fn is_live_scalar(x: i64) -> bool
+{
+  return is_live(x);
+}
+)",
+                    "is_live expects an Array[T], Slice[T], or Ref[T] argument");
 
   expect_diagnostic(R"(
 module bad;
