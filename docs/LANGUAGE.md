@@ -190,7 +190,8 @@ ensures exact: result == at(xs, index);
 
 `len(value)` returns an `i64` length. Sigil treats model lengths as
 non-negative proof facts. `at(value, index)` returns the element type `T` and
-creates compile-time `memory_live` and `index_in_bounds` proof obligations:
+creates ordered compile-time `memory_live`, `index_in_bounds`, and
+`memory_initialized` proof obligations:
 
 ```sigil
 index >= 0 && index < len(value)
@@ -200,6 +201,12 @@ The SMT model uses an abstract allocation-wide backing array. Every array and
 slice has an internal element offset; arrays are fixed at offset zero and slice
 offsets are non-negative. `at(xs, i)` lowers to a solver-level
 `select(xs.data, xs.offset + i)`.
+
+Every array and slice also carries an allocation-wide Boolean initialization
+mask. `is_initialized(xs, i)` selects that mask at `xs.offset + i`. The three
+ordered read obligations prove that the allocation is live, the logical index
+is in bounds, and the physical element is initialized; together they are the
+modeled no-crash condition for `at`.
 
 `slice_view(source, start, length)` creates a checked subview and must be bound
 to a `Slice[T]` local or model field. It emits `memory_live` followed by
@@ -221,8 +228,8 @@ views therefore do not overlap.
 the source allocation to be live, owned, and under an active mutable borrow.
 The operation returns the same model type as `value`, preserves the model
 length, offset, and ownership state, emits an `index_in_bounds` obligation for
-the write index, and lowers the backing data to solver-level `store` at
-`value.offset + index`:
+the write index, lowers the backing data to solver-level `store`, and sets the
+same physical index to `true` in the successor initialization mask:
 
 ```sigil
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
@@ -241,7 +248,7 @@ ensures exact: result == value;
 Model stores must currently be materialized in a `let` binding or container
 field before later `len` or `at` facts use them. Plain model aliases, such as
 `let alias: Slice[i64] = xs;`, are also materialized as
-length/data/offset component facts.
+length/data/initialization/offset component facts.
 
 Every array, slice, and reference model also carries an abstract allocation
 identity. `allocation_id(value)` exposes that identity as `i64`.
@@ -309,6 +316,8 @@ Fresh proof-model allocations are created with initialized constructors:
 - `allocate_array(length, initial)` returns `Array[T]`.
 - `allocate_slice(length, initial)` returns `Slice[T]`.
 - `allocate_ref(initial)` returns `Ref[T]`.
+- `allocate_uninit_array(length, witness)` returns `Array[T]`.
+- `allocate_uninit_slice(length, witness)` returns `Slice[T]`.
 
 `T` is inferred from the `i64` or `bool` initial value. Constructors must be the
 direct initializer of a model `let` or container model field. Array and slice
@@ -317,6 +326,14 @@ sets offset zero, and models every in-bounds element as `initial`. Every result
 is live, has an owner with a nonzero owner token, and starts with no borrows.
 References additionally start valid, writable, at epoch zero, and with a fresh
 address relative to every current reference root.
+
+Ordinary array and slice constructors set every initialization-mask element to
+true. Raw constructors set every mask element to false; their `witness` selects
+`T` and supplies an inaccessible backing value until a checked `store`
+initializes a logical index. Function-entry array/slice models are currently
+treated as fully initialized safe-container snapshots. Passing partially
+initialized models across function boundaries remains undefined because model
+return and aggregate effect semantics are not implemented yet.
 
 Each constructor receives an allocation identity distinct from every allocation
 snapshot previously materialized on the current proof path, including consumed
@@ -338,10 +355,10 @@ it with `release_mut`. A store without owner presence or an active mutable
 borrow leaves the corresponding safety obligation unresolved.
 
 This is intentionally a proof model, not a runtime memory model. It can model a
-checked transition from a unique live owner to a dead tombstone, but it does not
-perform native allocation/deallocation, track partially initialized elements,
-define byte layout, or propagate effects through runtime aliases. The allocation
-constructors above create fully initialized abstract snapshots only.
+checked transition from a unique live owner to a dead tombstone and track local
+partial initialization, but it does not perform native allocation/deallocation,
+define byte layout, propagate effects through runtime aliases, or pass partial
+initialization state across function boundaries.
 Aggregate returns are still rejected, and native lowering skips functions that
 take array or slice model parameters.
 
@@ -576,10 +593,13 @@ Supported expression forms:
 - function calls: `callee(arg1, arg2)`
 - theorem calls in proof-only contexts: `lemma(arg1, arg2)`
 - model intrinsics: `len(xs)`, `at(xs, index)`,
-  `store(xs, index, value)`
+  `is_initialized(xs, index)`, `store(xs, index, value)`,
+  `allocate_array(length, initial)`, `allocate_slice(length, initial)`,
+  `allocate_uninit_array(length, witness)`, and
+  `allocate_uninit_slice(length, witness)`
 - reference intrinsics: `is_valid(ptr)`, `can_write(ptr)`, `load(ptr)`,
   `addr(ptr)`, `store(ptr, value)`, `same_ref(left, right)`,
-  `disjoint(left, right)`
+  `disjoint(left, right)`, `allocate_ref(initial)`
 - cross-model allocation intrinsics: `allocation_id(value)`,
   `is_live(value)`, `same_allocation(left, right)`,
   `disjoint_allocation(left, right)`
@@ -587,6 +607,7 @@ Supported expression forms:
   `shared_borrows(value)`, `has_mut_borrow(value)`
 - borrow transitions: `borrow_shared(value)`, `release_shared(value)`,
   `borrow_mut(value)`, `release_mut(value)`
+- consuming transitions: `move_owner(value)`, `deallocate(value)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`

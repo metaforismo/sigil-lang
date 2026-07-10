@@ -341,7 +341,7 @@ ensures exact: result == at(xs, index);
 
   const auto container_module = sigil::parse_source(container_source, "containers.sigil");
   const auto container_obligations = sigil::build_obligations(container_module);
-  expect(container_obligations.size() == 9, "container invariants, field asserts, safety, ensure");
+  expect(container_obligations.size() == 11, "container invariants, field asserts, safety, ensure");
   expect(container_obligations[0].name ==
              "fn.read_window.container.window.invariant.1.index_non_negative",
          "container first invariant obligation name");
@@ -394,18 +394,22 @@ ensures exact: result == at(flags, index);
 
   const auto slice_model_module = sigil::parse_source(slice_model_source, "slice-model.sigil");
   const auto slice_model_obligations = sigil::build_obligations(slice_model_module);
-  expect(slice_model_obligations.size() == 10, "array and slice model obligations");
+  expect(slice_model_obligations.size() == 14, "array and slice model obligations");
   expect(slice_model_obligations[0].name == "fn.read_slice.safety.1.memory_live",
          "slice return access liveness obligation");
   expect(slice_model_obligations[1].name == "fn.read_slice.safety.2.index_in_bounds",
          "slice return access bounds obligation");
-  expect(slice_model_obligations[2].name == "fn.read_slice.safety.3.memory_live",
+  expect(slice_model_obligations[2].name == "fn.read_slice.safety.3.memory_initialized",
+         "slice return initialization obligation");
+  expect(slice_model_obligations[3].name == "fn.read_slice.safety.4.memory_live",
          "slice ensure access liveness obligation");
-  expect(slice_model_obligations[3].name == "fn.read_slice.safety.4.index_in_bounds",
+  expect(slice_model_obligations[4].name == "fn.read_slice.safety.5.index_in_bounds",
          "slice ensure access bounds obligation");
-  expect(slice_model_obligations[4].name == "fn.read_slice.ensures.1.exact",
+  expect(slice_model_obligations[5].name == "fn.read_slice.safety.6.memory_initialized",
+         "slice ensure initialization obligation");
+  expect(slice_model_obligations[6].name == "fn.read_slice.ensures.1.exact",
          "slice ensure obligation");
-  expect(slice_model_obligations[5].name == "fn.read_array.safety.1.memory_live",
+  expect(slice_model_obligations[7].name == "fn.read_array.safety.1.memory_live",
          "array return access liveness obligation");
   const auto slice_safety_smt = sigil::emit_smt_lib(slice_model_obligations[1]);
   expect(slice_safety_smt.find("(declare-const xs_len Int)") != std::string::npos,
@@ -415,7 +419,7 @@ ensures exact: result == at(flags, index);
   expect(slice_safety_smt.find("(assert (not (and (>= index 0) (< index xs_len))))") !=
              std::string::npos,
          "slice bounds goal uses len");
-  const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[9]);
+  const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[13]);
   expect(array_ensure_smt.find("(declare-const flags_data (Array Int Bool))") != std::string::npos,
          "array bool data model is declared");
   expect(array_ensure_smt.find("(assert (= flags_offset 0))") != std::string::npos,
@@ -428,13 +432,17 @@ ensures exact: result == at(flags, index);
          "slice liveness proven from precondition");
   expect(slice_model_results[1].status == sigil::VerificationStatus::Proven,
          "slice bounds proven from precondition");
-  expect(slice_model_results[4].status == sigil::VerificationStatus::Proven,
-         "slice ensure proven from return binding");
-  expect(slice_model_results[5].status == sigil::VerificationStatus::Proven,
-         "array liveness proven from precondition");
+  expect(slice_model_results[2].status == sigil::VerificationStatus::Proven,
+         "slice initialization proven from entry model");
   expect(slice_model_results[6].status == sigil::VerificationStatus::Proven,
+         "slice ensure proven from return binding");
+  expect(slice_model_results[7].status == sigil::VerificationStatus::Proven,
+         "array liveness proven from precondition");
+  expect(slice_model_results[8].status == sigil::VerificationStatus::Proven,
          "array bounds proven from precondition");
   expect(slice_model_results[9].status == sigil::VerificationStatus::Proven,
+         "array initialization proven from entry model");
+  expect(slice_model_results[13].status == sigil::VerificationStatus::Proven,
          "array ensure proven from return binding");
 
   const char* model_update_source = R"(
@@ -466,7 +474,7 @@ ensures exact: result == value;
 
   const auto model_update_module = sigil::parse_source(model_update_source, "model-updates.sigil");
   const auto model_update_obligations = sigil::build_obligations(model_update_module);
-  expect(model_update_obligations.size() == 15, "array and slice store obligations");
+  expect(model_update_obligations.size() == 17, "array and slice store obligations");
   expect(model_update_obligations[0].name == "fn.write_then_read.safety.1.memory_live",
          "store write liveness obligation");
   expect(model_update_obligations[1].name == "fn.write_then_read.safety.2.ownership_present",
@@ -481,11 +489,13 @@ ensures exact: result == value;
          "store read liveness obligation");
   expect(model_update_obligations[6].name == "fn.write_then_read.safety.6.index_in_bounds",
          "store read bounds obligation");
-  expect(model_update_obligations[7].name == "fn.write_then_read.ensures.1.exact",
+  expect(model_update_obligations[7].name == "fn.write_then_read.safety.7.memory_initialized",
+         "store read initialization obligation");
+  expect(model_update_obligations[8].name == "fn.write_then_read.ensures.1.exact",
          "store scalar ensure obligation");
-  expect(model_update_obligations[14].name == "fn.update_flag.ensures.1.exact",
+  expect(model_update_obligations[16].name == "fn.update_flag.ensures.1.exact",
          "store bool ensure obligation");
-  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[7]);
+  const auto write_store_smt = sigil::emit_smt_lib(model_update_obligations[8]);
   expect(write_store_smt.find("(declare-const updated_len Int)") != std::string::npos,
          "store local length is declared");
   expect(write_store_smt.find("(declare-const updated_data (Array Int Int))") != std::string::npos,
@@ -506,7 +516,7 @@ ensures exact: result == value;
       "store read binds result to updated select");
   expect(write_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "store ensure checks write then read");
-  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[14]);
+  const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[16]);
   expect(flag_store_smt.find("(declare-const updated_data (Array Int Bool))") != std::string::npos,
          "store bool array data is declared");
   expect(flag_store_smt.find(
@@ -528,7 +538,9 @@ ensures exact: result == value;
          "store read liveness proven from store fact");
   expect(model_update_results[6].status == sigil::VerificationStatus::Proven,
          "store read bounds proven from store length fact");
-  expect(model_update_results[7].status == sigil::VerificationStatus::Unknown,
+  expect(model_update_results[7].status == sigil::VerificationStatus::Proven,
+         "same-index store initializes the read");
+  expect(model_update_results[8].status == sigil::VerificationStatus::Unknown,
          "store write then read needs array theory");
 
   const char* slice_view_source = R"(
@@ -550,14 +562,14 @@ ensures exact: result == at(xs, start + index);
 
   const auto slice_view_module = sigil::parse_source(slice_view_source, "slice-views.sigil");
   const auto slice_view_obligations = sigil::build_obligations(slice_view_module);
-  expect(slice_view_obligations.size() == 10, "slice view obligations");
+  expect(slice_view_obligations.size() == 12, "slice view obligations");
   expect(slice_view_obligations[0].name == "fn.read_subview.safety.1.memory_live",
          "slice view liveness obligation");
   expect(slice_view_obligations[1].name == "fn.read_subview.safety.2.view_in_bounds",
          "slice view range obligation");
   expect(slice_view_obligations[2].name == "fn.read_subview.assert.1.allocation_preserved",
          "slice view allocation assertion");
-  const auto slice_view_smt = sigil::emit_smt_lib(slice_view_obligations[9]);
+  const auto slice_view_smt = sigil::emit_smt_lib(slice_view_obligations[11]);
   expect(slice_view_smt.find("(declare-const xs_offset Int)") != std::string::npos,
          "slice source offset is declared");
   expect(slice_view_smt.find("(assert (= sub_offset (+ xs_offset start)))") != std::string::npos,
@@ -1017,46 +1029,49 @@ ensures preserved: result;
   const auto allocation_liveness_module =
       sigil::parse_source(allocation_liveness_source, "allocation-liveness.sigil");
   const auto allocation_liveness_obligations = sigil::build_obligations(allocation_liveness_module);
-  expect(allocation_liveness_obligations.size() == 22, "allocation liveness obligations");
+  expect(allocation_liveness_obligations.size() == 24, "allocation liveness obligations");
   expect(allocation_liveness_obligations[0].name == "fn.expose_liveness.ensures.1.exact",
          "liveness exposure obligation");
   expect(allocation_liveness_obligations[1].name == "fn.read_live_slice.safety.1.memory_live",
          "slice read liveness obligation");
   expect(allocation_liveness_obligations[2].name == "fn.read_live_slice.safety.2.index_in_bounds",
          "slice read bounds obligation after liveness");
-  expect(allocation_liveness_obligations[5].name == "fn.read_live_slice.ensures.1.exact",
+  expect(allocation_liveness_obligations[3].name ==
+             "fn.read_live_slice.safety.3.memory_initialized",
+         "slice read initialization obligation after bounds");
+  expect(allocation_liveness_obligations[7].name == "fn.read_live_slice.ensures.1.exact",
          "slice read ensure obligation");
-  expect(allocation_liveness_obligations[6].name == "fn.read_live_ref.safety.1.memory_live",
+  expect(allocation_liveness_obligations[8].name == "fn.read_live_ref.safety.1.memory_live",
          "ref load liveness obligation");
-  expect(allocation_liveness_obligations[7].name == "fn.read_live_ref.safety.2.memory_valid",
+  expect(allocation_liveness_obligations[9].name == "fn.read_live_ref.safety.2.memory_valid",
          "ref load validity obligation after liveness");
-  expect(allocation_liveness_obligations[10].name == "fn.read_live_ref.ensures.1.exact",
+  expect(allocation_liveness_obligations[12].name == "fn.read_live_ref.ensures.1.exact",
          "ref load ensure obligation");
-  expect(allocation_liveness_obligations[11].name ==
+  expect(allocation_liveness_obligations[13].name ==
              "fn.model_store_preserves_liveness.safety.1.memory_live",
          "model store liveness obligation");
-  expect(allocation_liveness_obligations[12].name ==
+  expect(allocation_liveness_obligations[14].name ==
              "fn.model_store_preserves_liveness.safety.2.ownership_present",
          "model store ownership obligation after liveness");
-  expect(allocation_liveness_obligations[13].name ==
+  expect(allocation_liveness_obligations[15].name ==
              "fn.model_store_preserves_liveness.safety.3.mutable_borrow_active",
          "model store mutable-borrow obligation after ownership");
-  expect(allocation_liveness_obligations[14].name ==
+  expect(allocation_liveness_obligations[16].name ==
              "fn.model_store_preserves_liveness.safety.4.index_in_bounds",
          "model store bounds obligation after liveness");
-  expect(allocation_liveness_obligations[15].name ==
+  expect(allocation_liveness_obligations[17].name ==
              "fn.model_store_preserves_liveness.ensures.1.preserved",
          "model store liveness preservation obligation");
-  expect(allocation_liveness_obligations[16].name ==
+  expect(allocation_liveness_obligations[18].name ==
              "fn.ref_store_preserves_liveness.safety.1.memory_live",
          "ref store liveness obligation");
-  expect(allocation_liveness_obligations[17].name ==
+  expect(allocation_liveness_obligations[19].name ==
              "fn.ref_store_preserves_liveness.safety.2.ownership_present",
          "ref store ownership obligation after liveness");
-  expect(allocation_liveness_obligations[18].name ==
+  expect(allocation_liveness_obligations[20].name ==
              "fn.ref_store_preserves_liveness.safety.3.mutable_borrow_active",
          "ref store mutable-borrow obligation after ownership");
-  expect(allocation_liveness_obligations[19].name ==
+  expect(allocation_liveness_obligations[21].name ==
              "fn.ref_store_preserves_liveness.safety.4.memory_valid",
          "ref store validity obligation after liveness");
 
@@ -1065,7 +1080,7 @@ ensures preserved: result;
          "liveness symbol is declared");
   expect(expose_liveness_smt.find("(assert (= result xs_live))") != std::string::npos,
          "is_live lowers to liveness symbol");
-  const auto model_live_smt = sigil::emit_smt_lib(allocation_liveness_obligations[15]);
+  const auto model_live_smt = sigil::emit_smt_lib(allocation_liveness_obligations[17]);
   expect(model_live_smt.find("(assert (= updated_live xs_live))") != std::string::npos,
          "model store preserves liveness");
 
@@ -1089,17 +1104,21 @@ requires in_bounds: index >= 0 && index < len(xs);
   const auto missing_liveness_module =
       sigil::parse_source(missing_liveness_source, "missing-liveness.sigil");
   const auto missing_liveness_obligations = sigil::build_obligations(missing_liveness_module);
-  expect(missing_liveness_obligations.size() == 2, "missing liveness obligations");
+  expect(missing_liveness_obligations.size() == 3, "missing liveness obligations");
   expect(missing_liveness_obligations[0].name == "fn.unsafe_read.safety.1.memory_live",
          "missing liveness gate is first");
   expect(missing_liveness_obligations[1].name == "fn.unsafe_read.safety.2.index_in_bounds",
          "independent bounds gate follows liveness");
+  expect(missing_liveness_obligations[2].name == "fn.unsafe_read.safety.3.memory_initialized",
+         "initialization gate follows bounds");
   const auto missing_liveness_results =
       sigil::verify_obligations(missing_liveness_obligations, false);
   expect(missing_liveness_results[0].status == sigil::VerificationStatus::Unknown,
          "missing liveness remains unknown");
   expect(missing_liveness_results[1].status == sigil::VerificationStatus::Proven,
          "bounds do not depend on liveness");
+  expect(missing_liveness_results[2].status == sigil::VerificationStatus::Proven,
+         "entry model initialization does not depend on liveness");
 
   const char* ownership_state_source = R"(
 module ownership_state;
@@ -1467,6 +1486,50 @@ fn allocate(existing: Ref[i64]) -> bool
   expect(fresh_reference_smt.find("(assert (= value_epoch 0))") != std::string::npos,
          "fresh reference initial epoch fact");
 
+  const char* initialization_safety_source = R"(
+module initialization_safety;
+
+fn initialize(length: i64, index: i64, value: i64) -> i64
+requires valid_length: length > 0;
+requires valid_index: index >= 0 && index < length;
+{
+  let raw: Slice[i64] = allocate_uninit_slice(length, 0);
+  let exclusive: Slice[i64] = borrow_mut(raw);
+  let initialized: Slice[i64] = store(exclusive, index, value);
+  return at(initialized, index);
+}
+  )";
+  const auto initialization_safety_module =
+      sigil::parse_source(initialization_safety_source, "initialization-safety.sigil");
+  const auto initialization_safety_obligations =
+      sigil::build_obligations(initialization_safety_module);
+  expect(initialization_safety_obligations.size() == 11, "initialization safety obligations");
+  expect(initialization_safety_obligations[8].name == "fn.initialize.safety.9.memory_live",
+         "initialized read liveness obligation");
+  expect(initialization_safety_obligations[9].name == "fn.initialize.safety.10.index_in_bounds",
+         "initialized read bounds obligation");
+  expect(initialization_safety_obligations[10].name == "fn.initialize.safety.11.memory_initialized",
+         "initialized read initialization obligation");
+  const auto initialization_safety_smt = sigil::emit_smt_lib(initialization_safety_obligations[10]);
+  expect(initialization_safety_smt.find(
+             "(assert (= raw_init ((as const (Array Int Bool)) false)))") != std::string::npos,
+         "raw allocation starts uninitialized");
+  expect(initialization_safety_smt.find("(assert (= exclusive_init raw_init))") !=
+             std::string::npos,
+         "borrow preserves initialization mask");
+  expect(initialization_safety_smt.find(
+             "(assert (= initialized_init (store exclusive_init (+ exclusive_offset index) "
+             "true)))") != std::string::npos,
+         "store initializes physical index");
+  expect(initialization_safety_smt.find(
+             "(assert (not (select initialized_init (+ initialized_offset index))))") !=
+             std::string::npos,
+         "read initialization goal selects physical index");
+  const auto initialization_safety_results =
+      sigil::verify_obligations(initialization_safety_obligations, false);
+  expect(initialization_safety_results[10].status == sigil::VerificationStatus::Proven,
+         "same-index store initialization proven locally");
+
   const char* memory_state_update_source = R"(
 module memory_state_updates;
 
@@ -1520,7 +1583,7 @@ requires in_bounds: index >= 0 && index < len(xs);
   const auto unborrowed_write_module =
       sigil::parse_source(unborrowed_write_source, "unborrowed-write.sigil");
   const auto unborrowed_write_obligations = sigil::build_obligations(unborrowed_write_module);
-  expect(unborrowed_write_obligations.size() == 6, "unborrowed write obligations");
+  expect(unborrowed_write_obligations.size() == 7, "unborrowed write obligations");
   const auto unborrowed_write_results =
       sigil::verify_obligations(unborrowed_write_obligations, false);
   expect(unborrowed_write_results[0].status == sigil::VerificationStatus::Proven,

@@ -272,7 +272,8 @@ bool is_model_intrinsic_name(const std::string& name) {
          name == "release_mut" || name == "slice_view" || name == "slice_offset" ||
          name == "same_view" || name == "overlaps" || name == "move_owner" ||
          name == "deallocate" || name == "allocate_array" || name == "allocate_slice" ||
-         name == "allocate_ref";
+         name == "allocate_ref" || name == "allocate_uninit_array" ||
+         name == "allocate_uninit_slice" || name == "is_initialized";
 }
 
 bool is_borrow_transition_name(const std::string& name) {
@@ -285,7 +286,8 @@ bool is_consuming_transition_name(const std::string& name) {
 }
 
 bool is_allocation_name(const std::string& name) {
-  return name == "allocate_array" || name == "allocate_slice" || name == "allocate_ref";
+  return name == "allocate_array" || name == "allocate_slice" || name == "allocate_ref" ||
+         name == "allocate_uninit_array" || name == "allocate_uninit_slice";
 }
 
 Type infer_expr(const Expr& expr, const SymbolTable& symbols, const StructTable& structs,
@@ -315,8 +317,24 @@ Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                                                 " initial value must be i64 or bool, found " +
                                                 initial.display());
     }
-    const auto model_name = is_ref ? "Ref" : (expr->name == "allocate_array" ? "Array" : "Slice");
+    const bool is_array = expr->name == "allocate_array" || expr->name == "allocate_uninit_array";
+    const auto model_name = is_ref ? "Ref" : (is_array ? "Array" : "Slice");
     return Type{TypeKind::Unknown, model_name, {initial}};
+  }
+
+  if (expr->name == "is_initialized") {
+    if (expr->arguments.size() != 2) {
+      throw Diagnostic(expr->range, "is_initialized expects 2 arguments, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto model = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (!is_model_container_type(model)) {
+      throw Diagnostic(expr->arguments[0]->range,
+                       "is_initialized expects an Array[T] or Slice[T] argument");
+    }
+    require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64,
+                 "is_initialized index");
+    return Type{TypeKind::Bool, "bool", {}};
   }
 
   if (is_consuming_transition_name(expr->name)) {

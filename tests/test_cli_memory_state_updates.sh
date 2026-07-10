@@ -13,11 +13,12 @@ output="$("$sigil_bin" check "$example_file" --no-z3 --solver-timeout-ms 250 --s
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 2" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 35" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 37" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_slice.safety.4.memory_live" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_slice.safety.5.ownership_present" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_slice.safety.6.mutable_borrow_active" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_slice.safety.7.index_in_bounds" >/dev/null
+printf '%s\n' "$output" | grep "fn.update_slice.safety.10.memory_initialized" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_ref.safety.6.mutable_borrow_active" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_ref.safety.7.memory_valid" >/dev/null
 printf '%s\n' "$output" | grep "fn.update_ref.safety.8.memory_write" >/dev/null
@@ -29,6 +30,8 @@ test -f "$ref_store"
 grep "(assert (= updated_mut_borrow borrowed_mut_borrow))" "$slice_store" >/dev/null
 grep "(assert (= updated_offset borrowed_offset))" "$slice_store" >/dev/null
 grep "(assert (= updated_data (store borrowed_data (+ borrowed_offset index) value)))" \
+  "$slice_store" >/dev/null
+grep "(assert (= updated_init (store borrowed_init (+ borrowed_offset index) true)))" \
   "$slice_store" >/dev/null
 grep "(assert (= updated_mut_borrow borrowed_mut_borrow))" "$ref_store" >/dev/null
 grep "(assert (= updated_epoch (+ borrowed_epoch 1)))" "$ref_store" >/dev/null

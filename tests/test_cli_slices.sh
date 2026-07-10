@@ -13,9 +13,10 @@ output="$("$sigil_bin" check "$example_file" --no-z3 --solver-timeout-ms 250 --s
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep "  functions: 3" >/dev/null
-printf '%s\n' "$output" | grep "  proof obligations: 11" >/dev/null
+printf '%s\n' "$output" | grep "  proof obligations: 15" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_slice.safety.1.memory_live" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_slice.safety.2.index_in_bounds" >/dev/null
+printf '%s\n' "$output" | grep "fn.read_slice.safety.3.memory_initialized" >/dev/null
 printf '%s\n' "$output" | grep "fn.read_flags.ensures.1.exact" >/dev/null
 printf '%s\n' "$output" | grep "fn.length_is_non_negative.ensures.1.non_negative" >/dev/null
 
@@ -32,6 +33,8 @@ test -f "$length_ensure"
 grep "(set-option :timeout 250)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_len Int)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_data (Array Int Int))" "$slice_bounds" >/dev/null
+grep "(declare-const xs_init (Array Int Bool))" "$slice_bounds" >/dev/null
+grep "(assert (= xs_init ((as const (Array Int Bool)) true)))" "$slice_bounds" >/dev/null
 grep "(declare-const xs_offset Int)" "$slice_bounds" >/dev/null
 grep "(assert (>= xs_offset 0))" "$slice_bounds" >/dev/null
 grep "(assert (not (and (>= index 0) (< index xs_len))))" "$slice_bounds" >/dev/null

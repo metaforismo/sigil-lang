@@ -34,8 +34,10 @@ test -f "$live_gate"
 grep "(set-option :timeout 250)" "$len_assert" >/dev/null
 grep "(declare-const window_items_len Int)" "$len_assert" >/dev/null
 grep "(declare-const window_items_data (Array Int Int))" "$len_assert" >/dev/null
+grep "(declare-const window_items_init (Array Int Bool))" "$len_assert" >/dev/null
 grep "(assert (= window_items_len xs_len))" "$len_assert" >/dev/null
 grep "(assert (= window_items_data xs_data))" "$len_assert" >/dev/null
+grep "(assert (= window_items_init xs_init))" "$len_assert" >/dev/null
 grep "(assert (not (= window_items_len xs_len)))" "$len_assert" >/dev/null
 grep "(assert (= window_index index))" "$index_assert" >/dev/null
 grep "(assert (not (< window_index window_items_len)))" "$container_invariant" >/dev/null
