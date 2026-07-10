@@ -30,9 +30,11 @@ proof layer also has fresh, fully initialized array/slice/reference constructors
 with deterministic lifetime-token non-reuse. Arrays and slices now carry
 allocation-wide initialization masks, raw constructors start fully
 uninitialized, checked stores initialize exactly one physical slot, and reads
-prove ordered liveness, bounds, and initialization obligations. The next step
-is richer lifetime provenance and function-boundary semantics for partial model
-states, followed by native aggregate layout and binary-level crash proofs.
+prove ordered liveness, bounds, and initialization obligations. Function-entry
+masks are now unconstrained, explicit contracts describe required slots, and
+modular calls prove those contracts over caller snapshots. The next step is
+richer lifetime provenance and model-valued return/effect semantics, followed
+by native aggregate layout and binary-level crash proofs.
 
 ## Completed
 
@@ -109,6 +111,8 @@ states, followed by native aggregate layout and binary-level crash proofs.
 - [x] Add raw array/slice allocations, partial initialization masks, and
       store-to-initialize transitions.
 - [x] Gate modeled array/slice reads on liveness, bounds, and initialization.
+- [x] Add explicit function-boundary initialization contracts and re-lower
+      substituted model predicates over caller snapshots.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -142,8 +146,10 @@ states, followed by native aggregate layout and binary-level crash proofs.
 - [x] Connect array/slice/reference updates to memory-state and ownership
       rules.
 - [x] Define local partial initialization semantics for array and slice models.
-- [ ] Define richer lifetime provenance and function-boundary semantics for
-      references, containers, and partial model states.
+- [x] Define parameter-boundary initialization semantics for partial array and
+      slice states.
+- [ ] Define richer lifetime provenance and model-valued return/effect
+      semantics for references and containers.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Execute an external agent loop that proposes candidate lemmas from saved
@@ -230,8 +236,10 @@ states, followed by native aggregate layout and binary-level crash proofs.
       lifetime-token reuse on the current proof path.
 - [x] Model local partial initialization with raw constructors and immutable
       store-to-initialize snapshots.
-- [ ] Model richer lifetime provenance, function-boundary partial state, and
-      path-sensitive alias invalidation.
+- [x] Prove explicit partial-initialization contracts across scalar-returning
+      function calls.
+- [ ] Model richer lifetime provenance, model-valued return/effect summaries,
+      and path-sensitive alias invalidation.
 - [x] Gate modeled array and slice reads on bounds and initialization before
       exposing their abstract values.
 - [ ] Connect those source-level no-crash obligations to monomorphized native

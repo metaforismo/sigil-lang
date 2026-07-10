@@ -125,7 +125,8 @@ The planner walks each function and builds proof obligations:
   `name == expr` as an assumption for later obligations;
 - function call expressions emit call-site obligations for callee `requires`
   predicates and add callee `ensures` predicates as assumptions over the fresh
-  call-result symbol;
+  call-result symbol; substituted model intrinsics are lowered again over the
+  caller's concrete component symbols;
 - theorem declarations are planned before functions as proof-only boolean
   subjects named `theorem.<name>`, with explicit postconditions plus an implicit
   `holds` postcondition;
@@ -153,6 +154,9 @@ The planner walks each function and builds proof obligations:
   `memory_live`, `index_in_bounds`, and `memory_initialized` safety obligations,
   then lower to SMT `select` over an allocation-wide abstract backing array at
   `container.offset + index`;
+- function-entry array and slice masks are unconstrained; explicit
+  `is_initialized` preconditions provide only the initialization facts a callee
+  may rely on;
 - `slice_view(source, start, length)` bindings create `memory_live` then
   `view_in_bounds` obligations, compose the source offset with `start`, and
   preserve allocation, backing data, initialization mask, liveness, and

@@ -65,6 +65,9 @@ initialization masks start false. The witness selects the element type but is
 not readable until a checked store initializes the selected slot.
 `is_initialized(model, index)` exposes the allocation-relative mask bit for
 array and slice proofs.
+Array and slice parameter masks are not implicitly initialized. Callees declare
+required slots with `requires is_initialized(model, index)`, and call-site
+obligations lower that predicate over the caller's current model snapshot.
 The local prover also performs bounded control-flow WP reasoning for branch
 joins and loop-summary conjunctions before invoking Z3.
 
@@ -203,6 +206,12 @@ Example with raw allocation and initialization-safe reads:
 
 ```sh
 sigil check examples/initialization_safety.sigil --strict --solver-timeout-ms 250 --save-smt build/initialization-safety-smt
+```
+
+Example with modular initialization contracts across function calls:
+
+```sh
+sigil check examples/function_boundary_initialization.sigil --strict --solver-timeout-ms 250 --save-smt build/function-boundary-initialization-smt
 ```
 
 Example with branch and loop weakest-precondition reasoning:

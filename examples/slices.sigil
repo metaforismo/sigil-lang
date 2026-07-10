@@ -3,6 +3,7 @@ module slices;
 fn read_slice(xs: Slice[i64], index: i64) -> i64
 requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
+requires initialized: is_initialized(xs, index);
 ensures exact: result == at(xs, index);
 {
   return at(xs, index);
@@ -11,6 +12,7 @@ ensures exact: result == at(xs, index);
 fn read_flags(flags: Array[bool], index: i64) -> bool
 requires live: is_live(flags);
 requires in_bounds: index >= 0 && index < len(flags);
+requires initialized: is_initialized(flags, index);
 ensures exact: result == at(flags, index);
 {
   return at(flags, index);

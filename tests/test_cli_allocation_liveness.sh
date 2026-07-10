@@ -51,4 +51,4 @@ test "$missing_status" -eq 2
 printf '%s\n' "$missing_output" | grep "\[UNKNOWN\] fn.unsafe_read.safety.1.memory_live" >/dev/null
 printf '%s\n' "$missing_output" | grep "\[PROVEN\] fn.unsafe_read.safety.2.index_in_bounds" >/dev/null
 printf '%s\n' "$missing_output" | grep \
-  "\[PROVEN\] fn.unsafe_read.safety.3.memory_initialized" >/dev/null
+  "\[UNKNOWN\] fn.unsafe_read.safety.3.memory_initialized" >/dev/null

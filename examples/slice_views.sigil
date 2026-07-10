@@ -4,6 +4,7 @@ fn read_subview(xs: Slice[i64], start: i64, count: i64, index: i64) -> i64
 requires live: is_live(xs);
 requires view_bounds: start >= 0 && count >= 0 && start + count <= len(xs);
 requires index_bounds: index >= 0 && index < count;
+requires initialized: is_initialized(xs, start + index);
 ensures exact: result == at(xs, start + index);
 {
   let sub: Slice[i64] = slice_view(xs, start, count);

@@ -1592,6 +1592,7 @@ Expr materialize_resolved_call_expr(const Expr& expr, const FunctionDecl& fn,
     ++precondition_index;
     auto goal = substitute_predicate(precondition, substitutions, expr->location, expr->range,
                                      precondition.name);
+    goal = rewrite_predicate(goal, {});
     obligations.push_back(
         make_call_precondition_obligation(fn, call_index, precondition_index, expr, goal, context));
   }
@@ -1611,6 +1612,7 @@ Expr materialize_resolved_call_expr(const Expr& expr, const FunctionDecl& fn,
     auto fact = substitute_predicate(ensure, substitutions, expr->location, expr->range,
                                      "call_" + expr->name + "_" + std::to_string(call_index) + "_" +
                                          ensure.name);
+    fact = rewrite_predicate(fact, {});
     context.active.push_back(std::move(fact));
   }
 
@@ -3175,11 +3177,6 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
     context.active.push_back(
         NamedPredicate{"model_" + sanitize_symbol(symbol) + "_len_non_negative", len_non_negative,
                        SourceLocation{}, SourceRange{}});
-    auto initialized = make_binary(
-        BinaryOp::Equal, make_identifier(model_init_symbol(symbol)),
-        make_call(std::string(kConstBoolArrayCall), {make_boolean(true)}, SourceRange{}));
-    context.active.push_back(NamedPredicate{"model_" + sanitize_symbol(symbol) + "_initialized",
-                                            initialized, SourceLocation{}, SourceRange{}});
     return;
   }
 

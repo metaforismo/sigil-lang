@@ -330,6 +330,7 @@ container Window[T] {
 fn read_window(xs: Slice[i64], index: i64) -> i64
 requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
+requires initialized: is_initialized(xs, index);
 ensures exact: result == at(xs, index);
 {
   let window: Window[i64] = Window[i64] { items: xs, index: index };
@@ -378,6 +379,7 @@ module slice_model;
 fn read_slice(xs: Slice[i64], index: i64) -> i64
 requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
+requires initialized: is_initialized(xs, index);
 ensures exact: result == at(xs, index);
 {
   return at(xs, index);
@@ -386,6 +388,7 @@ ensures exact: result == at(xs, index);
 fn read_array(flags: Array[bool], index: i64) -> bool
 requires live: is_live(flags);
 requires in_bounds: index >= 0 && index < len(flags);
+requires initialized: is_initialized(flags, index);
 ensures exact: result == at(flags, index);
 {
   return at(flags, index);
@@ -550,6 +553,7 @@ fn read_subview(xs: Slice[i64], start: i64, count: i64, index: i64) -> i64
 requires live: is_live(xs);
 requires view_bounds: start >= 0 && count >= 0 && start + count <= len(xs);
 requires index_bounds: index >= 0 && index < count;
+requires initialized: is_initialized(xs, start + index);
 ensures exact: result == at(xs, start + index);
 {
   let sub: Slice[i64] = slice_view(xs, start, count);
@@ -989,6 +993,7 @@ ensures exact: result == is_live(xs);
 fn read_live_slice(xs: Slice[i64], index: i64) -> i64
 requires live: is_live(xs);
 requires in_bounds: index >= 0 && index < len(xs);
+requires initialized: is_initialized(xs, index);
 ensures exact: result == at(xs, index);
 {
   return at(xs, index);
@@ -1117,8 +1122,8 @@ requires in_bounds: index >= 0 && index < len(xs);
          "missing liveness remains unknown");
   expect(missing_liveness_results[1].status == sigil::VerificationStatus::Proven,
          "bounds do not depend on liveness");
-  expect(missing_liveness_results[2].status == sigil::VerificationStatus::Proven,
-         "entry model initialization does not depend on liveness");
+  expect(missing_liveness_results[2].status == sigil::VerificationStatus::Unknown,
+         "missing initialization contract remains unknown");
 
   const char* ownership_state_source = R"(
 module ownership_state;
@@ -1529,6 +1534,64 @@ requires valid_index: index >= 0 && index < length;
       sigil::verify_obligations(initialization_safety_obligations, false);
   expect(initialization_safety_results[10].status == sigil::VerificationStatus::Proven,
          "same-index store initialization proven locally");
+
+  const char* boundary_initialization_source = R"(
+module boundary_initialization;
+
+fn needs_initialized(values: Slice[i64], index: i64) -> bool
+requires initialized: is_initialized(values, index);
+{
+  assert contract_visible: is_initialized(values, index);
+  return true;
+}
+
+fn initialize_then_call() -> bool
+{
+  let raw: Slice[i64] = allocate_uninit_slice(1, 0);
+  let exclusive: Slice[i64] = borrow_mut(raw);
+  let initialized: Slice[i64] = store(exclusive, 0, 5);
+  return needs_initialized(initialized, 0);
+}
+  )";
+  const auto boundary_initialization_module =
+      sigil::parse_source(boundary_initialization_source, "boundary-initialization.sigil");
+  const auto boundary_initialization_obligations =
+      sigil::build_obligations(boundary_initialization_module);
+  const sigil::ProofObligation* boundary_contract_assert = nullptr;
+  const sigil::ProofObligation* boundary_call_requirement = nullptr;
+  for (const auto& obligation : boundary_initialization_obligations) {
+    if (obligation.name == "fn.needs_initialized.assert.1.contract_visible") {
+      boundary_contract_assert = &obligation;
+    }
+    if (obligation.name == "fn.initialize_then_call.call.1.requires.1.initialized") {
+      boundary_call_requirement = &obligation;
+    }
+  }
+  expect(boundary_contract_assert != nullptr, "boundary contract assertion exists");
+  expect(boundary_call_requirement != nullptr, "boundary call requirement exists");
+  const auto boundary_contract_smt = sigil::emit_smt_lib(*boundary_contract_assert);
+  expect(boundary_contract_smt.find("(assert (select values_init (+ values_offset index)))") !=
+             std::string::npos,
+         "boundary contract lowers to entry initialization mask");
+  expect(boundary_contract_smt.find("((as const (Array Int Bool)) true)") == std::string::npos,
+         "boundary does not invent full initialization");
+  const auto boundary_call_smt = sigil::emit_smt_lib(*boundary_call_requirement);
+  expect(boundary_call_smt.find(
+             "(assert (= initialized_init (store exclusive_init (+ exclusive_offset 0) true)))") !=
+             std::string::npos,
+         "caller store updates initialization mask");
+  expect(
+      boundary_call_smt.find("(assert (not (select initialized_init (+ initialized_offset 0))))") !=
+          std::string::npos,
+      "callee requirement is lowered over caller model symbols");
+  expect(boundary_call_smt.find("is_initialized") == std::string::npos,
+         "callee requirement has no unresolved source intrinsic");
+  const auto boundary_initialization_results =
+      sigil::verify_obligations(boundary_initialization_obligations, false);
+  expect(boundary_initialization_results.front().status == sigil::VerificationStatus::Proven,
+         "explicit entry contract proves local assertion");
+  expect(boundary_initialization_results.back().status == sigil::VerificationStatus::Proven,
+         "stored caller state proves callee initialization requirement");
 
   const char* memory_state_update_source = R"(
 module memory_state_updates;

@@ -34,7 +34,7 @@ grep "(set-option :timeout 250)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_len Int)" "$slice_bounds" >/dev/null
 grep "(declare-const xs_data (Array Int Int))" "$slice_bounds" >/dev/null
 grep "(declare-const xs_init (Array Int Bool))" "$slice_bounds" >/dev/null
-grep "(assert (= xs_init ((as const (Array Int Bool)) true)))" "$slice_bounds" >/dev/null
+grep -F "(assert (select xs_init (+ xs_offset index)))" "$slice_bounds" >/dev/null
 grep "(declare-const xs_offset Int)" "$slice_bounds" >/dev/null
 grep "(assert (>= xs_offset 0))" "$slice_bounds" >/dev/null
 grep "(assert (not (and (>= index 0) (< index xs_len))))" "$slice_bounds" >/dev/null
