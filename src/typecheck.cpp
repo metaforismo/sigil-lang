@@ -269,7 +269,8 @@ bool is_model_intrinsic_name(const std::string& name) {
          name == "disjoint_allocation" || name == "is_live" || name == "owner_id" ||
          name == "has_owner" || name == "shared_borrows" || name == "has_mut_borrow" ||
          name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
-         name == "release_mut";
+         name == "release_mut" || name == "slice_view" || name == "slice_offset" ||
+         name == "same_view" || name == "overlaps";
 }
 
 bool is_borrow_transition_name(const std::string& name) {
@@ -285,6 +286,52 @@ Type require_type(const Expr& expr, const SymbolTable& symbols, const StructTabl
 
 Type infer_model_intrinsic_expr(const Expr& expr, const SymbolTable& symbols,
                                 const StructTable& structs, const CallableContext& context) {
+  if (expr->name == "slice_view") {
+    if (expr->arguments.size() != 3) {
+      throw Diagnostic(expr->range, "slice_view expects 3 arguments, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto source = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (source.kind != TypeKind::Unknown || source.spelling != "Slice" ||
+        source.arguments.size() != 1) {
+      throw Diagnostic(expr->arguments[0]->range, "slice_view expects a Slice[T] source");
+    }
+    require_type(expr->arguments[1], symbols, structs, context, TypeKind::I64, "slice_view start");
+    require_type(expr->arguments[2], symbols, structs, context, TypeKind::I64, "slice_view length");
+    return source;
+  }
+
+  if (expr->name == "slice_offset") {
+    if (expr->arguments.size() != 1) {
+      throw Diagnostic(expr->range, "slice_offset expects 1 argument, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto slice = infer_expr(expr->arguments[0], symbols, structs, context);
+    if (slice.kind != TypeKind::Unknown || slice.spelling != "Slice" ||
+        slice.arguments.size() != 1) {
+      throw Diagnostic(expr->arguments[0]->range, "slice_offset expects a Slice[T] argument");
+    }
+    return Type{TypeKind::I64, "i64", {}};
+  }
+
+  if (expr->name == "same_view" || expr->name == "overlaps") {
+    if (expr->arguments.size() != 2) {
+      throw Diagnostic(expr->range, expr->name + " expects 2 arguments, got " +
+                                        std::to_string(expr->arguments.size()));
+    }
+    const auto left = infer_expr(expr->arguments[0], symbols, structs, context);
+    const auto right = infer_expr(expr->arguments[1], symbols, structs, context);
+    if (left.kind != TypeKind::Unknown || left.spelling != "Slice" || left.arguments.size() != 1 ||
+        right.kind != TypeKind::Unknown || right.spelling != "Slice" ||
+        right.arguments.size() != 1) {
+      throw Diagnostic(expr->range, expr->name + " expects Slice[T] arguments");
+    }
+    if (!same_type(left, right)) {
+      throw Diagnostic(expr->range, expr->name + " requires slices with the same element type");
+    }
+    return Type{TypeKind::Bool, "bool", {}};
+  }
+
   if (is_borrow_transition_name(expr->name)) {
     if (expr->arguments.size() != 1) {
       throw Diagnostic(expr->range, expr->name + " expects 1 argument, got " +

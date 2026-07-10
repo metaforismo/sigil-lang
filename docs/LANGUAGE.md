@@ -196,14 +196,33 @@ creates compile-time `memory_live` and `index_in_bounds` proof obligations:
 index >= 0 && index < len(value)
 ```
 
-The SMT model uses an abstract backing array and lowers `at(xs, i)` to a
-solver-level `select`.
+The SMT model uses an abstract allocation-wide backing array. Every array and
+slice has an internal element offset; arrays are fixed at offset zero and slice
+offsets are non-negative. `at(xs, i)` lowers to a solver-level
+`select(xs.data, xs.offset + i)`.
+
+`slice_view(source, start, length)` creates a checked subview and must be bound
+to a `Slice[T]` local or model field. It emits `memory_live` followed by
+`view_in_bounds`:
+
+```sigil
+start >= 0 && length >= 0 && start + length <= len(source)
+```
+
+The result preserves backing data, allocation identity, liveness, and ownership
+state; its length is `length` and its absolute offset is
+`slice_offset(source) + start`. `slice_offset(slice)` exposes that offset.
+`same_view(a, b)` requires equal allocation, offset, and length. `overlaps(a, b)`
+uses half-open ranges and is true exactly when equally typed slices share an
+allocation and both range ends cross the other range start. Adjacent and empty
+views therefore do not overlap.
 
 `store(value, index, element)` is an immutable proof-level update. It requires
 the source allocation to be live, owned, and under an active mutable borrow.
 The operation returns the same model type as `value`, preserves the model
-length and ownership state, emits an `index_in_bounds` obligation for the write
-index, and lowers the backing data to solver-level `store`:
+length, offset, and ownership state, emits an `index_in_bounds` obligation for
+the write index, and lowers the backing data to solver-level `store` at
+`value.offset + index`:
 
 ```sigil
 fn write_then_read(xs: Slice[i64], index: i64, value: i64) -> i64
@@ -221,8 +240,8 @@ ensures exact: result == value;
 
 Model stores must currently be materialized in a `let` binding or container
 field before later `len` or `at` facts use them. Plain model aliases, such as
-`let alias: Slice[i64] = xs;`, are also materialized as length/data component
-facts.
+`let alias: Slice[i64] = xs;`, are also materialized as
+length/data/offset component facts.
 
 Every array, slice, and reference model also carries an abstract allocation
 identity. `allocation_id(value)` exposes that identity as `i64`.
@@ -261,11 +280,17 @@ Borrow state changes through immutable, model-producing transitions:
   borrow, then clears `has_mut_borrow`.
 
 Transitions preserve allocation identity, liveness, owner identity/presence,
-container data/length, and reference address/validity/value/permission/epoch.
-Like `store`, a transition result must be materialized in a model `let` or
-container model field. These are checked proof-state snapshots, not linear
-move semantics: the source model remains visible until a later language layer
-defines consuming ownership and alias invalidation.
+container data/length/offset, and reference
+address/validity/value/permission/epoch. Like `store`, a transition result must
+be materialized in a model `let` or container model field. These are checked
+proof-state snapshots, not linear move semantics: the source model remains
+visible until a later language layer defines consuming ownership and alias
+invalidation.
+
+View overlap is currently a proof fact, not an exclusivity policy. The checker
+does not yet reject two simultaneously visible mutable snapshots merely because
+their ranges overlap; consuming ownership and alias invalidation remain required
+before these models can represent runtime memory safely.
 
 Both container and reference stores preserve an active mutable borrow in the
 successor snapshot. Code may establish that state directly in a function

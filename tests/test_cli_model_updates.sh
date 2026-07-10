@@ -33,12 +33,16 @@ test -f "$flag_store"
 grep "(set-option :timeout 250)" "$write_store" >/dev/null
 grep "(declare-const updated_len Int)" "$write_store" >/dev/null
 grep "(declare-const updated_data (Array Int Int))" "$write_store" >/dev/null
+grep "(declare-const updated_offset Int)" "$write_store" >/dev/null
 grep "(assert (= updated_len xs_len))" "$write_store" >/dev/null
 grep "(assert (= updated_live xs_live))" "$write_store" >/dev/null
-grep "(assert (= updated_data (store xs_data index value)))" "$write_store" >/dev/null
-grep "(assert (= result (select updated_data index)))" "$write_store" >/dev/null
+grep "(assert (= updated_offset xs_offset))" "$write_store" >/dev/null
+grep "(assert (= updated_data (store xs_data (+ xs_offset index) value)))" "$write_store" >/dev/null
+grep "(assert (= result (select updated_data (+ updated_offset index))))" "$write_store" >/dev/null
 grep "(assert (not (= result value)))" "$write_store" >/dev/null
 grep "(assert (= updated_len xs_len))" "$write_len" >/dev/null
 grep "(assert (not (= updated_len xs_len)))" "$write_len" >/dev/null
 grep "(declare-const updated_data (Array Int Bool))" "$flag_store" >/dev/null
-grep "(assert (= updated_data (store flags_data index value)))" "$flag_store" >/dev/null
+grep "(assert (= updated_offset 0))" "$flag_store" >/dev/null
+grep "(assert (= updated_data (store flags_data (+ flags_offset index) value)))" \
+  "$flag_store" >/dev/null

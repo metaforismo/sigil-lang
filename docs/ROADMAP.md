@@ -22,8 +22,9 @@ modeled read and write now proves a shared allocation-liveness fact.
 Allocation-level owner and borrow-state facts are explicit and preserved,
 shared/mutable borrow acquire/release transitions are checked, and all modeled
 stores require owner presence plus an active mutable borrow.
-The next step is allocation/lifetime transitions, provenance, alias
-invalidation, and function-boundary semantics.
+Slices now carry allocation-relative offsets, checked subview construction, and
+half-open overlap facts. The next step is allocation/lifetime transitions,
+alias invalidation, and function-boundary semantics.
 
 ## Completed
 
@@ -153,7 +154,7 @@ invalidation, and function-boundary semantics.
 - [x] Add reference write-permission facts and store write gates.
 - [x] Add array and slice allocation-alias facts beyond modeled reference
       addresses.
-- [ ] Add slice origin, offset, and overlapping-view facts within one
+- [x] Add slice origin, offset, and overlapping-view facts within one
       allocation.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.

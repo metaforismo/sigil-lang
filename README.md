@@ -119,6 +119,8 @@ production verifier yet.
 - A budgeted `agent-refine` loop for external proposers. It enforces attempt,
   proposer, and solver budgets; preserves contracts and proof surfaces; rejects
   new assumptions; and saves replayable candidate, status, and SMT traces.
+- Allocation-relative slice views with checked range construction, compositional
+  offsets, half-open overlap predicates, and offset-aware reads and stores.
 - CMake detection for `libgccjit`; builds without it and reports backend status.
 - Native lowering for pure `i64`/`bool` functions using function calls, `let`,
   assignment, conditionals, arithmetic `+`/`-`/`*`, comparisons, boolean
@@ -190,6 +192,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/generics.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/containers.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/slices.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/slice_views.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/model_updates.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/ref_updates.sigil --strict --solver-timeout-ms 250

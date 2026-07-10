@@ -199,6 +199,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/slices")
 
 add_test(
+  NAME sigil_cli_slice_view_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_slice_views.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/slice_views.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/slice-views")
+
+add_test(
   NAME sigil_cli_model_updates_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_model_updates.sh"
           "$<TARGET_FILE:sigil>"
@@ -423,6 +430,15 @@ if(SIGIL_Z3_EXECUTABLE)
     NAME sigil_z3_slices
     COMMAND sigil check "${CMAKE_CURRENT_SOURCE_DIR}/examples/slices.sigil" --strict)
   set_tests_properties(sigil_z3_slices PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_slice_views
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_slice_views_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/slice_views.sigil"
+            "${CMAKE_CURRENT_BINARY_DIR}/slice-views-z3")
+  set_tests_properties(sigil_z3_slice_views PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

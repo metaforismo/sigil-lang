@@ -418,7 +418,9 @@ ensures exact: result == at(flags, index);
   const auto array_ensure_smt = sigil::emit_smt_lib(slice_model_obligations[9]);
   expect(array_ensure_smt.find("(declare-const flags_data (Array Int Bool))") != std::string::npos,
          "array bool data model is declared");
-  expect(array_ensure_smt.find("(assert (= result (select flags_data index)))") !=
+  expect(array_ensure_smt.find("(assert (= flags_offset 0))") != std::string::npos,
+         "array backing offset is fixed to zero");
+  expect(array_ensure_smt.find("(assert (= result (select flags_data (+ flags_offset index))))") !=
              std::string::npos,
          "array ensure assumes selected element");
   const auto slice_model_results = sigil::verify_obligations(slice_model_obligations, false);
@@ -488,20 +490,27 @@ ensures exact: result == value;
          "store local length is declared");
   expect(write_store_smt.find("(declare-const updated_data (Array Int Int))") != std::string::npos,
          "store local data is declared");
+  expect(write_store_smt.find("(declare-const updated_offset Int)") != std::string::npos,
+         "store local offset is declared");
   expect(write_store_smt.find("(assert (= updated_len xs_len))") != std::string::npos,
          "store preserves length");
-  expect(write_store_smt.find("(assert (= updated_data (store xs_data index value)))") !=
-             std::string::npos,
-         "store updates SMT array data");
-  expect(write_store_smt.find("(assert (= result (select updated_data index)))") !=
-             std::string::npos,
-         "store read binds result to updated select");
+  expect(write_store_smt.find("(assert (= updated_offset xs_offset))") != std::string::npos,
+         "store preserves slice offset");
+  expect(
+      write_store_smt.find("(assert (= updated_data (store xs_data (+ xs_offset index) value)))") !=
+          std::string::npos,
+      "store updates SMT array data");
+  expect(
+      write_store_smt.find("(assert (= result (select updated_data (+ updated_offset index))))") !=
+          std::string::npos,
+      "store read binds result to updated select");
   expect(write_store_smt.find("(assert (not (= result value)))") != std::string::npos,
          "store ensure checks write then read");
   const auto flag_store_smt = sigil::emit_smt_lib(model_update_obligations[14]);
   expect(flag_store_smt.find("(declare-const updated_data (Array Int Bool))") != std::string::npos,
          "store bool array data is declared");
-  expect(flag_store_smt.find("(assert (= updated_data (store flags_data index value)))") !=
+  expect(flag_store_smt.find(
+             "(assert (= updated_data (store flags_data (+ flags_offset index) value)))") !=
              std::string::npos,
          "store bool array data is updated");
   const auto model_update_results = sigil::verify_obligations(model_update_obligations, false);
@@ -521,6 +530,50 @@ ensures exact: result == value;
          "store read bounds proven from store length fact");
   expect(model_update_results[7].status == sigil::VerificationStatus::Unknown,
          "store write then read needs array theory");
+
+  const char* slice_view_source = R"(
+module slice_views;
+
+fn read_subview(xs: Slice[i64], start: i64, count: i64, index: i64) -> i64
+requires live: is_live(xs);
+requires view_bounds: start >= 0 && count >= 0 && start + count <= len(xs);
+requires index_bounds: index >= 0 && index < count;
+ensures exact: result == at(xs, start + index);
+{
+  let sub: Slice[i64] = slice_view(xs, start, count);
+  assert allocation_preserved: same_allocation(sub, xs);
+  assert offset_composed: slice_offset(sub) == slice_offset(xs) + start;
+  assert length_selected: len(sub) == count;
+  return at(sub, index);
+}
+)";
+
+  const auto slice_view_module = sigil::parse_source(slice_view_source, "slice-views.sigil");
+  const auto slice_view_obligations = sigil::build_obligations(slice_view_module);
+  expect(slice_view_obligations.size() == 10, "slice view obligations");
+  expect(slice_view_obligations[0].name == "fn.read_subview.safety.1.memory_live",
+         "slice view liveness obligation");
+  expect(slice_view_obligations[1].name == "fn.read_subview.safety.2.view_in_bounds",
+         "slice view range obligation");
+  expect(slice_view_obligations[2].name == "fn.read_subview.assert.1.allocation_preserved",
+         "slice view allocation assertion");
+  const auto slice_view_smt = sigil::emit_smt_lib(slice_view_obligations[9]);
+  expect(slice_view_smt.find("(declare-const xs_offset Int)") != std::string::npos,
+         "slice source offset is declared");
+  expect(slice_view_smt.find("(assert (= sub_offset (+ xs_offset start)))") != std::string::npos,
+         "slice view composes source and relative offsets");
+  expect(slice_view_smt.find("(assert (= sub_data xs_data))") != std::string::npos,
+         "slice view preserves backing data");
+  expect(slice_view_smt.find("(assert (= result (select sub_data (+ sub_offset index))))") !=
+             std::string::npos,
+         "slice view read uses allocation-relative offset");
+  const auto slice_view_results = sigil::verify_obligations(slice_view_obligations, false);
+  expect(slice_view_results[0].status == sigil::VerificationStatus::Proven,
+         "slice view liveness proven locally");
+  expect(slice_view_results[2].status == sigil::VerificationStatus::Proven,
+         "slice view allocation preservation proven locally");
+  expect(slice_view_results[3].status == sigil::VerificationStatus::Proven,
+         "slice view offset composition proven locally");
 
   const char* ref_model_source = R"(
 module ref_model;

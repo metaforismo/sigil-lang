@@ -109,13 +109,15 @@ Container invariant obligations use the
 distinct from ordinary struct invariant obligations while still following the
 same deterministic proof flow.
 
-Array and slice model parameters are materialized as four proof symbols:
-`value.alloc`, `value.live`, `value.len`, and `value.data`. The allocation and
-length symbols are `Int`, liveness is `Bool`, and data is an SMT array from
-integer indices to the concrete element sort. For example, `Slice[i64]`
-creates `(Array Int Int)` data, while `Array[bool]` creates `(Array Int Bool)`
-data. `len(xs)` lowers to `xs.len`, `is_live(xs)` lowers to `xs.live`, and
-`at(xs, i)` lowers to `(select xs.data i)`.
+Array and slice model parameters are materialized as five proof symbols:
+`value.alloc`, `value.live`, `value.len`, `value.offset`, and `value.data`. The
+allocation, length, and offset symbols are `Int`, liveness is `Bool`, and data
+is an SMT array from integer indices to the concrete element sort. For example,
+`Slice[i64]` creates `(Array Int Int)` data, while `Array[bool]` creates
+`(Array Int Bool)` data. Array offsets are constrained to zero; slice offsets
+are non-negative.
+`len(xs)` lowers to `xs.len`, `is_live(xs)` lowers to `xs.live`, and
+`at(xs, i)` lowers to `(select xs.data (+ xs.offset i))`.
 
 Every `at(container, index)` expression first emits a `memory_live` obligation
 whose goal is `is_live(container)`, followed by an `index_in_bounds` obligation
@@ -136,25 +138,34 @@ component facts for the new model:
 
 ```sigil
 updated.len == xs.len
+updated.offset == xs.offset
 updated.alloc == xs.alloc
 updated.live == xs.live
 updated.owner == xs.owner
 updated.has_owner == xs.has_owner
 updated.shared == xs.shared
 updated.mut_borrow == xs.mut_borrow
-updated.data == store(xs.data, i, value)
+updated.data == store(xs.data, xs.offset + i, value)
 ```
 
 The write emits `memory_live`, `ownership_present`, `mutable_borrow_active`,
 and `index_in_bounds`, in that order. The owner and mutable-borrow guards make
 the write a checked memory-state transition rather than an unconstrained array
 rewrite.
-Reads from the updated model then lower to `select(updated.data, index)`, so Z3
+Reads from the updated model then lower to
+`select(updated.data, updated.offset + index)`, so Z3
 can prove standard array-theory facts such as reading the same index that was
 just written. This is still not runtime mutation: the allocation token is an
 abstract identity, and the liveness bit is an explicit proof fact rather than
-allocation creation/destruction, ownership, slice-range, or native-memory
-semantics.
+allocation creation/destruction or native-memory semantics.
+
+`slice_view(xs, start, count)` emits `memory_live` and `view_in_bounds`
+obligations, then materializes a result with the same data/allocation/liveness
+and ownership state, length `count`, and offset `xs.offset + start`.
+`same_view` lowers to allocation/offset/length equality. `overlaps` lowers to
+same-allocation plus intersection of the two half-open element ranges. Both
+arguments must have the same `Slice[T]` type because byte-level layout is not
+defined yet.
 
 Reference model parameters are materialized as `ref.addr`, `ref.valid`,
 `ref.write`, `ref.value`, `ref.epoch`, `ref.alloc`, and `ref.live`. `addr(ref)` lowers to

@@ -662,6 +662,53 @@ fn disjoint_allocation_scalar(xs: Slice[i64], x: i64) -> bool
 
   expect_diagnostic(R"(
 module bad;
+fn array_offset(xs: Array[i64]) -> i64
+{
+  return slice_offset(xs);
+}
+)",
+                    "slice_offset expects a Slice[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn scalar_view(x: i64) -> i64
+{
+  let view: Slice[i64] = slice_view(x, 0, 0);
+  return len(view);
+}
+)",
+                    "slice_view expects a Slice[T] source");
+
+  expect_diagnostic(R"(
+module bad;
+fn boolean_view_start(xs: Slice[i64], flag: bool) -> i64
+{
+  let view: Slice[i64] = slice_view(xs, flag, 0);
+  return len(view);
+}
+)",
+                    "slice_view start must be i64, found bool");
+
+  expect_diagnostic(R"(
+module bad;
+fn mixed_overlap(left: Slice[i64], right: Slice[bool]) -> bool
+{
+  return overlaps(left, right);
+}
+)",
+                    "overlaps requires slices with the same element type");
+
+  expect_diagnostic(R"(
+module bad;
+fn same_view_arity(xs: Slice[i64]) -> bool
+{
+  return same_view(xs);
+}
+)",
+                    "same_view expects 2 arguments, got 1");
+
+  expect_diagnostic(R"(
+module bad;
 fn is_live_scalar(x: i64) -> bool
 {
   return is_live(x);
