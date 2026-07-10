@@ -178,7 +178,21 @@ shared_borrows(value) >= 0
 
 Aliases and both immutable store forms copy the four symbols unchanged. This
 models allocation state, not linear handle ownership: checked borrow/release
-transitions and move semantics are separate work.
+transitions update fresh snapshots, while move semantics remain separate work.
+
+Each borrow transition emits three ordered safety obligations:
+
+1. `memory_live` proves `is_live(source)`.
+2. `ownership_present` proves `has_owner(source)`.
+3. An operation guard proves `shared_borrow_available`,
+   `shared_borrow_active`, `mutable_borrow_available`, or
+   `mutable_borrow_active`.
+
+The resulting snapshot preserves all non-borrow components. Shared acquire and
+release use `target.shared == source.shared + 1` and `- 1`; mutable acquire and
+release set `target.mut_borrow` to `true` and `false`. The registered consistency
+invariants ensure successful transitions cannot create negative shared counts
+or simultaneous shared and mutable borrows.
 
 For same-type reference snapshots in one proof context, the planner also emits
 deterministic alias-consistency assumptions:

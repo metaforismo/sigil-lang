@@ -255,6 +255,13 @@ add_test(
           "${CMAKE_CURRENT_BINARY_DIR}/ownership-state")
 
 add_test(
+  NAME sigil_cli_borrow_transition_tests
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_borrow_transitions.sh"
+          "$<TARGET_FILE:sigil>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/examples/borrow_transitions.sigil"
+          "${CMAKE_CURRENT_BINARY_DIR}/borrow-transitions")
+
+add_test(
   NAME sigil_cli_type_error_tests
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_type_errors.sh"
           "$<TARGET_FILE:sigil>"
@@ -456,6 +463,14 @@ if(SIGIL_Z3_EXECUTABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/ownership_state.sigil")
   set_tests_properties(sigil_z3_ownership_state PROPERTIES
+    ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
+
+  add_test(
+    NAME sigil_z3_borrow_transitions
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_borrow_transitions_z3.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/borrow_transitions.sigil")
+  set_tests_properties(sigil_z3_borrow_transitions PROPERTIES
     ENVIRONMENT "SIGIL_Z3=${SIGIL_Z3_EXECUTABLE}")
 
   add_test(

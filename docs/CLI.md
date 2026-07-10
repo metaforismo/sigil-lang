@@ -43,6 +43,8 @@ modeled referenced value, and advance the modeled epoch. `allocation_id`,
 allocation facts across array, slice, and reference models.
 `owner_id`, `has_owner`, `shared_borrows`, and `has_mut_borrow` expose common
 ownership state and deterministic consistency constraints.
+Borrow/release transition bindings emit ordered liveness, ownership, and
+availability/active obligations before updating a fresh model snapshot.
 
 The proof set also includes safety obligations such as
 `fn.name.safety.N.divisor_nonzero` for division and modulo expressions. Those
@@ -143,6 +145,12 @@ Example with ownership and borrow-state facts:
 
 ```sh
 sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250 --save-smt build/ownership-state-smt
+```
+
+Example with checked shared and mutable borrow transitions:
+
+```sh
+sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250 --save-smt build/borrow-transition-smt
 ```
 
 Exit codes:

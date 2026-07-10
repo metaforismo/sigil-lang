@@ -333,6 +333,21 @@ ensures exact: result == (shared_borrows(xs) >= 0 && !has_mut_borrow(xs));
   return shared_borrows(xs) >= 0 && !has_mut_borrow(xs);
 }
 
+fn checked_borrow_transitions(xs: Slice[i64], ptr: Ref[i64]) -> bool
+requires xs_live: is_live(xs);
+requires xs_owned: has_owner(xs);
+requires xs_available: !has_mut_borrow(xs);
+requires ptr_live: is_live(ptr);
+requires ptr_owned: has_owner(ptr);
+requires ptr_available: shared_borrows(ptr) == 0 && !has_mut_borrow(ptr);
+{
+  let shared: Slice[i64] = borrow_shared(xs);
+  let shared_done: Slice[i64] = release_shared(shared);
+  let mutable: Ref[i64] = borrow_mut(ptr);
+  let mutable_done: Ref[i64] = release_mut(mutable);
+  return shared_borrows(shared_done) == shared_borrows(xs) && !has_mut_borrow(mutable_done);
+}
+
 fn proof_only_lemma_use(x: i64) -> i64
 requires nonzero: x != 0;
 ensures preserved: result != 0;
@@ -671,6 +686,26 @@ fn shared_borrows_scalar(x: i64) -> i64
 }
 )",
                     "shared_borrows expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn borrow_shared_scalar(x: i64) -> i64
+{
+  let borrowed: i64 = borrow_shared(x);
+  return borrowed;
+}
+)",
+                    "borrow_shared expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn release_mut_arity(ptr: Ref[i64]) -> bool
+{
+  let released: Ref[i64] = release_mut(ptr, ptr);
+  return has_mut_borrow(released);
+}
+)",
+                    "release_mut expects 1 argument, got 2");
 
   expect_diagnostic(R"(
 module bad;

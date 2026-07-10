@@ -1076,6 +1076,109 @@ ensures preserved: result;
   expect(ref_borrow_smt.find("(assert (= updated_owner ptr_owner))") != std::string::npos,
          "ref store preserves owner identity");
 
+  const char* borrow_transition_source = R"(
+module borrow_transitions;
+
+fn shared_round_trip(xs: Slice[i64]) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+requires available: !has_mut_borrow(xs);
+ensures restored: result == shared_borrows(xs);
+{
+  let borrowed: Slice[i64] = borrow_shared(xs);
+  assert incremented: shared_borrows(borrowed) == shared_borrows(xs) + 1;
+  let released: Slice[i64] = release_shared(borrowed);
+  assert decremented: shared_borrows(released) == shared_borrows(xs);
+  return shared_borrows(released);
+}
+
+fn mutable_round_trip(ptr: Ref[i64]) -> bool
+requires live: is_live(ptr);
+requires owned: has_owner(ptr);
+requires no_shared: shared_borrows(ptr) == 0;
+requires no_mutable: !has_mut_borrow(ptr);
+ensures released: result;
+{
+  let borrowed: Ref[i64] = borrow_mut(ptr);
+  assert active: has_mut_borrow(borrowed);
+  assert address_preserved: addr(borrowed) == addr(ptr);
+  let released: Ref[i64] = release_mut(borrowed);
+  assert inactive: !has_mut_borrow(released);
+  return !has_mut_borrow(released);
+}
+)";
+
+  const auto borrow_transition_module =
+      sigil::parse_source(borrow_transition_source, "borrow-transitions.sigil");
+  const auto borrow_transition_obligations = sigil::build_obligations(borrow_transition_module);
+  expect(borrow_transition_obligations.size() == 19, "borrow transition obligations");
+  expect(borrow_transition_obligations[0].name == "fn.shared_round_trip.safety.1.memory_live",
+         "shared borrow liveness obligation");
+  expect(borrow_transition_obligations[1].name == "fn.shared_round_trip.safety.2.ownership_present",
+         "shared borrow ownership obligation");
+  expect(borrow_transition_obligations[2].name ==
+             "fn.shared_round_trip.safety.3.shared_borrow_available",
+         "shared borrow availability obligation");
+  expect(borrow_transition_obligations[4].name == "fn.shared_round_trip.safety.4.memory_live",
+         "shared release liveness obligation");
+  expect(borrow_transition_obligations[6].name ==
+             "fn.shared_round_trip.safety.6.shared_borrow_active",
+         "shared release active obligation");
+  expect(borrow_transition_obligations[9].name == "fn.mutable_round_trip.safety.1.memory_live",
+         "mutable borrow liveness obligation");
+  expect(borrow_transition_obligations[11].name ==
+             "fn.mutable_round_trip.safety.3.mutable_borrow_available",
+         "mutable borrow availability obligation");
+  expect(borrow_transition_obligations[14].name == "fn.mutable_round_trip.safety.4.memory_live",
+         "mutable release liveness obligation");
+  expect(borrow_transition_obligations[16].name ==
+             "fn.mutable_round_trip.safety.6.mutable_borrow_active",
+         "mutable release active obligation");
+  const auto shared_smt = sigil::emit_smt_lib(borrow_transition_obligations[8]);
+  expect(shared_smt.find("(assert (= borrowed_shared (+ xs_shared 1)))") != std::string::npos,
+         "shared borrow increments count");
+  expect(shared_smt.find("(assert (= released_shared (- borrowed_shared 1)))") != std::string::npos,
+         "shared release decrements count");
+  const auto mutable_smt = sigil::emit_smt_lib(borrow_transition_obligations[18]);
+  expect(mutable_smt.find("(assert borrowed_mut_borrow)") != std::string::npos,
+         "mutable borrow activates state");
+  expect(mutable_smt.find("(assert (not released_mut_borrow))") != std::string::npos,
+         "mutable release clears state");
+
+  const auto borrow_transition_results =
+      sigil::verify_obligations(borrow_transition_obligations, false);
+  for (std::size_t index = 0; index < borrow_transition_results.size(); ++index) {
+    const auto needs_smt = index == 6 || index == 7 || index == 11 || index == 17;
+    expect(borrow_transition_results[index].status ==
+               (needs_smt ? sigil::VerificationStatus::Unknown : sigil::VerificationStatus::Proven),
+           "borrow transition local proof boundary");
+  }
+
+  const char* missing_borrow_guard_source = R"(
+module missing_borrow_guard;
+
+fn unsafe_shared_borrow(xs: Slice[i64]) -> i64
+requires live: is_live(xs);
+requires owned: has_owner(xs);
+{
+  let borrowed: Slice[i64] = borrow_shared(xs);
+  return shared_borrows(borrowed);
+}
+)";
+  const auto missing_borrow_guard_module =
+      sigil::parse_source(missing_borrow_guard_source, "missing-borrow-guard.sigil");
+  const auto missing_borrow_guard_obligations =
+      sigil::build_obligations(missing_borrow_guard_module);
+  expect(missing_borrow_guard_obligations.size() == 3, "missing borrow guard obligations");
+  const auto missing_borrow_guard_results =
+      sigil::verify_obligations(missing_borrow_guard_obligations, false);
+  expect(missing_borrow_guard_results[0].status == sigil::VerificationStatus::Proven,
+         "borrow liveness proven independently");
+  expect(missing_borrow_guard_results[1].status == sigil::VerificationStatus::Proven,
+         "borrow ownership proven independently");
+  expect(missing_borrow_guard_results[2].status == sigil::VerificationStatus::Unknown,
+         "missing borrow availability remains unknown");
+
   const char* ref_epoch_source = R"(
 module ref_epochs;
 

@@ -245,6 +245,24 @@ consistency invariants for every model value: shared counts are nonnegative, a
 mutable borrow excludes shared borrows, and owner presence implies a nonzero
 owner token. Aliases and immutable stores preserve all four facts.
 
+Borrow state changes through immutable, model-producing transitions:
+
+- `borrow_shared(value)` requires liveness, owner presence, and no mutable
+  borrow, then increments `shared_borrows`.
+- `release_shared(value)` requires liveness, owner presence, and at least one
+  shared borrow, then decrements `shared_borrows`.
+- `borrow_mut(value)` requires liveness, owner presence, zero shared borrows,
+  and no mutable borrow, then activates `has_mut_borrow`.
+- `release_mut(value)` requires liveness, owner presence, and an active mutable
+  borrow, then clears `has_mut_borrow`.
+
+Transitions preserve allocation identity, liveness, owner identity/presence,
+container data/length, and reference address/validity/value/permission/epoch.
+Like `store`, a transition result must be materialized in a model `let` or
+container model field. These are checked proof-state snapshots, not linear
+move semantics: the source model remains visible until a later language layer
+defines consuming ownership and alias invalidation.
+
 This is intentionally a proof model, not a runtime memory model. It does not
 create or destroy allocations, transition an allocation between live and dead,
 establish ownership, define view ranges, prove non-overlap inside one
@@ -482,6 +500,8 @@ Supported expression forms:
   `disjoint_allocation(left, right)`
 - ownership intrinsics: `owner_id(value)`, `has_owner(value)`,
   `shared_borrows(value)`, `has_mut_borrow(value)`
+- borrow transitions: `borrow_shared(value)`, `release_shared(value)`,
+  `borrow_mut(value)`, `release_mut(value)`
 - aggregate literals: `TypeName { field: value }` and
   `TypeName[i64, bool] { field: value }`
 - field access: `value.field`
