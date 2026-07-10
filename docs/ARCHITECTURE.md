@@ -74,6 +74,8 @@ system:
   allocation-level ownership state;
 - `borrow_shared`, `release_shared`, `borrow_mut`, and `release_mut` return
   updated memory-model snapshots after checked transition guards;
+- `move_owner` and `deallocate` are consuming model transitions whose direct
+  source identifier becomes unavailable after a root-level model `let`;
 - aggregate literals must use valid generic arity, initialize declared fields
   exactly once, and field access must target a field on an aggregate-typed
   expression;
@@ -96,6 +98,8 @@ system:
   not escape their branch;
 - loop conditions and invariants must be `bool`, and loop-body locals do not
   escape their loop body;
+- consuming transitions are rejected inside branches, loops, and nested
+  expressions until path-sensitive linear-state joins are defined;
 - `while` bodies cannot contain `return` statements until the proof planner has
   a full control-flow model for early loop exits;
 - explicit `assume`, `assert`, and loop invariant labels must be unique within
@@ -162,6 +166,11 @@ The planner walks each function and builds proof obligations:
 - borrow transition bindings create `memory_live`, `ownership_present`, and
   operation-specific safety obligations, preserve non-borrow state, and update
   shared/mutable state in fresh proof symbols;
+- consuming transition bindings additionally prove `borrow_free` and
+  deterministic `allocation_unique` obligations. `move_owner` transfers the
+  current model root; `deallocate` creates a dead, ownerless, borrow-free
+  tombstone and invalidates reference permissions without inventing effects on
+  possible aliases;
 - reference `load(ref)` expressions create `memory_live` and `memory_valid`
   safety obligations and lower to the modeled referenced value;
 - reference `can_write(ref)` expressions lower to deterministic proof-level

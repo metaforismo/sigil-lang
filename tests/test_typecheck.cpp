@@ -756,6 +756,81 @@ fn release_mut_arity(ptr: Ref[i64]) -> bool
 
   expect_diagnostic(R"(
 module bad;
+fn move_scalar(x: i64) -> i64
+{
+  let moved: i64 = move_owner(x);
+  return moved;
+}
+)",
+                    "move_owner expects an Array[T], Slice[T], or Ref[T] argument");
+
+  expect_diagnostic(R"(
+module bad;
+fn missing_deallocation_source(xs: Slice[i64]) -> bool
+{
+  let dead: Slice[i64] = deallocate();
+  return true;
+}
+)",
+                    "deallocate expects 1 argument, got 0");
+
+  expect_diagnostic(R"(
+module bad;
+fn non_identifier_source(xs: Slice[i64]) -> bool
+{
+  let dead: Slice[i64] = deallocate(slice_view(xs, 0, len(xs)));
+  return !is_live(dead);
+}
+)",
+                    "deallocate requires an identifier source");
+
+  expect_diagnostic(R"(
+module bad;
+fn use_after_move(xs: Slice[i64]) -> i64
+{
+  let moved: Slice[i64] = move_owner(xs);
+  return len(xs);
+}
+)",
+                    "use of consumed model value 'xs'");
+
+  expect_diagnostic(R"(
+module bad;
+fn consume_twice(xs: Ref[i64]) -> bool
+{
+  let moved: Ref[i64] = move_owner(xs);
+  let dead: Ref[i64] = deallocate(xs);
+  return !is_live(dead);
+}
+)",
+                    "use of consumed model value 'xs'");
+
+  expect_diagnostic(
+      R"(
+module bad;
+fn nested_deallocation(xs: Slice[i64], flag: bool) -> bool
+{
+  if flag {
+    let dead: Slice[i64] = deallocate(xs);
+  } else {
+  }
+  return true;
+}
+)",
+      "consuming transition 'deallocate' is only supported in the function body root");
+
+  expect_diagnostic(R"(
+module bad;
+fn nested_move_expression(xs: Slice[i64]) -> i64
+{
+  return len(move_owner(xs));
+}
+)",
+                    "consuming transition 'move_owner' must be the direct initializer of a model "
+                    "let binding");
+
+  expect_diagnostic(R"(
+module bad;
 fn bad_ref_element(ptr: Ref[Slice[i64]]) -> i64
 {
   return 0;

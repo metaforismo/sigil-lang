@@ -83,6 +83,10 @@ production verifier yet.
 - Writes are connected to those transitions: a mutable borrow can be acquired,
   preserved through array, slice, or reference `store`, and explicitly
   released in a later proof-state snapshot.
+- Consuming `move_owner` and `deallocate` transitions with static use-after-move
+  rejection and ordered liveness, ownership, borrow-free, and conservative
+  allocation-uniqueness obligations. Deallocation yields a dead tombstone and
+  possible aliases block the transition.
 - Assignment to previously declared locals, lowered through versioned proof
   symbols so old and new values stay distinct.
 - Bounded control-flow weakest-precondition reasoning: the local prover splits
@@ -204,6 +208,7 @@ Save SMT artifacts and show counterexample models:
 ./build/sigil check examples/ownership_state.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/borrow_transitions.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/memory_state_updates.sigil --strict --solver-timeout-ms 250
+./build/sigil check examples/consuming_deallocation.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/control_flow_wp.sigil --strict --solver-timeout-ms 250
 ./build/sigil check examples/assignments.sigil --no-z3 --save-proof-hints build/proof-hints
 ./build/sigil check examples/assignments.sigil --no-z3 --save-agent-requests build/agent-requests
@@ -288,9 +293,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 
 The next hard pieces are, in order:
 
-- allocation/lifetime transitions, consuming ownership, alias invalidation,
-  provenance rules, and richer memory-state semantics beyond the current
-  checked borrow and write transitions;
+- allocation creation and freshness, initialization tracking, richer lifetime
+  and provenance rules, and path-sensitive consuming transitions beyond the
+  current conservative deallocation model;
 - aggregate layout, copy, aliasing, and function-boundary semantics;
 - a memory model that connects reference and container facts to low-level data
   structures;

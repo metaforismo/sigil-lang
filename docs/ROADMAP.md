@@ -23,8 +23,11 @@ Allocation-level owner and borrow-state facts are explicit and preserved,
 shared/mutable borrow acquire/release transitions are checked, and all modeled
 stores require owner presence plus an active mutable borrow.
 Slices now carry allocation-relative offsets, checked subview construction, and
-half-open overlap facts. The next step is allocation/lifetime transitions,
-alias invalidation, and function-boundary semantics.
+half-open overlap facts. Root-level `move_owner` and `deallocate` transitions
+now consume their source binding, prove liveness/ownership/borrow freedom and
+conservative allocation uniqueness, and materialize dead tombstones. The next
+step is fresh allocation creation, initialization tracking, richer provenance,
+and function-boundary semantics.
 
 ## Completed
 
@@ -94,6 +97,8 @@ alias invalidation, and function-boundary semantics.
 - [x] Add checked shared/mutable borrow and release transitions.
 - [x] Gate array, slice, and reference stores on owner presence and an active
       mutable borrow, preserving that state in the successor snapshot.
+- [x] Add consuming owner transfer and conservative checked deallocation with
+      static use-after-move rejection and dead tombstones.
 - [x] Add simple struct values and field access.
 - [x] Prove declared struct invariants when struct literals are constructed.
 - [x] Add local weakest-precondition substitution for straight-line assignments.
@@ -126,7 +131,8 @@ alias invalidation, and function-boundary semantics.
 
 - [x] Connect array/slice/reference updates to memory-state and ownership
       rules.
-- [ ] Define ownership, allocation, lifetime, and provenance for references.
+- [ ] Define allocation creation, freshness, richer lifetime, and provenance
+      semantics for references.
 - [x] Extend weakest-precondition generation beyond straight-line mutation into
       branch and loop control flow.
 - [x] Execute an external agent loop that proposes candidate lemmas from saved
@@ -207,8 +213,10 @@ alias invalidation, and function-boundary semantics.
 - [x] Add checked shared/mutable borrow acquire and release transitions.
 - [x] Require owner presence and an active mutable borrow for every modeled
       array, slice, and reference store.
-- [ ] Model allocation/deallocation transitions, consuming ownership, and alias
-      invalidation as explicit proof facts.
+- [x] Model consuming owner transfer and deallocation with borrow-free and
+      conservative alias-exclusion obligations.
+- [ ] Model fresh allocation creation, initialization, richer lifetime
+      provenance, and path-sensitive alias invalidation.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
 - [x] Connect source-level memory facts to native IR and binary-proof artifacts

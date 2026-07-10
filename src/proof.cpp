@@ -607,6 +607,7 @@ VerificationResult verify_syntactically(const ProofObligation& obligation, const
 struct ProofContext {
   SymbolTable symbols;
   SymbolTable ref_symbols;
+  SymbolTable model_symbols;
   std::unordered_map<std::string, std::string> bindings;
   std::unordered_map<std::string, std::string> struct_types;
   std::vector<NamedPredicate> active;
@@ -634,6 +635,10 @@ constexpr std::string_view kEntryEpochSymbol = "__sigil_entry_epoch";
 bool is_borrow_transition_name(const std::string& name) {
   return name == "borrow_shared" || name == "release_shared" || name == "borrow_mut" ||
          name == "release_mut";
+}
+
+bool is_consuming_transition_name(const std::string& name) {
+  return name == "move_owner" || name == "deallocate";
 }
 
 bool is_theorem_proof_subject(const FunctionDecl& fn) {
@@ -1217,6 +1222,14 @@ ProofObligation make_memory_state_obligation(const FunctionDecl& fn, int safety_
     goal = make_binary(BinaryOp::And, no_shared, no_mut, operation->range);
   } else if (kind == "mutable_borrow_active") {
     goal = make_identifier(mut_borrow_symbol(model->name), operation->arguments[0]->range);
+  } else if (kind == "borrow_free") {
+    auto no_shared = make_binary(
+        BinaryOp::Equal, make_identifier(shared_borrows_symbol(model->name), operation->range),
+        make_integer(0, operation->range), operation->range);
+    auto no_mut =
+        make_unary(UnaryOp::Not, make_identifier(mut_borrow_symbol(model->name), operation->range),
+                   operation->range);
+    goal = make_binary(BinaryOp::And, no_shared, no_mut, operation->range);
   } else {
     throw Diagnostic(operation->range, "unknown memory-state obligation '" + kind + "'");
   }
@@ -1227,6 +1240,53 @@ ProofObligation make_memory_state_obligation(const FunctionDecl& fn, int safety_
   obligation.range = operation->range;
   obligation.assumptions = context.active;
   obligation.goal = NamedPredicate{kind, goal, obligation.location, obligation.range};
+  obligation.symbols = context.symbols;
+  return obligation;
+}
+
+ProofObligation make_allocation_unique_obligation(const FunctionDecl& fn, int safety_index,
+                                                  const Expr& operation,
+                                                  const ProofContext& context) {
+  if (!operation || operation->arguments.empty()) {
+    throw Diagnostic(operation ? operation->range : SourceRange{},
+                     "consuming operation requires a model value");
+  }
+  const auto source = rewrite_expr(operation->arguments[0], context.bindings);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(operation->arguments[0]->range,
+                     "consuming operation requires a materialized memory model value");
+  }
+
+  std::vector<std::string> others;
+  for (const auto& [symbol, _] : context.model_symbols) {
+    if (symbol != source->name) {
+      others.push_back(symbol);
+    }
+  }
+  std::sort(others.begin(), others.end());
+
+  Expr goal = make_boolean(true, operation->range);
+  bool has_comparison = false;
+  for (const auto& other : others) {
+    auto disjoint = make_binary(
+        BinaryOp::NotEqual, make_identifier(allocation_symbol(source->name), operation->range),
+        make_identifier(allocation_symbol(other), operation->range), operation->range);
+    if (!has_comparison) {
+      goal = disjoint;
+      has_comparison = true;
+    } else {
+      goal = make_binary(BinaryOp::And, goal, disjoint, operation->range);
+    }
+  }
+
+  ProofObligation obligation;
+  obligation.name =
+      proof_subject_name(fn) + ".safety." + std::to_string(safety_index) + ".allocation_unique";
+  obligation.location = operation->arguments[0]->location;
+  obligation.range = operation->range;
+  obligation.assumptions = context.active;
+  obligation.goal =
+      NamedPredicate{"allocation_unique", goal, obligation.location, obligation.range};
   obligation.symbols = context.symbols;
   return obligation;
 }
@@ -1268,7 +1328,8 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
       append_expression_safety_obligations(argument, fn, context, safety_index, obligations);
     }
     if (expr->name == "at" || expr->name == "load" || expr->name == "store" ||
-        expr->name == "slice_view" || is_borrow_transition_name(expr->name)) {
+        expr->name == "slice_view" || is_borrow_transition_name(expr->name) ||
+        is_consuming_transition_name(expr->name)) {
       ++safety_index;
       obligations.push_back(make_memory_live_obligation(fn, safety_index, expr, context));
     }
@@ -1290,6 +1351,16 @@ void append_expression_safety_obligations(const Expr& expr, const FunctionDecl& 
                         : expr->name == "borrow_mut"     ? "mutable_borrow_available"
                                                          : "mutable_borrow_active";
       obligations.push_back(make_memory_state_obligation(fn, safety_index, expr, context, kind));
+    }
+    if (is_consuming_transition_name(expr->name)) {
+      ++safety_index;
+      obligations.push_back(
+          make_memory_state_obligation(fn, safety_index, expr, context, "ownership_present"));
+      ++safety_index;
+      obligations.push_back(
+          make_memory_state_obligation(fn, safety_index, expr, context, "borrow_free"));
+      ++safety_index;
+      obligations.push_back(make_allocation_unique_obligation(fn, safety_index, expr, context));
     }
     if (expr->name == "at" || (expr->name == "store" && expr->arguments.size() == 3)) {
       ++safety_index;
@@ -1470,6 +1541,11 @@ Expr materialize_call_expr(const Expr& expr, const FunctionDecl& fn, ProofContex
                      "slice_view returns a model value and must be bound with let before use");
   }
 
+  if (is_consuming_transition_name(expr->name)) {
+    throw Diagnostic(expr->range,
+                     expr->name + " returns a consumed model value and must be bound with let");
+  }
+
   if (is_borrow_transition_name(expr->name)) {
     throw Diagnostic(expr->range,
                      expr->name + " returns a model value and must be bound with let before use");
@@ -1629,6 +1705,7 @@ void register_model_alias(const std::string& target_symbol, const Type& type,
     throw Diagnostic(range, "model field initializer could not be materialized");
   }
   context.symbols[target_symbol] = type;
+  context.model_symbols[target_symbol] = type;
 
   if (is_model_container_type(type)) {
     const auto target_len = model_len_symbol(target_symbol);
@@ -1728,6 +1805,11 @@ bool is_slice_view_call(const Expr& expr) {
          expr->arguments.size() == 3;
 }
 
+bool is_consuming_transition_call(const Expr& expr) {
+  return expr && expr->kind == ExprNode::Kind::Call && is_consuming_transition_name(expr->name) &&
+         expr->arguments.size() == 1;
+}
+
 bool is_borrow_transition_call(const Expr& expr) {
   return expr && expr->kind == ExprNode::Kind::Call && is_borrow_transition_name(expr->name) &&
          expr->arguments.size() == 1;
@@ -1761,6 +1843,7 @@ void register_slice_view_binding(const Expr& view, const std::string& target_sym
                                        functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
+  context.model_symbols[target_symbol] = type;
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
@@ -1791,6 +1874,96 @@ void register_slice_view_binding(const Expr& view, const std::string& target_sym
   copy_ownership_state("view_", target_symbol, source->name, view->range, view->location, context);
 }
 
+void register_consuming_transition_binding(const Expr& transition, const std::string& target_symbol,
+                                           const Type& type, const FunctionDecl& fn,
+                                           ProofContext& context, int& call_index,
+                                           const StructTable& structs,
+                                           const FunctionTable& functions,
+                                           const TheoremTable& theorems,
+                                           std::vector<ProofObligation>& obligations) {
+  if (!is_model_type(type) || !is_consuming_transition_call(transition)) {
+    throw Diagnostic(transition ? transition->range : SourceRange{},
+                     "consuming transition requires a memory model target");
+  }
+  const auto source = materialize_expr(transition->arguments[0], fn, context, call_index, structs,
+                                       functions, theorems, obligations);
+  if (!source || source->kind != ExprNode::Kind::Identifier) {
+    throw Diagnostic(transition->arguments[0]->range,
+                     "consuming transition source requires a materialized memory model value");
+  }
+
+  if (transition->name == "move_owner") {
+    register_model_alias(target_symbol, type, source, transition->range, transition->location,
+                         context);
+  } else {
+    context.symbols[target_symbol] = type;
+    if (is_model_container_type(type)) {
+      context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+      context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
+      register_model_offset(target_symbol, type, context);
+      add_symbol_equality_fact("deallocate_" + model_len_symbol(target_symbol),
+                               model_len_symbol(target_symbol), model_len_symbol(source->name),
+                               transition->range, transition->location, context);
+      add_symbol_equality_fact("deallocate_" + model_data_symbol(target_symbol),
+                               model_data_symbol(target_symbol), model_data_symbol(source->name),
+                               transition->range, transition->location, context);
+      add_symbol_equality_fact(
+          "deallocate_" + model_offset_symbol(target_symbol), model_offset_symbol(target_symbol),
+          model_offset_symbol(source->name), transition->range, transition->location, context);
+    } else {
+      context.symbols[ref_addr_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+      context.symbols[ref_valid_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+      context.symbols[ref_value_symbol(target_symbol)] = type.arguments.front();
+      context.symbols[ref_write_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+      context.symbols[ref_epoch_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+      add_symbol_equality_fact("deallocate_" + ref_addr_symbol(target_symbol),
+                               ref_addr_symbol(target_symbol), ref_addr_symbol(source->name),
+                               transition->range, transition->location, context);
+      add_symbol_equality_fact("deallocate_" + ref_value_symbol(target_symbol),
+                               ref_value_symbol(target_symbol), ref_value_symbol(source->name),
+                               transition->range, transition->location, context);
+      add_transition_fact("deallocate_" + ref_valid_symbol(target_symbol),
+                          ref_valid_symbol(target_symbol), make_boolean(false, transition->range),
+                          transition, context);
+      add_transition_fact("deallocate_" + ref_write_symbol(target_symbol),
+                          ref_write_symbol(target_symbol), make_boolean(false, transition->range),
+                          transition, context);
+      auto next_epoch = make_binary(
+          BinaryOp::Add, make_identifier(ref_epoch_symbol(source->name), transition->range),
+          make_integer(1, transition->range), transition->range);
+      add_transition_fact("deallocate_" + ref_epoch_symbol(target_symbol),
+                          ref_epoch_symbol(target_symbol), next_epoch, transition, context);
+    }
+
+    context.symbols[allocation_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
+    context.symbols[allocation_live_symbol(target_symbol)] = Type{TypeKind::Bool, "bool", {}};
+    add_symbol_equality_fact("deallocate_" + allocation_symbol(target_symbol),
+                             allocation_symbol(target_symbol), allocation_symbol(source->name),
+                             transition->range, transition->location, context);
+    add_transition_fact("deallocate_" + allocation_live_symbol(target_symbol),
+                        allocation_live_symbol(target_symbol),
+                        make_boolean(false, transition->range), transition, context);
+    register_ownership_state(target_symbol, context);
+    add_transition_fact("deallocate_" + owner_symbol(target_symbol), owner_symbol(target_symbol),
+                        make_integer(0, transition->range), transition, context);
+    add_transition_fact("deallocate_" + has_owner_symbol(target_symbol),
+                        has_owner_symbol(target_symbol), make_boolean(false, transition->range),
+                        transition, context);
+    add_transition_fact("deallocate_" + shared_borrows_symbol(target_symbol),
+                        shared_borrows_symbol(target_symbol), make_integer(0, transition->range),
+                        transition, context);
+    add_transition_fact("deallocate_" + mut_borrow_symbol(target_symbol),
+                        mut_borrow_symbol(target_symbol), make_boolean(false, transition->range),
+                        transition, context);
+  }
+
+  context.model_symbols.erase(source->name);
+  context.ref_symbols.erase(source->name);
+  if (transition->arguments[0]->kind == ExprNode::Kind::Identifier) {
+    context.bindings.erase(transition->arguments[0]->name);
+  }
+}
+
 void register_borrow_transition_binding(const Expr& transition, const std::string& target_symbol,
                                         const Type& type, const FunctionDecl& fn,
                                         ProofContext& context, int& call_index,
@@ -1809,6 +1982,7 @@ void register_borrow_transition_binding(const Expr& transition, const std::strin
   }
 
   context.symbols[target_symbol] = type;
+  context.model_symbols[target_symbol] = type;
   if (is_model_container_type(type)) {
     context.symbols[model_len_symbol(target_symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(target_symbol)] = model_data_type(type);
@@ -1912,6 +2086,7 @@ void register_model_store_binding(const Expr& expr, const std::string& target_sy
                                       functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
+  context.model_symbols[target_symbol] = type;
   const auto target_len = model_len_symbol(target_symbol);
   const auto target_data = model_data_symbol(target_symbol);
   const auto target_offset = model_offset_symbol(target_symbol);
@@ -1977,6 +2152,7 @@ void register_ref_store_binding(const Expr& expr, const std::string& target_symb
                                       functions, theorems, obligations);
 
   context.symbols[target_symbol] = type;
+  context.model_symbols[target_symbol] = type;
   const auto target_addr = ref_addr_symbol(target_symbol);
   const auto target_valid = ref_valid_symbol(target_symbol);
   const auto target_value = ref_value_symbol(target_symbol);
@@ -2467,6 +2643,12 @@ void process_statement(const Statement& statement, const FunctionDecl& fn, Proof
       return;
     }
 
+    if (is_model_type(statement.type) && is_consuming_transition_call(statement.expr)) {
+      register_consuming_transition_binding(statement.expr, symbol, statement.type, fn, context,
+                                            call_index, structs, functions, theorems, obligations);
+      return;
+    }
+
     if (is_model_type(statement.type) && is_borrow_transition_call(statement.expr)) {
       register_borrow_transition_binding(statement.expr, symbol, statement.type, fn, context,
                                          call_index, structs, functions, theorems, obligations);
@@ -2678,6 +2860,7 @@ StructTable build_struct_table(const Module& module) {
 void register_struct_value(const std::string& symbol, const Type& type, const StructTable& structs,
                            ProofContext& context) {
   if (is_model_container_type(type)) {
+    context.model_symbols[symbol] = type;
     const auto len_symbol = model_len_symbol(symbol);
     context.symbols[len_symbol] = Type{TypeKind::I64, "i64", {}};
     context.symbols[model_data_symbol(symbol)] = model_data_type(type);
@@ -2696,6 +2879,7 @@ void register_struct_value(const std::string& symbol, const Type& type, const St
   }
 
   if (is_ref_model_type(type)) {
+    context.model_symbols[symbol] = type;
     context.ref_symbols[symbol] = type;
     context.symbols[ref_addr_symbol(symbol)] = Type{TypeKind::I64, "i64", {}};
     context.symbols[ref_valid_symbol(symbol)] = Type{TypeKind::Bool, "bool", {}};
