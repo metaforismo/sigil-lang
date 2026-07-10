@@ -345,6 +345,13 @@ if(SIGIL_GCCJIT_AVAILABLE)
             "$<TARGET_FILE:sigil>"
             "${CMAKE_CURRENT_SOURCE_DIR}/examples/native.sigil"
             "${CMAKE_CURRENT_BINARY_DIR}/native-ir-artifacts")
+
+  add_test(
+    NAME sigil_gccjit_memory_proof_artifacts
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_memory_proof_artifacts.sh"
+            "$<TARGET_FILE:sigil>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/examples/native_memory_facts.sigil"
+            "${CMAKE_CURRENT_BINARY_DIR}/memory-proof-artifacts")
   if(SIGIL_GCCJIT_TEST_ENV)
     set_tests_properties(sigil_gccjit_compile_native PROPERTIES
       ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
@@ -353,6 +360,8 @@ if(SIGIL_GCCJIT_AVAILABLE)
     set_tests_properties(sigil_gccjit_native_diagnostics PROPERTIES
       ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
     set_tests_properties(sigil_gccjit_native_artifacts PROPERTIES
+      ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
+    set_tests_properties(sigil_gccjit_memory_proof_artifacts PROPERTIES
       ENVIRONMENT "${SIGIL_GCCJIT_TEST_ENV}")
   endif()
 endif()

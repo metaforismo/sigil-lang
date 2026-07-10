@@ -209,7 +209,8 @@ invalidation, and function-boundary semantics.
       invalidation as explicit proof facts.
 - [ ] Prove bounds, initialization, and no-crash properties for arrays and
       slices before native lowering relies on them.
-- [ ] Connect source-level memory facts to native IR and binary-proof artifacts.
+- [x] Connect source-level memory facts to native IR and binary-proof artifacts
+      without promoting compile-time ledgers to proof claims.
 
 ## Binary-Level Experiments
 
